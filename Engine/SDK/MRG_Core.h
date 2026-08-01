@@ -200,6 +200,11 @@ namespace mrg::platform
 
         [[nodiscard]] std::int32_t MouseDeltaX() const noexcept;
         [[nodiscard]] std::int32_t MouseDeltaY() const noexcept;
+        // Absolute Win32 client coordinates are a pointer-placement snapshot.
+        // Raw Input events remain the authoritative timestamped input stream.
+        [[nodiscard]] std::int32_t MousePositionX() const noexcept;
+        [[nodiscard]] std::int32_t MousePositionY() const noexcept;
+        [[nodiscard]] bool IsMouseInsideWindow() const noexcept;
         [[nodiscard]] float MouseWheelDelta() const noexcept;
         [[nodiscard]] std::span<const InputEvent> Events() const noexcept;
         [[nodiscard]] std::int64_t PerformanceCounterFrequency() const noexcept;
@@ -227,6 +232,10 @@ namespace mrg::platform
             std::int32_t x,
             std::int32_t y,
             std::int64_t timestamp) noexcept;
+        void SetMousePosition(
+            std::int32_t x,
+            std::int32_t y,
+            bool insideWindow) noexcept;
         void AddMouseWheel(float delta, std::int64_t timestamp) noexcept;
         void PushEvent(const InputEvent& event) noexcept;
 
@@ -238,6 +247,9 @@ namespace mrg::platform
         std::array<bool, MouseButtonCount> mouseButtonsReleased_{};
         std::int32_t mouseDeltaX_{};
         std::int32_t mouseDeltaY_{};
+        std::int32_t mousePositionX_{};
+        std::int32_t mousePositionY_{};
+        bool mouseInsideWindow_{};
         float mouseWheelDelta_{};
         std::array<InputEvent, MaximumEventsPerUpdate> events_{};
         std::size_t eventCount_{};
@@ -317,6 +329,13 @@ namespace mrg::collision
         float radius{};
     };
 
+    struct Triangle3D
+    {
+        DirectX::XMFLOAT3 first{};
+        DirectX::XMFLOAT3 second{};
+        DirectX::XMFLOAT3 third{};
+    };
+
     // orientation is a quaternion in (x, y, z, w) order. It is normalized
     // internally before a query.
     struct Obb3D
@@ -334,6 +353,16 @@ namespace mrg::collision
         // point + direction * parameter for Line3D, origin + direction *
         // parameter for Ray3D, and lerp(start, end, parameter) for a segment.
         // Segment parameters are clamped to [0, 1].
+        float parameter{};
+    };
+
+    struct TriangleHit3D
+    {
+        DirectX::XMFLOAT3 point{};
+        DirectX::XMFLOAT3 normal{};
+        // Weights for first, second, and third. They sum to one and can be
+        // used to interpolate UVs or other per-vertex attributes.
+        DirectX::XMFLOAT3 barycentric{};
         float parameter{};
     };
 
@@ -400,6 +429,17 @@ namespace mrg::collision
     [[nodiscard]] bool Intersects(
         const Plane3D& plane,
         const LineSegment3D& segment,
+        float epsilon = DefaultEpsilon) noexcept;
+
+    // Moller-Trumbore ray/triangle query. Winding is preserved in the
+    // returned normal; callers decide whether to reject a back face.
+    [[nodiscard]] std::optional<TriangleHit3D> Intersect(
+        const Triangle3D& triangle,
+        const Ray3D& ray,
+        float epsilon = DefaultEpsilon) noexcept;
+    [[nodiscard]] bool Intersects(
+        const Triangle3D& triangle,
+        const Ray3D& ray,
         float epsilon = DefaultEpsilon) noexcept;
 
     [[nodiscard]] bool Intersects(
@@ -684,6 +724,547 @@ namespace mrg::geometry
     };
 }
 // ===== END Engine\Geometry\Primitive\SphereShape.h =====
+
+// ===== BEGIN Engine\UI\Core\UiElement.h =====
+
+// Backend-neutral retained-mode UI primitives. Coordinates use a canvas-local
+// top-left origin and increase to the right and downward.
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+namespace mrg::ui
+{
+    using UiElementId = std::uint64_t;
+
+    struct UiPoint
+    {
+        float x{};
+        float y{};
+    };
+
+    struct UiSize
+    {
+        float width{};
+        float height{};
+    };
+
+    struct UiRect
+    {
+        float x{};
+        float y{};
+        float width{};
+        float height{};
+
+        [[nodiscard]] bool Contains(UiPoint point) const noexcept;
+    };
+
+    struct UiColor
+    {
+        float red{};
+        float green{};
+        float blue{};
+        float alpha{1.0F};
+    };
+
+    struct UiVisualStyle
+    {
+        UiColor normal{0.20F, 0.22F, 0.27F, 1.0F};
+        UiColor hovered{0.28F, 0.32F, 0.40F, 1.0F};
+        UiColor pressed{0.12F, 0.16F, 0.24F, 1.0F};
+        UiColor disabled{0.14F, 0.14F, 0.16F, 0.65F};
+    };
+
+    enum class UiDrawCommandType : std::uint8_t
+    {
+        Rectangle,
+        Text,
+    };
+
+    enum class UiTextAlignment : std::uint8_t
+    {
+        Leading,
+        Center,
+        Trailing,
+    };
+
+    struct UiDrawCommand
+    {
+        UiDrawCommandType type{UiDrawCommandType::Rectangle};
+        UiRect bounds{};
+        UiColor color{};
+        std::wstring text;
+        float fontSize{18.0F};
+        UiTextAlignment horizontalAlignment{UiTextAlignment::Leading};
+    };
+
+    enum class UiPointerEventType : std::uint8_t
+    {
+        Enter,
+        Leave,
+        Move,
+        Press,
+        Release,
+        Click,
+    };
+
+    enum class UiPointerButton : std::uint8_t
+    {
+        None,
+        Left,
+        Right,
+        Middle,
+    };
+
+    struct UiPointerEvent
+    {
+        UiPointerEventType type{};
+        UiPointerButton button{UiPointerButton::None};
+        UiPoint canvasPosition{};
+        UiPoint localPosition{};
+        std::int64_t timestampTicks{};
+    };
+
+    enum class UiActionType : std::uint8_t
+    {
+        Clicked,
+        ValueChanged,
+        SelectionChanged,
+    };
+
+    struct UiAction
+    {
+        UiActionType type{};
+        UiElementId source{};
+        float value{};
+        std::size_t selectedIndex{};
+        std::int64_t timestampTicks{};
+    };
+
+    class UiCanvas;
+    class UiInputRouter;
+
+    class UiElement
+    {
+    public:
+        UiElement();
+        virtual ~UiElement();
+
+        UiElement(const UiElement&) = delete;
+        UiElement& operator=(const UiElement&) = delete;
+        UiElement(UiElement&&) = delete;
+        UiElement& operator=(UiElement&&) = delete;
+
+        [[nodiscard]] UiElementId Id() const noexcept;
+        [[nodiscard]] const UiRect& Bounds() const noexcept;
+        void SetBounds(const UiRect& bounds);
+        [[nodiscard]] UiRect BoundsInCanvas() const noexcept;
+
+        [[nodiscard]] bool IsVisible() const noexcept;
+        void SetVisible(bool visible) noexcept;
+        [[nodiscard]] bool IsEnabled() const noexcept;
+        void SetEnabled(bool enabled) noexcept;
+        [[nodiscard]] bool IsHitTestVisible() const noexcept;
+        void SetHitTestVisible(bool visible) noexcept;
+        [[nodiscard]] bool IsHovered() const noexcept;
+        [[nodiscard]] bool IsPressed() const noexcept;
+
+        [[nodiscard]] const UiVisualStyle& Style() const noexcept;
+        void SetStyle(const UiVisualStyle& style) noexcept;
+
+        [[nodiscard]] UiElement* Parent() noexcept;
+        [[nodiscard]] const UiElement* Parent() const noexcept;
+        [[nodiscard]] const std::vector<std::unique_ptr<UiElement>>& Children()
+            const noexcept;
+
+        UiElement& AddChild(std::unique_ptr<UiElement> child);
+
+        template <typename ElementType, typename... ArgumentTypes>
+            requires std::is_base_of_v<UiElement, ElementType>
+        ElementType& EmplaceChild(ArgumentTypes&&... arguments)
+        {
+            auto child = std::make_unique<ElementType>(
+                std::forward<ArgumentTypes>(arguments)...);
+            ElementType& result = *child;
+            AddChild(std::move(child));
+            return result;
+        }
+
+        [[nodiscard]] bool RemoveChild(UiElementId id) noexcept;
+
+    protected:
+        [[nodiscard]] UiColor CurrentBackgroundColor() const noexcept;
+        virtual void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const;
+        virtual void OnPointerEvent(
+            const UiPointerEvent& event,
+            std::vector<UiAction>& actions);
+
+    private:
+        friend class UiCanvas;
+        friend class UiInputRouter;
+
+        struct HitResult
+        {
+            UiElement* element{};
+            UiPoint localPosition{};
+        };
+
+        [[nodiscard]] HitResult HitTest(UiPoint parentPosition) noexcept;
+        [[nodiscard]] UiElement* Find(UiElementId id) noexcept;
+        [[nodiscard]] const UiElement* Find(UiElementId id) const noexcept;
+        void CollectDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            UiPoint parentOrigin) const;
+        void SetHovered(bool hovered) noexcept;
+        void SetPressed(bool pressed) noexcept;
+
+        UiElementId id_{};
+        UiRect bounds_{};
+        UiVisualStyle style_{};
+        UiElement* parent_{};
+        std::vector<std::unique_ptr<UiElement>> children_;
+        bool visible_{true};
+        bool enabled_{true};
+        bool hitTestVisible_{true};
+        bool hovered_{};
+        bool pressed_{};
+    };
+}
+// ===== END Engine\UI\Core\UiElement.h =====
+
+// ===== BEGIN Engine\UI\Core\UiCanvas.h =====
+
+
+#include <span>
+
+namespace mrg::ui
+{
+    class UiCanvas final
+    {
+    public:
+        explicit UiCanvas(UiSize logicalSize);
+
+        [[nodiscard]] UiSize LogicalSize() const noexcept;
+        void SetLogicalSize(UiSize logicalSize);
+        [[nodiscard]] UiElement& Root() noexcept;
+        [[nodiscard]] const UiElement& Root() const noexcept;
+        [[nodiscard]] UiElement* FindElement(UiElementId id) noexcept;
+        [[nodiscard]] const UiElement* FindElement(UiElementId id) const noexcept;
+
+        [[nodiscard]] std::vector<UiDrawCommand> BuildDrawList() const;
+        [[nodiscard]] std::vector<UiAction> TakeActions();
+
+    private:
+        friend class UiInputRouter;
+
+        [[nodiscard]] UiElement::HitResult HitTest(UiPoint position) noexcept;
+
+        UiSize logicalSize_{};
+        UiElement root_;
+        std::vector<UiAction> actions_;
+    };
+}
+// ===== END Engine\UI\Core\UiCanvas.h =====
+
+// ===== BEGIN Engine\UI\Input\UiInputRouter.h =====
+
+
+namespace mrg::ui
+{
+    struct UiPointerInput
+    {
+        UiPoint position{};
+        bool available{true};
+        bool leftButtonDown{};
+        bool leftButtonPressed{};
+        bool leftButtonReleased{};
+        std::int64_t timestampTicks{};
+    };
+
+    // Converts pointer snapshots into enter/leave/capture/click semantics.
+    // Capture keeps a pressed control as the event target until release.
+    class UiInputRouter final
+    {
+    public:
+        void Process(UiCanvas& canvas, const UiPointerInput& input);
+        void Reset(UiCanvas& canvas) noexcept;
+
+        [[nodiscard]] UiElementId HoveredElement() const noexcept;
+        [[nodiscard]] UiElementId CapturedElement() const noexcept;
+
+    private:
+        void Dispatch(
+            UiCanvas& canvas,
+            UiElement& element,
+            UiPointerEventType type,
+            const UiPointerInput& input,
+            UiPointerButton button = UiPointerButton::None);
+        void ChangeHovered(
+            UiCanvas& canvas,
+            UiElement* next,
+            const UiPointerInput& input);
+
+        UiElementId hovered_{};
+        UiElementId captured_{};
+    };
+}
+// ===== END Engine\UI\Input\UiInputRouter.h =====
+
+// ===== BEGIN Engine\UI\Surface\UiSurface.h =====
+
+
+#include <DirectXMath.h>
+
+#include <memory>
+#include <optional>
+#include <vector>
+
+namespace mrg::ui
+{
+    struct UiSurfaceHit
+    {
+        float rayParameter{};
+        DirectX::XMFLOAT3 worldPosition{};
+        DirectX::XMFLOAT3 worldNormal{};
+        DirectX::XMFLOAT2 uv{};
+    };
+
+    class IUiSurface
+    {
+    public:
+        virtual ~IUiSurface();
+        [[nodiscard]] virtual std::optional<UiSurfaceHit> Raycast(
+            const collision::Ray3D& worldRay) const noexcept = 0;
+    };
+
+    // Finite XY plane. Local UV (0,0) is the upper-left corner, matching the
+    // RectangleShape and canvas coordinate convention.
+    class PlaneUiSurface final : public IUiSurface
+    {
+    public:
+        PlaneUiSurface(
+            float width,
+            float height,
+            const DirectX::XMFLOAT4X4& worldTransform,
+            bool twoSided = false);
+
+        void SetWorldTransform(
+            const DirectX::XMFLOAT4X4& worldTransform) noexcept;
+        [[nodiscard]] const DirectX::XMFLOAT4X4& WorldTransform()
+            const noexcept;
+        [[nodiscard]] UiSize WorldSize() const noexcept;
+        [[nodiscard]] std::optional<UiSurfaceHit> Raycast(
+            const collision::Ray3D& worldRay) const noexcept override;
+
+    private:
+        float width_{};
+        float height_{};
+        DirectX::XMFLOAT4X4 worldTransform_{};
+        bool twoSided_{};
+    };
+
+    // Copies CPU positions/UVs from a Shape. This O(triangle-count) baseline
+    // is intended for modest interactive surfaces; a later BVH can replace
+    // the query internally without changing IUiSurface or client code.
+    class MeshUvUiSurface final : public IUiSurface
+    {
+    public:
+        MeshUvUiSurface(
+            const geometry::Shape& shape,
+            const DirectX::XMFLOAT4X4& worldTransform,
+            bool twoSided = false);
+
+        void SetWorldTransform(
+            const DirectX::XMFLOAT4X4& worldTransform) noexcept;
+        [[nodiscard]] const DirectX::XMFLOAT4X4& WorldTransform()
+            const noexcept;
+        [[nodiscard]] std::optional<UiSurfaceHit> Raycast(
+            const collision::Ray3D& worldRay) const noexcept override;
+
+    private:
+        struct SurfaceVertex
+        {
+            DirectX::XMFLOAT3 position{};
+            DirectX::XMFLOAT2 uv{};
+        };
+
+        std::vector<SurfaceVertex> vertices_;
+        std::vector<std::uint32_t> indices_;
+        DirectX::XMFLOAT4X4 worldTransform_{};
+        bool twoSided_{};
+    };
+
+    // Owns a logical Canvas and composes it with a replaceable world surface.
+    // It does not inherit UiCanvas because presentation is not UI ownership.
+    class WorldSpaceCanvas final
+    {
+    public:
+        WorldSpaceCanvas(
+            UiSize logicalSize,
+            std::unique_ptr<IUiSurface> surface);
+
+        [[nodiscard]] UiCanvas& Canvas() noexcept;
+        [[nodiscard]] const UiCanvas& Canvas() const noexcept;
+        [[nodiscard]] IUiSurface& Surface() noexcept;
+        [[nodiscard]] const IUiSurface& Surface() const noexcept;
+        void SetSurface(std::unique_ptr<IUiSurface> surface);
+        [[nodiscard]] std::optional<UiPoint> MapPointer(
+            const collision::Ray3D& worldRay) const noexcept;
+
+    private:
+        UiCanvas canvas_;
+        std::unique_ptr<IUiSurface> surface_;
+    };
+
+    [[nodiscard]] std::optional<UiPoint> MapScreenPointer(
+        UiPoint screenPosition,
+        UiSize viewportSize,
+        UiSize canvasSize,
+        UiPoint canvasOrigin = {}) noexcept;
+
+    [[nodiscard]] std::optional<collision::Ray3D> CreateWorldPointerRay(
+        UiPoint screenPosition,
+        UiSize viewportSize,
+        const DirectX::XMFLOAT4X4& viewProjection) noexcept;
+}
+// ===== END Engine\UI\Surface\UiSurface.h =====
+
+// ===== BEGIN Engine\UI\Widget\UiWidgets.h =====
+
+
+#include <string_view>
+
+namespace mrg::ui
+{
+    class UiPanel : public UiElement
+    {
+    public:
+        UiPanel() = default;
+        ~UiPanel() override = default;
+    };
+
+    class UiLabel final : public UiElement
+    {
+    public:
+        explicit UiLabel(std::wstring text = {});
+
+        [[nodiscard]] std::wstring_view Text() const noexcept;
+        void SetText(std::wstring text);
+        [[nodiscard]] float FontSize() const noexcept;
+        void SetFontSize(float fontSize);
+        [[nodiscard]] UiColor TextColor() const noexcept;
+        void SetTextColor(UiColor color) noexcept;
+        void SetHorizontalAlignment(UiTextAlignment alignment) noexcept;
+
+    protected:
+        void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const override;
+
+    private:
+        std::wstring text_;
+        float fontSize_{18.0F};
+        UiColor textColor_{1.0F, 1.0F, 1.0F, 1.0F};
+        UiTextAlignment alignment_{UiTextAlignment::Leading};
+    };
+
+    class UiButton : public UiElement
+    {
+    public:
+        explicit UiButton(std::wstring text = {});
+
+        [[nodiscard]] std::wstring_view Text() const noexcept;
+        void SetText(std::wstring text);
+        void SetFontSize(float fontSize);
+
+    protected:
+        void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const override;
+        void OnPointerEvent(
+            const UiPointerEvent& event,
+            std::vector<UiAction>& actions) override;
+
+        [[nodiscard]] float FontSize() const noexcept;
+
+    private:
+        std::wstring text_;
+        float fontSize_{17.0F};
+    };
+
+    class UiToggle final : public UiButton
+    {
+    public:
+        explicit UiToggle(std::wstring text = {}, bool checked = false);
+
+        [[nodiscard]] bool IsChecked() const noexcept;
+        void SetChecked(bool checked) noexcept;
+
+    protected:
+        void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const override;
+        void OnPointerEvent(
+            const UiPointerEvent& event,
+            std::vector<UiAction>& actions) override;
+
+    private:
+        bool checked_{};
+    };
+
+    class UiSlider final : public UiElement
+    {
+    public:
+        explicit UiSlider(float value = 0.0F);
+
+        [[nodiscard]] float Value() const noexcept;
+        void SetValue(float value) noexcept;
+
+    protected:
+        void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const override;
+        void OnPointerEvent(
+            const UiPointerEvent& event,
+            std::vector<UiAction>& actions) override;
+
+    private:
+        void UpdateFromPointer(
+            const UiPointerEvent& event,
+            std::vector<UiAction>& actions);
+
+        float value_{};
+    };
+
+    class UiComboBox final : public UiButton
+    {
+    public:
+        UiComboBox() = default;
+
+        void SetItems(std::vector<std::wstring> items);
+        [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
+        [[nodiscard]] std::size_t SelectedIndex() const noexcept;
+        void SetSelectedIndex(std::size_t index);
+
+    protected:
+        void OnPointerEvent(
+            const UiPointerEvent& event,
+            std::vector<UiAction>& actions) override;
+
+    private:
+        void RefreshText();
+
+        std::vector<std::wstring> items_;
+        std::size_t selectedIndex_{};
+    };
+}
+// ===== END Engine\UI\Widget\UiWidgets.h =====
 
 // ===== BEGIN Engine\Graphics.D3D12\Text\TextRendering.h =====
 
@@ -1315,6 +1896,55 @@ namespace mrg::graphics
     };
 }
 // ===== END Engine\Graphics.D3D12\Renderer\D3D12Renderer.h =====
+
+// ===== BEGIN Engine\Graphics.D3D12\UI\UiRendering.h =====
+
+// D3D12 presentation adapter for backend-neutral UiCanvas draw commands.
+
+
+#include <DirectXMath.h>
+
+namespace mrg::graphics
+{
+    class D3D12UiRenderer final
+    {
+    public:
+        D3D12UiRenderer() = default;
+
+        void Initialize(
+            MeshRenderSystem& meshRendering,
+            TextRenderSystem& textRendering);
+        void Shutdown() noexcept;
+
+        // Renders at pixel size with a top-left screen origin. Text is
+        // supported by the existing DirectWrite-backed screen renderer.
+        void SubmitScreen(
+            const ui::UiCanvas& canvas,
+            const RenderContext& context,
+            ui::UiPoint screenOrigin = {});
+
+        // Renders rectangles directly onto a finite local XY plane. The
+        // transform positions that plane in the world. Rich text and curved
+        // visual warping require a canvas-to-texture presenter; input mapping
+        // remains fully supported by PlaneUiSurface/MeshUvUiSurface.
+        void SubmitPlane(
+            const ui::UiCanvas& canvas,
+            const RenderContext& context,
+            const DirectX::XMFLOAT4X4& surfaceWorld,
+            ui::UiSize surfaceWorldSize,
+            const DirectX::XMFLOAT4X4& viewProjection);
+
+    private:
+        [[nodiscard]] bool IsInitialized() const noexcept;
+
+        MeshRenderSystem* meshRendering_{};
+        TextRenderSystem* textRendering_{};
+        GpuMeshHandle rectangleMesh_;
+        MaterialInstanceHandle rectangleMaterial_;
+        FontHandle defaultFont_;
+    };
+}
+// ===== END Engine\Graphics.D3D12\UI\UiRendering.h =====
 
 // ===== BEGIN Engine\Core\Client\IGameClient.h =====
 

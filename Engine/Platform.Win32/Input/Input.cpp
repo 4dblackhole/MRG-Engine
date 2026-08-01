@@ -54,6 +54,21 @@ namespace mrg::platform
         return mouseDeltaY_;
     }
 
+    std::int32_t InputState::MousePositionX() const noexcept
+    {
+        return mousePositionX_;
+    }
+
+    std::int32_t InputState::MousePositionY() const noexcept
+    {
+        return mousePositionY_;
+    }
+
+    bool InputState::IsMouseInsideWindow() const noexcept
+    {
+        return mouseInsideWindow_;
+    }
+
     float InputState::MouseWheelDelta() const noexcept
     {
         return mouseWheelDelta_;
@@ -77,6 +92,7 @@ namespace mrg::platform
         std::ranges::fill(mouseButtonsReleased_, false);
         mouseDeltaX_ = 0;
         mouseDeltaY_ = 0;
+        mouseInsideWindow_ = false;
         mouseWheelDelta_ = 0.0F;
         eventCount_ = 0;
     }
@@ -91,6 +107,7 @@ namespace mrg::platform
         std::ranges::fill(mouseButtonsReleased_, false);
         mouseDeltaX_ = 0;
         mouseDeltaY_ = 0;
+        mouseInsideWindow_ = false;
         mouseWheelDelta_ = 0.0F;
         eventCount_ = 0;
     }
@@ -188,6 +205,16 @@ namespace mrg::platform
             0,
             delta,
             timestamp});
+    }
+
+    void InputState::SetMousePosition(
+        const std::int32_t x,
+        const std::int32_t y,
+        const bool insideWindow) noexcept
+    {
+        mousePositionX_ = x;
+        mousePositionY_ = y;
+        mouseInsideWindow_ = insideWindow;
     }
 
     void InputState::PushEvent(const InputEvent& event) noexcept

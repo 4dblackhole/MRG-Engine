@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Core"><UniqueIdentifier>{50777777-7777-4777-8777-777777777771}</UniqueIdentifier></Filter>
+    <Filter Include="Input"><UniqueIdentifier>{50777777-7777-4777-8777-777777777772}</UniqueIdentifier></Filter>
+    <Filter Include="Surface"><UniqueIdentifier>{50777777-7777-4777-8777-777777777773}</UniqueIdentifier></Filter>
+    <Filter Include="Widget"><UniqueIdentifier>{50777777-7777-4777-8777-777777777774}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Core\UiElement.h"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="Core\UiCanvas.h"><Filter>Core</Filter></ClInclude>
+    <ClInclude Include="Input\UiInputRouter.h"><Filter>Input</Filter></ClInclude>
+    <ClInclude Include="Surface\UiSurface.h"><Filter>Surface</Filter></ClInclude>
+    <ClInclude Include="Widget\UiWidgets.h"><Filter>Widget</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Core\UiElement.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="Core\UiCanvas.cpp"><Filter>Core</Filter></ClCompile>
+    <ClCompile Include="Input\UiInputRouter.cpp"><Filter>Input</Filter></ClCompile>
+    <ClCompile Include="Surface\UiSurface.cpp"><Filter>Surface</Filter></ClCompile>
+    <ClCompile Include="Widget\UiWidgets.cpp"><Filter>Widget</Filter></ClCompile>
+  </ItemGroup>
+</Project>

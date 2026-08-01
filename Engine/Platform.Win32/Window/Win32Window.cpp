@@ -143,6 +143,10 @@ namespace mrg::platform
             DispatchMessageW(&message);
         }
 
+        // UI placement needs an absolute client-space snapshot. Raw Input is
+        // still used for button transitions, deltas, and QPC timestamps.
+        UpdateMousePosition();
+
         return true;
     }
 
@@ -472,6 +476,29 @@ namespace mrg::platform
             ReleaseCapture();
         }
         mouseCaptured_ = false;
+    }
+
+    void Win32Window::UpdateMousePosition() noexcept
+    {
+        if (window_ == nullptr || input_ == nullptr)
+        {
+            return;
+        }
+
+        POINT point{};
+        RECT clientRectangle{};
+        if (!GetCursorPos(&point) ||
+            !ScreenToClient(window_, &point) ||
+            !GetClientRect(window_, &clientRectangle))
+        {
+            input_->SetMousePosition(0, 0, false);
+            return;
+        }
+
+        const bool inside =
+            point.x >= clientRectangle.left && point.x < clientRectangle.right &&
+            point.y >= clientRectangle.top && point.y < clientRectangle.bottom;
+        input_->SetMousePosition(point.x, point.y, inside);
     }
 
     void Win32Window::RefreshDisplayRate() noexcept

@@ -180,6 +180,79 @@ namespace
             !Intersects(Sphere3D{{4.0F, 4.0F, 4.0F}, 0.5F}, first),
             "sphere is separate from 3D OBB");
     }
+
+    void TestTriangleAndUvSurfaces()
+    {
+        using namespace mrg::collision;
+
+        const Triangle3D triangle{
+            {-1.0F, -1.0F, 0.0F},
+            {-1.0F, 1.0F, 0.0F},
+            {1.0F, 1.0F, 0.0F}};
+        const Ray3D centerRay{{0.0F, 0.0F, -2.0F}, {0.0F, 0.0F, 1.0F}};
+        const auto triangleHit = Intersect(triangle, centerRay);
+        Check(triangleHit.has_value(), "ray intersects an indexed UI triangle");
+        if (triangleHit)
+        {
+            const float weightSum = triangleHit->barycentric.x +
+                triangleHit->barycentric.y + triangleHit->barycentric.z;
+            Check(NearlyEqual(weightSum, 1.0F), "triangle barycentric weights");
+            Check(NearlyEqual(triangleHit->parameter, 2.0F), "triangle ray parameter");
+        }
+
+        DirectX::XMFLOAT4X4 identity{};
+        DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
+        const mrg::ui::PlaneUiSurface plane(2.0F, 2.0F, identity);
+        const auto planeHit = plane.Raycast(centerRay);
+        Check(planeHit.has_value(), "world-space UI plane is raycastable");
+        if (planeHit)
+        {
+            Check(
+                NearlyEqual(planeHit->uv.x, 0.5F) &&
+                    NearlyEqual(planeHit->uv.y, 0.5F),
+                "plane center maps to center UV");
+        }
+
+        const mrg::geometry::RectangleShape rectangle(2.0F, 2.0F);
+        const mrg::ui::MeshUvUiSurface mesh(rectangle, identity);
+        const auto meshHit = mesh.Raycast(centerRay);
+        Check(meshHit.has_value(), "mesh UV UI surface is raycastable");
+        if (meshHit)
+        {
+            Check(
+                NearlyEqual(meshHit->uv.x, 0.5F) &&
+                    NearlyEqual(meshHit->uv.y, 0.5F),
+                "barycentric interpolation preserves rectangle UV");
+        }
+    }
+
+    void TestUiRouting()
+    {
+        mrg::ui::UiCanvas canvas({320.0F, 180.0F});
+        auto& button = canvas.Root().EmplaceChild<mrg::ui::UiButton>(L"Apply");
+        button.SetBounds({20.0F, 20.0F, 120.0F, 40.0F});
+
+        mrg::ui::UiInputRouter router;
+        router.Process(canvas, {{40.0F, 35.0F}, true, true, true, false, 10});
+        Check(button.IsPressed(), "UI button captures a pointer press");
+        router.Process(canvas, {{40.0F, 35.0F}, true, false, false, true, 20});
+        const std::vector<mrg::ui::UiAction> actions = canvas.TakeActions();
+        Check(!button.IsPressed(), "UI button releases pointer capture");
+        Check(
+            actions.size() == 1 &&
+                actions[0].type == mrg::ui::UiActionType::Clicked &&
+                actions[0].source == button.Id(),
+            "press and release on one button emits a click");
+
+        auto& slider = canvas.Root().EmplaceChild<mrg::ui::UiSlider>(0.0F);
+        slider.SetBounds({20.0F, 80.0F, 200.0F, 40.0F});
+        router.Process(canvas, {{30.0F, 100.0F}, true, true, true, false, 30});
+        router.Process(canvas, {{300.0F, 100.0F}, true, true, false, false, 40});
+        Check(
+            NearlyEqual(slider.Value(), 1.0F),
+            "captured slider keeps receiving movement outside its bounds");
+        router.Process(canvas, {{300.0F, 100.0F}, true, false, false, true, 50});
+    }
 }
 
 int main()
@@ -187,13 +260,15 @@ int main()
     TestPlaneAndLines();
     TestTwoDimensionalQueries();
     TestThreeDimensionalVolumes();
+    TestTriangleAndUvSurfaces();
+    TestUiRouting();
 
     if (failureCount != 0)
     {
-        std::cerr << failureCount << " collision test(s) failed.\n";
+        std::cerr << failureCount << " engine test(s) failed.\n";
         return 1;
     }
 
-    std::cout << "All collision tests passed.\n";
+    std::cout << "All collision and UI tests passed.\n";
     return 0;
 }

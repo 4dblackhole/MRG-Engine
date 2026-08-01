@@ -69,6 +69,13 @@ namespace mrg::collision
         float radius{};
     };
 
+    struct Triangle3D
+    {
+        DirectX::XMFLOAT3 first{};
+        DirectX::XMFLOAT3 second{};
+        DirectX::XMFLOAT3 third{};
+    };
+
     // orientation is a quaternion in (x, y, z, w) order. It is normalized
     // internally before a query.
     struct Obb3D
@@ -86,6 +93,16 @@ namespace mrg::collision
         // point + direction * parameter for Line3D, origin + direction *
         // parameter for Ray3D, and lerp(start, end, parameter) for a segment.
         // Segment parameters are clamped to [0, 1].
+        float parameter{};
+    };
+
+    struct TriangleHit3D
+    {
+        DirectX::XMFLOAT3 point{};
+        DirectX::XMFLOAT3 normal{};
+        // Weights for first, second, and third. They sum to one and can be
+        // used to interpolate UVs or other per-vertex attributes.
+        DirectX::XMFLOAT3 barycentric{};
         float parameter{};
     };
 
@@ -152,6 +169,17 @@ namespace mrg::collision
     [[nodiscard]] bool Intersects(
         const Plane3D& plane,
         const LineSegment3D& segment,
+        float epsilon = DefaultEpsilon) noexcept;
+
+    // Moller-Trumbore ray/triangle query. Winding is preserved in the
+    // returned normal; callers decide whether to reject a back face.
+    [[nodiscard]] std::optional<TriangleHit3D> Intersect(
+        const Triangle3D& triangle,
+        const Ray3D& ray,
+        float epsilon = DefaultEpsilon) noexcept;
+    [[nodiscard]] bool Intersects(
+        const Triangle3D& triangle,
+        const Ray3D& ray,
         float epsilon = DefaultEpsilon) noexcept;
 
     [[nodiscard]] bool Intersects(

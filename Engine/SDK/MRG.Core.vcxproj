@@ -48,7 +48,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Core;$(ProjectDir)..\Platform.Win32;$(ProjectDir)..\Graphics.D3D12;$(ProjectDir)..\Audio;$(ProjectDir)..\Collision;$(ProjectDir)..\Geometry;$(FmodIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Core;$(ProjectDir)..\Platform.Win32;$(ProjectDir)..\Graphics.D3D12;$(ProjectDir)..\Audio;$(ProjectDir)..\Collision;$(ProjectDir)..\Geometry;$(ProjectDir)..\UI;$(FmodIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
@@ -71,12 +71,18 @@
     <ClInclude Include="..\Geometry\Primitive\RectangleShape.h" />
     <ClInclude Include="..\Geometry\Primitive\CubeShape.h" />
     <ClInclude Include="..\Geometry\Primitive\SphereShape.h" />
+    <ClInclude Include="..\UI\Core\UiElement.h" />
+    <ClInclude Include="..\UI\Core\UiCanvas.h" />
+    <ClInclude Include="..\UI\Input\UiInputRouter.h" />
+    <ClInclude Include="..\UI\Surface\UiSurface.h" />
+    <ClInclude Include="..\UI\Widget\UiWidgets.h" />
     <ClInclude Include="..\Graphics.D3D12\Renderer\D3D12Renderer.h" />
     <ClInclude Include="..\Graphics.D3D12\Mesh\MeshRendering.h" />
     <ClInclude Include="..\Graphics.D3D12\Texture\TextureManager.h" />
     <ClInclude Include="..\Graphics.D3D12\Text\TextRendering.h" />
     <ClInclude Include="..\Graphics.D3D12\Shader\ShaderCompiler.h" />
     <ClInclude Include="..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl" />
+    <ClInclude Include="..\Graphics.D3D12\UI\UiRendering.h" />
     <ClInclude Include="..\Core\Client\IGameClient.h" />
     <ClInclude Include="..\Core\Client\SceneGameClient.h" />
     <ClInclude Include="..\Core\App\Engine.h" />
@@ -99,11 +105,17 @@
     <ClCompile Include="..\Geometry\Primitive\RectangleShape.cpp" />
     <ClCompile Include="..\Geometry\Primitive\CubeShape.cpp" />
     <ClCompile Include="..\Geometry\Primitive\SphereShape.cpp" />
+    <ClCompile Include="..\UI\Core\UiElement.cpp" />
+    <ClCompile Include="..\UI\Core\UiCanvas.cpp" />
+    <ClCompile Include="..\UI\Input\UiInputRouter.cpp" />
+    <ClCompile Include="..\UI\Surface\UiSurface.cpp" />
+    <ClCompile Include="..\UI\Widget\UiWidgets.cpp" />
     <ClCompile Include="..\Graphics.D3D12\Renderer\D3D12Renderer.cpp" />
     <ClCompile Include="..\Graphics.D3D12\Mesh\MeshRendering.cpp" />
     <ClCompile Include="..\Graphics.D3D12\Texture\TextureManager.cpp" />
     <ClCompile Include="..\Graphics.D3D12\Text\TextRendering.cpp" />
     <ClCompile Include="..\Graphics.D3D12\Shader\ShaderCompiler.cpp" />
+    <ClCompile Include="..\Graphics.D3D12\UI\UiRendering.cpp" />
     <ClCompile Include="..\Core\Client\IGameClient.cpp" />
     <ClCompile Include="..\Core\Client\SceneGameClient.cpp" />
     <ClCompile Include="..\Core\App\Engine.cpp" />
@@ -131,10 +143,16 @@
     <CorePublicHeader Include="$(ProjectDir)..\Geometry\Primitive\RectangleShape.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Geometry\Primitive\CubeShape.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Geometry\Primitive\SphereShape.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\UI\Core\UiElement.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\UI\Core\UiCanvas.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\UI\Input\UiInputRouter.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\UI\Surface\UiSurface.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\UI\Widget\UiWidgets.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\Text\TextRendering.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\Texture\TextureManager.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\Mesh\MeshRendering.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\Renderer\D3D12Renderer.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\UI\UiRendering.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Client\IGameClient.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Client\SceneGameClient.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\App\Engine.h" />

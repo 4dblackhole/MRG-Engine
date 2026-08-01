@@ -63,6 +63,7 @@ namespace mrg::platform
             const RAWMOUSE& mouse,
             std::int64_t timestamp);
         void UpdateMouseCapture();
+        void UpdateMousePosition() noexcept;
         void ReleaseMouseCapture();
         void RefreshDisplayRate() noexcept;
 

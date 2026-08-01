@@ -10,7 +10,8 @@ MRG-Engine/
 │  ├─ Audio/               backend-neutral API와 FMOD backend
 │  ├─ Collision/           렌더러 비종속 충돌 질의
 │  ├─ Geometry/            정점 형식, Shape와 primitive
-│  ├─ Graphics.D3D12/      D3D12 renderer, mesh, texture, text, shader
+│  ├─ UI/                  backend-neutral Canvas, Widget, 입력과 UV 표면
+│  ├─ Graphics.D3D12/      D3D12 renderer, mesh, texture, text, shader, UI 표현
 │  ├─ Core/                loop, Client 계약, Scene, 공통 System 타입
 │  └─ SDK/                 통합 MRG.Core.lib와 생성 MRG_Core.h
 ├─ Tests/

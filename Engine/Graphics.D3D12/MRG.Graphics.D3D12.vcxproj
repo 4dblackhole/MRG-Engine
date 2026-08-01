@@ -48,7 +48,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Geometry;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Geometry;$(ProjectDir)..\UI;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
@@ -64,6 +64,7 @@
     <ClInclude Include="Text\TextRendering.h" />
     <ClInclude Include="Shader\ShaderCompiler.h" />
     <ClInclude Include="Shader\Generated\BuiltInShaders.inl" />
+    <ClInclude Include="UI\UiRendering.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Renderer\D3D12Renderer.cpp" />
@@ -71,6 +72,7 @@
     <ClCompile Include="Texture\TextureManager.cpp" />
     <ClCompile Include="Text\TextRendering.cpp" />
     <ClCompile Include="Shader\ShaderCompiler.cpp" />
+    <ClCompile Include="UI\UiRendering.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Shader\GenerateEmbeddedShaders.ps1" />
@@ -81,6 +83,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Geometry\MRG.Geometry.vcxproj">
       <Project>{96666666-6666-4666-8666-666666666666}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\UI\MRG.UI.vcxproj">
+      <Project>{E7777777-7777-4777-8777-777777777777}</Project>
     </ProjectReference>
   </ItemGroup>
   <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile" Inputs="$(ProjectDir)Shader\GenerateEmbeddedShaders.ps1;$(ProjectDir)Shader\UnlitVertexColorInstanced.hlsl;$(ProjectDir)Shader\UnlitVertexColorTextureArrayInstanced.hlsl;$(ProjectDir)Shader\Text.hlsl" Outputs="$(ProjectDir)Shader\Generated\BuiltInShaders.inl">

@@ -61,6 +61,11 @@ namespace mrg::platform
 
         [[nodiscard]] std::int32_t MouseDeltaX() const noexcept;
         [[nodiscard]] std::int32_t MouseDeltaY() const noexcept;
+        // Absolute Win32 client coordinates are a pointer-placement snapshot.
+        // Raw Input events remain the authoritative timestamped input stream.
+        [[nodiscard]] std::int32_t MousePositionX() const noexcept;
+        [[nodiscard]] std::int32_t MousePositionY() const noexcept;
+        [[nodiscard]] bool IsMouseInsideWindow() const noexcept;
         [[nodiscard]] float MouseWheelDelta() const noexcept;
         [[nodiscard]] std::span<const InputEvent> Events() const noexcept;
         [[nodiscard]] std::int64_t PerformanceCounterFrequency() const noexcept;
@@ -88,6 +93,10 @@ namespace mrg::platform
             std::int32_t x,
             std::int32_t y,
             std::int64_t timestamp) noexcept;
+        void SetMousePosition(
+            std::int32_t x,
+            std::int32_t y,
+            bool insideWindow) noexcept;
         void AddMouseWheel(float delta, std::int64_t timestamp) noexcept;
         void PushEvent(const InputEvent& event) noexcept;
 
@@ -99,6 +108,9 @@ namespace mrg::platform
         std::array<bool, MouseButtonCount> mouseButtonsReleased_{};
         std::int32_t mouseDeltaX_{};
         std::int32_t mouseDeltaY_{};
+        std::int32_t mousePositionX_{};
+        std::int32_t mousePositionY_{};
+        bool mouseInsideWindow_{};
         float mouseWheelDelta_{};
         std::array<InputEvent, MaximumEventsPerUpdate> events_{};
         std::size_t eventCount_{};

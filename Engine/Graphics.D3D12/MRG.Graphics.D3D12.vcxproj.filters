@@ -19,6 +19,9 @@
     <Filter Include="Shader\Generated">
       <UniqueIdentifier>{20222222-2222-4222-8222-222222222225}</UniqueIdentifier>
     </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{20222222-2222-4222-8222-222222222226}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Renderer\D3D12Renderer.h">
@@ -39,6 +42,7 @@
     <ClInclude Include="Shader\Generated\BuiltInShaders.inl">
       <Filter>Shader\Generated</Filter>
     </ClInclude>
+    <ClInclude Include="UI\UiRendering.h"><Filter>UI</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Renderer\D3D12Renderer.cpp">
@@ -56,6 +60,7 @@
     <ClCompile Include="Shader\ShaderCompiler.cpp">
       <Filter>Shader</Filter>
     </ClCompile>
+    <ClCompile Include="UI\UiRendering.cpp"><Filter>UI</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shader\GenerateEmbeddedShaders.ps1">

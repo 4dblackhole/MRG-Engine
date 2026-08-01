@@ -64,6 +64,16 @@ namespace
             point.z + direction.z * parameter};
     }
 
+    [[nodiscard]] XMFLOAT3 Cross(
+        const XMFLOAT3& first,
+        const XMFLOAT3& second) noexcept
+    {
+        return {
+            first.y * second.z - first.z * second.y,
+            first.z * second.x - first.x * second.z,
+            first.x * second.y - first.y * second.x};
+    }
+
     [[nodiscard]] float LengthSquared(const XMFLOAT2& value) noexcept
     {
         return Dot(value, value);
@@ -529,6 +539,74 @@ namespace mrg::collision
         const float epsilon) noexcept
     {
         return Intersect(plane, segment, epsilon).has_value();
+    }
+
+    std::optional<TriangleHit3D> Intersect(
+        const Triangle3D& triangle,
+        const Ray3D& ray,
+        const float epsilon) noexcept
+    {
+        const float absoluteEpsilon = AbsEpsilon(epsilon);
+        const XMFLOAT3 firstEdge = Subtract(triangle.second, triangle.first);
+        const XMFLOAT3 secondEdge = Subtract(triangle.third, triangle.first);
+        const XMFLOAT3 directionCross = Cross(ray.direction, secondEdge);
+        const float determinant = Dot(firstEdge, directionCross);
+        if (!std::isfinite(determinant) ||
+            std::abs(determinant) <= absoluteEpsilon)
+        {
+            return std::nullopt;
+        }
+
+        const float inverseDeterminant = 1.0F / determinant;
+        const XMFLOAT3 originDelta = Subtract(ray.origin, triangle.first);
+        const float secondWeight =
+            Dot(originDelta, directionCross) * inverseDeterminant;
+        if (secondWeight < -absoluteEpsilon ||
+            secondWeight > 1.0F + absoluteEpsilon)
+        {
+            return std::nullopt;
+        }
+
+        const XMFLOAT3 deltaCross = Cross(originDelta, firstEdge);
+        const float thirdWeight =
+            Dot(ray.direction, deltaCross) * inverseDeterminant;
+        if (thirdWeight < -absoluteEpsilon ||
+            secondWeight + thirdWeight > 1.0F + absoluteEpsilon)
+        {
+            return std::nullopt;
+        }
+
+        float parameter = Dot(secondEdge, deltaCross) * inverseDeterminant;
+        if (!std::isfinite(parameter) || parameter < -absoluteEpsilon)
+        {
+            return std::nullopt;
+        }
+        parameter = std::max(parameter, 0.0F);
+
+        const XMFLOAT3 unnormalizedNormal = Cross(firstEdge, secondEdge);
+        const float normalLengthSquared = LengthSquared(unnormalizedNormal);
+        if (!std::isfinite(normalLengthSquared) ||
+            normalLengthSquared <= absoluteEpsilon * absoluteEpsilon)
+        {
+            return std::nullopt;
+        }
+        const float inverseNormalLength = 1.0F / std::sqrt(normalLengthSquared);
+        const float firstWeight = 1.0F - secondWeight - thirdWeight;
+        return TriangleHit3D{
+            AddScaled(ray.origin, ray.direction, parameter),
+            {unnormalizedNormal.x * inverseNormalLength,
+                unnormalizedNormal.y * inverseNormalLength,
+                unnormalizedNormal.z * inverseNormalLength},
+            {firstWeight, secondWeight, thirdWeight},
+            parameter};
+    }
+
+    bool Intersects(
+        const Triangle3D& triangle,
+        const Ray3D& ray,
+        const float epsilon) noexcept
+    {
+        return Intersect(triangle, ray, epsilon).has_value();
     }
 
     bool Intersects(

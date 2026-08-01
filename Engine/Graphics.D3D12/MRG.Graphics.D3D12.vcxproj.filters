@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Renderer">
+      <UniqueIdentifier>{20222222-2222-4222-8222-222222222221}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Mesh">
+      <UniqueIdentifier>{20222222-2222-4222-8222-222222222222}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Texture">
+      <UniqueIdentifier>{20222222-2222-4222-8222-222222222223}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Text">
+      <UniqueIdentifier>{20222222-2222-4222-8222-222222222229}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shader">
+      <UniqueIdentifier>{20222222-2222-4222-8222-222222222224}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shader\Generated">
+      <UniqueIdentifier>{20222222-2222-4222-8222-222222222225}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Renderer\D3D12Renderer.h">
+      <Filter>Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="Mesh\MeshRendering.h">
+      <Filter>Mesh</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture\TextureManager.h">
+      <Filter>Texture</Filter>
+    </ClInclude>
+    <ClInclude Include="Text\TextRendering.h">
+      <Filter>Text</Filter>
+    </ClInclude>
+    <ClInclude Include="Shader\ShaderCompiler.h">
+      <Filter>Shader</Filter>
+    </ClInclude>
+    <ClInclude Include="Shader\Generated\BuiltInShaders.inl">
+      <Filter>Shader\Generated</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Renderer\D3D12Renderer.cpp">
+      <Filter>Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Mesh\MeshRendering.cpp">
+      <Filter>Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Texture\TextureManager.cpp">
+      <Filter>Texture</Filter>
+    </ClCompile>
+    <ClCompile Include="Text\TextRendering.cpp">
+      <Filter>Text</Filter>
+    </ClCompile>
+    <ClCompile Include="Shader\ShaderCompiler.cpp">
+      <Filter>Shader</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shader\GenerateEmbeddedShaders.ps1">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\UnlitVertexColorInstanced.hlsl">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\UnlitVertexColorTextureArrayInstanced.hlsl">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="Shader\Text.hlsl">
+      <Filter>Shader</Filter>
+    </None>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Shape">
+      <UniqueIdentifier>{90666666-6666-4666-8666-666666666661}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Primitive">
+      <UniqueIdentifier>{90666666-6666-4666-8666-666666666662}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Shape\Vertex.h">
+      <Filter>Shape</Filter>
+    </ClInclude>
+    <ClInclude Include="Shape\Shape.h">
+      <Filter>Shape</Filter>
+    </ClInclude>
+    <ClInclude Include="Primitive\RectangleShape.h">
+      <Filter>Primitive</Filter>
+    </ClInclude>
+    <ClInclude Include="Primitive\CubeShape.h">
+      <Filter>Primitive</Filter>
+    </ClInclude>
+    <ClInclude Include="Primitive\SphereShape.h">
+      <Filter>Primitive</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Shape\Shape.cpp">
+      <Filter>Shape</Filter>
+    </ClCompile>
+    <ClCompile Include="Primitive\RectangleShape.cpp">
+      <Filter>Primitive</Filter>
+    </ClCompile>
+    <ClCompile Include="Primitive\CubeShape.cpp">
+      <Filter>Primitive</Filter>
+    </ClCompile>
+    <ClCompile Include="Primitive\SphereShape.cpp">
+      <Filter>Primitive</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{78888888-8888-4888-8888-888888888888}</ProjectGuid>
+    <RootNamespace>MRGCore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <OutDir>$(BaseOutputPath)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(BaseIntermediateOutputPath)$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>MRG.Core</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Core;$(ProjectDir)..\Platform.Win32;$(ProjectDir)..\Graphics.D3D12;$(ProjectDir)..\Audio;$(ProjectDir)..\Collision;$(ProjectDir)..\Geometry;$(FmodIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="MRG_Core.h" />
+    <ClInclude Include="..\Platform.Win32\Input\Input.h" />
+    <ClInclude Include="..\Platform.Win32\System\ComApartment.h" />
+    <ClInclude Include="..\Platform.Win32\System\RuntimePaths.h" />
+    <ClInclude Include="..\Platform.Win32\Window\Win32Window.h" />
+    <ClInclude Include="..\Audio\System\AudioSystem.h" />
+    <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBackend.h" />
+    <ClInclude Include="..\Collision\Query\Collision.h" />
+    <ClInclude Include="..\Geometry\Shape\Vertex.h" />
+    <ClInclude Include="..\Geometry\Shape\Shape.h" />
+    <ClInclude Include="..\Geometry\Primitive\RectangleShape.h" />
+    <ClInclude Include="..\Geometry\Primitive\CubeShape.h" />
+    <ClInclude Include="..\Geometry\Primitive\SphereShape.h" />
+    <ClInclude Include="..\Graphics.D3D12\Renderer\D3D12Renderer.h" />
+    <ClInclude Include="..\Graphics.D3D12\Mesh\MeshRendering.h" />
+    <ClInclude Include="..\Graphics.D3D12\Texture\TextureManager.h" />
+    <ClInclude Include="..\Graphics.D3D12\Text\TextRendering.h" />
+    <ClInclude Include="..\Graphics.D3D12\Shader\ShaderCompiler.h" />
+    <ClInclude Include="..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl" />
+    <ClInclude Include="..\Core\Client\IGameClient.h" />
+    <ClInclude Include="..\Core\Client\SceneGameClient.h" />
+    <ClInclude Include="..\Core\App\Engine.h" />
+    <ClInclude Include="..\Core\System\Camera.h" />
+    <ClInclude Include="..\Core\System\HighResolutionClock.h" />
+    <ClInclude Include="..\Core\System\MeshInstance.h" />
+    <ClInclude Include="..\Core\System\TransformNode.h" />
+    <ClInclude Include="..\Core\Scene\GameScene.h" />
+    <ClInclude Include="..\Core\Scene\SceneManager.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Platform.Win32\Input\Input.cpp" />
+    <ClCompile Include="..\Platform.Win32\System\ComApartment.cpp" />
+    <ClCompile Include="..\Platform.Win32\System\RuntimePaths.cpp" />
+    <ClCompile Include="..\Platform.Win32\Window\Win32Window.cpp" />
+    <ClCompile Include="..\Audio\System\AudioSystem.cpp" />
+    <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBackend.cpp" />
+    <ClCompile Include="..\Collision\Query\Collision.cpp" />
+    <ClCompile Include="..\Geometry\Shape\Shape.cpp" />
+    <ClCompile Include="..\Geometry\Primitive\RectangleShape.cpp" />
+    <ClCompile Include="..\Geometry\Primitive\CubeShape.cpp" />
+    <ClCompile Include="..\Geometry\Primitive\SphereShape.cpp" />
+    <ClCompile Include="..\Graphics.D3D12\Renderer\D3D12Renderer.cpp" />
+    <ClCompile Include="..\Graphics.D3D12\Mesh\MeshRendering.cpp" />
+    <ClCompile Include="..\Graphics.D3D12\Texture\TextureManager.cpp" />
+    <ClCompile Include="..\Graphics.D3D12\Text\TextRendering.cpp" />
+    <ClCompile Include="..\Graphics.D3D12\Shader\ShaderCompiler.cpp" />
+    <ClCompile Include="..\Core\Client\IGameClient.cpp" />
+    <ClCompile Include="..\Core\Client\SceneGameClient.cpp" />
+    <ClCompile Include="..\Core\App\Engine.cpp" />
+    <ClCompile Include="..\Core\System\Camera.cpp" />
+    <ClCompile Include="..\Core\System\HighResolutionClock.cpp" />
+    <ClCompile Include="..\Core\System\MeshInstance.cpp" />
+    <ClCompile Include="..\Core\System\TransformNode.cpp" />
+    <ClCompile Include="..\Core\Scene\GameScene.cpp" />
+    <ClCompile Include="..\Core\Scene\SceneManager.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GenerateCoreHeader.ps1" />
+    <None Include="..\Graphics.D3D12\Shader\GenerateEmbeddedShaders.ps1" />
+    <None Include="..\Graphics.D3D12\Shader\UnlitVertexColorInstanced.hlsl" />
+    <None Include="..\Graphics.D3D12\Shader\UnlitVertexColorTextureArrayInstanced.hlsl" />
+    <None Include="..\Graphics.D3D12\Shader\Text.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <CorePublicHeader Include="$(ProjectDir)..\Audio\System\AudioSystem.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Platform.Win32\System\RuntimePaths.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Platform.Win32\Input\Input.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Collision\Query\Collision.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Geometry\Shape\Vertex.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Geometry\Shape\Shape.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Geometry\Primitive\RectangleShape.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Geometry\Primitive\CubeShape.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Geometry\Primitive\SphereShape.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\Text\TextRendering.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\Texture\TextureManager.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\Mesh\MeshRendering.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Graphics.D3D12\Renderer\D3D12Renderer.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\Client\IGameClient.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\Client\SceneGameClient.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\App\Engine.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\System\Camera.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\System\HighResolutionClock.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\System\MeshInstance.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\System\TransformNode.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\Scene\GameScene.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\Scene\SceneManager.h" />
+  </ItemGroup>
+  <Target Name="GenerateCoreHeader" BeforeTargets="PrepareForBuild" Inputs="$(ProjectDir)GenerateCoreHeader.ps1;@(CorePublicHeader)" Outputs="$(ProjectDir)MRG_Core.h">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)GenerateCoreHeader.ps1&quot; -RepositoryRoot &quot;$(ProjectDir)..\..&quot; -OutputPath &quot;$(ProjectDir)MRG_Core.h&quot;" />
+  </Target>
+  <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile" Inputs="$(ProjectDir)..\Graphics.D3D12\Shader\GenerateEmbeddedShaders.ps1;$(ProjectDir)..\Graphics.D3D12\Shader\UnlitVertexColorInstanced.hlsl;$(ProjectDir)..\Graphics.D3D12\Shader\UnlitVertexColorTextureArrayInstanced.hlsl;$(ProjectDir)..\Graphics.D3D12\Shader\Text.hlsl" Outputs="$(ProjectDir)..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\Graphics.D3D12\Shader\GenerateEmbeddedShaders.ps1&quot; -ShaderDirectory &quot;$(ProjectDir)..\Graphics.D3D12\Shader&quot; -OutputPath &quot;$(ProjectDir)..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl&quot;" />
+  </Target>
+  <Target Name="CopyCoreSdk" AfterTargets="Build">
+    <Copy SourceFiles="$(ProjectDir)MRG_Core.h" DestinationFiles="$(OutDir)MRG_Core.h" SkipUnchangedFiles="true" />
+    <Delete Files="$(OutDir)shaders\ColoredCube.hlsl;$(OutDir)shaders\UnlitVertexColorInstanced.hlsl;$(OutDir)shaders\UnlitVertexColorTextureArrayInstanced.hlsl;$(OutDir)shaders\Text.hlsl" />
+  </Target>
+  <Target Name="EnsureFmodSdk" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(FmodIncludeDir)\fmod.hpp')" Text="FMOD Core API was not found. Set FMOD_ROOT or pass /p:FmodRoot=&quot;path to FMOD Studio API Windows&quot;." />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

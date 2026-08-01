@@ -1,0 +1,158 @@
+#include "System/TransformNode.h"
+
+#include <stdexcept>
+#include <utility>
+
+using namespace DirectX;
+
+namespace mrg::scene
+{
+    TransformNode::TransformNode()
+    {
+        XMStoreFloat4x4(&world_, XMMatrixIdentity());
+    }
+
+    void TransformNode::SetPosition(
+        const float x,
+        const float y,
+        const float z) noexcept
+    {
+        position_ = {x, y, z};
+        MarkWorldDirty();
+    }
+
+    void TransformNode::SetScale(
+        const float x,
+        const float y,
+        const float z) noexcept
+    {
+        scale_ = {x, y, z};
+        MarkWorldDirty();
+    }
+
+    void TransformNode::SetRotationRollPitchYaw(
+        const float pitch,
+        const float yaw,
+        const float roll) noexcept
+    {
+        XMStoreFloat4(
+            &rotation_,
+            XMQuaternionRotationRollPitchYaw(pitch, yaw, roll));
+        MarkWorldDirty();
+    }
+
+    void TransformNode::SetRotationQuaternion(
+        const float x,
+        const float y,
+        const float z,
+        const float w) noexcept
+    {
+        XMStoreFloat4(
+            &rotation_,
+            XMQuaternionNormalize(XMVectorSet(x, y, z, w)));
+        MarkWorldDirty();
+    }
+
+    const XMFLOAT3& TransformNode::Position() const noexcept
+    {
+        return position_;
+    }
+
+    const XMFLOAT3& TransformNode::Scale() const noexcept
+    {
+        return scale_;
+    }
+
+    const XMFLOAT4& TransformNode::Rotation() const noexcept
+    {
+        return rotation_;
+    }
+
+    TransformNode& TransformNode::AddChild(
+        std::unique_ptr<TransformNode> child)
+    {
+        if (child == nullptr)
+        {
+            throw std::invalid_argument("A transform child cannot be null.");
+        }
+        if (child->parent_ != nullptr)
+        {
+            throw std::invalid_argument(
+                "A transform child already has a parent.");
+        }
+
+        child->parent_ = this;
+        child->MarkWorldDirty();
+        children_.push_back(std::move(child));
+        return *children_.back();
+    }
+
+    TransformNode& TransformNode::CreateChild()
+    {
+        return AddChild(std::make_unique<TransformNode>());
+    }
+
+    TransformNode* TransformNode::Parent() const noexcept
+    {
+        return parent_;
+    }
+
+    const std::vector<std::unique_ptr<TransformNode>>&
+    TransformNode::Children() const noexcept
+    {
+        return children_;
+    }
+
+    const XMFLOAT4X4& TransformNode::WorldMatrix()
+    {
+        UpdateWorld();
+        return world_;
+    }
+
+    void TransformNode::UpdateWorldRecursive()
+    {
+        UpdateWorld();
+        for (const auto& child : children_)
+        {
+            child->UpdateWorldRecursive();
+        }
+    }
+
+    void TransformNode::MarkWorldDirty() noexcept
+    {
+        // A parent transform affects every descendant world matrix, so defer
+        // recomputation until WorldMatrix()/UpdateWorldRecursive is requested.
+        worldDirty_ = true;
+        for (const auto& child : children_)
+        {
+            child->MarkWorldDirty();
+        }
+    }
+
+    void TransformNode::UpdateWorld()
+    {
+        if (!worldDirty_)
+        {
+            return;
+        }
+
+        const XMMATRIX local =
+            XMMatrixScaling(scale_.x, scale_.y, scale_.z) *
+            XMMatrixRotationQuaternion(XMLoadFloat4(&rotation_)) *
+            XMMatrixTranslation(position_.x, position_.y, position_.z);
+
+        if (parent_ != nullptr)
+        {
+            parent_->UpdateWorld();
+            XMStoreFloat4x4(
+                &world_,
+                local * XMLoadFloat4x4(&parent_->world_));
+        }
+        else
+        {
+            XMStoreFloat4x4(&world_, local);
+        }
+
+        worldDirty_ = false;
+    }
+}

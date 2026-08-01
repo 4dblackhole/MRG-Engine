@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Input">
+      <UniqueIdentifier>{10111111-1111-4111-8111-111111111111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="System">
+      <UniqueIdentifier>{10111111-1111-4111-8111-111111111113}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Window">
+      <UniqueIdentifier>{10111111-1111-4111-8111-111111111112}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Input\Input.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="System\RuntimePaths.h">
+      <Filter>System</Filter>
+    </ClInclude>
+    <ClInclude Include="System\ComApartment.h">
+      <Filter>System</Filter>
+    </ClInclude>
+    <ClInclude Include="Window\Win32Window.h">
+      <Filter>Window</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Input\Input.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="System\RuntimePaths.cpp">
+      <Filter>System</Filter>
+    </ClCompile>
+    <ClCompile Include="System\ComApartment.cpp">
+      <Filter>System</Filter>
+    </ClCompile>
+    <ClCompile Include="Window\Win32Window.cpp">
+      <Filter>Window</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

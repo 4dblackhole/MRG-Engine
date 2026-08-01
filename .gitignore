@@ -1,0 +1,13 @@
+.vs/
+bin/
+build/
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+
+# Third-party SDKs and runtime binaries are supplied locally.
+ThirdParty/
+*.dll
+*.lib
+

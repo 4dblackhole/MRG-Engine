@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{B2222222-2222-4222-8222-222222222222}</ProjectGuid>
+    <RootNamespace>MRGGraphicsD3D12</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <OutDir>$(BaseOutputPath)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(BaseIntermediateOutputPath)$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>MRG.Graphics.D3D12</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Geometry;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="Renderer\D3D12Renderer.h" />
+    <ClInclude Include="Mesh\MeshRendering.h" />
+    <ClInclude Include="Texture\TextureManager.h" />
+    <ClInclude Include="Text\TextRendering.h" />
+    <ClInclude Include="Shader\ShaderCompiler.h" />
+    <ClInclude Include="Shader\Generated\BuiltInShaders.inl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Renderer\D3D12Renderer.cpp" />
+    <ClCompile Include="Mesh\MeshRendering.cpp" />
+    <ClCompile Include="Texture\TextureManager.cpp" />
+    <ClCompile Include="Text\TextRendering.cpp" />
+    <ClCompile Include="Shader\ShaderCompiler.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shader\GenerateEmbeddedShaders.ps1" />
+    <None Include="Shader\UnlitVertexColorInstanced.hlsl" />
+    <None Include="Shader\UnlitVertexColorTextureArrayInstanced.hlsl" />
+    <None Include="Shader\Text.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Geometry\MRG.Geometry.vcxproj">
+      <Project>{96666666-6666-4666-8666-666666666666}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile" Inputs="$(ProjectDir)Shader\GenerateEmbeddedShaders.ps1;$(ProjectDir)Shader\UnlitVertexColorInstanced.hlsl;$(ProjectDir)Shader\UnlitVertexColorTextureArrayInstanced.hlsl;$(ProjectDir)Shader\Text.hlsl" Outputs="$(ProjectDir)Shader\Generated\BuiltInShaders.inl">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Shader\GenerateEmbeddedShaders.ps1&quot; -ShaderDirectory &quot;$(ProjectDir)Shader&quot; -OutputPath &quot;$(ProjectDir)Shader\Generated\BuiltInShaders.inl&quot;" />
+  </Target>
+  <Target Name="RemoveLegacyRuntimeShaders" AfterTargets="Build">
+    <Delete Files="$(OutDir)shaders\ColoredCube.hlsl;$(OutDir)shaders\UnlitVertexColorInstanced.hlsl;$(OutDir)shaders\UnlitVertexColorTextureArrayInstanced.hlsl;$(OutDir)shaders\Text.hlsl" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

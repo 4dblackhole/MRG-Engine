@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Platform.Win32">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888801}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform.Win32\Input">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888802}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform.Win32\System">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888823}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform.Win32\Window">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888803}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Audio">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888804}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Audio\System">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888805}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Audio\Backend">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888806}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Audio\Backend\Fmod">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888807}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Collision">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888820}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Collision\Query">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888821}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Geometry">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888808}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Geometry\Shape">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888809}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Geometry\Primitive">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888810}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics.D3D12">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888811}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics.D3D12\Renderer">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888812}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics.D3D12\Mesh">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888813}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics.D3D12\Texture">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888814}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics.D3D12\Text">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888822}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics.D3D12\Shader">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888815}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics.D3D12\Shader\Generated">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888816}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888817}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core\App">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888818}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core\Client">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888826}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core\System">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888825}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core\Scene">
+      <UniqueIdentifier>{70888888-8888-4888-8888-888888888819}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="MRG_Core.h" />
+    <ClInclude Include="..\Platform.Win32\Input\Input.h"><Filter>Platform.Win32\Input</Filter></ClInclude>
+    <ClInclude Include="..\Platform.Win32\System\ComApartment.h"><Filter>Platform.Win32\System</Filter></ClInclude>
+    <ClInclude Include="..\Platform.Win32\System\RuntimePaths.h"><Filter>Platform.Win32\System</Filter></ClInclude>
+    <ClInclude Include="..\Platform.Win32\Window\Win32Window.h"><Filter>Platform.Win32\Window</Filter></ClInclude>
+    <ClInclude Include="..\Audio\System\AudioSystem.h"><Filter>Audio\System</Filter></ClInclude>
+    <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBackend.h"><Filter>Audio\Backend\Fmod</Filter></ClInclude>
+    <ClInclude Include="..\Collision\Query\Collision.h"><Filter>Collision\Query</Filter></ClInclude>
+    <ClInclude Include="..\Geometry\Shape\Vertex.h"><Filter>Geometry\Shape</Filter></ClInclude>
+    <ClInclude Include="..\Geometry\Shape\Shape.h"><Filter>Geometry\Shape</Filter></ClInclude>
+    <ClInclude Include="..\Geometry\Primitive\RectangleShape.h"><Filter>Geometry\Primitive</Filter></ClInclude>
+    <ClInclude Include="..\Geometry\Primitive\CubeShape.h"><Filter>Geometry\Primitive</Filter></ClInclude>
+    <ClInclude Include="..\Geometry\Primitive\SphereShape.h"><Filter>Geometry\Primitive</Filter></ClInclude>
+    <ClInclude Include="..\Graphics.D3D12\Renderer\D3D12Renderer.h"><Filter>Graphics.D3D12\Renderer</Filter></ClInclude>
+    <ClInclude Include="..\Graphics.D3D12\Mesh\MeshRendering.h"><Filter>Graphics.D3D12\Mesh</Filter></ClInclude>
+    <ClInclude Include="..\Graphics.D3D12\Texture\TextureManager.h"><Filter>Graphics.D3D12\Texture</Filter></ClInclude>
+    <ClInclude Include="..\Graphics.D3D12\Text\TextRendering.h"><Filter>Graphics.D3D12\Text</Filter></ClInclude>
+    <ClInclude Include="..\Graphics.D3D12\Shader\ShaderCompiler.h"><Filter>Graphics.D3D12\Shader</Filter></ClInclude>
+    <ClInclude Include="..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl"><Filter>Graphics.D3D12\Shader\Generated</Filter></ClInclude>
+    <ClInclude Include="..\Core\Client\IGameClient.h"><Filter>Core\Client</Filter></ClInclude>
+    <ClInclude Include="..\Core\Client\SceneGameClient.h"><Filter>Core\Client</Filter></ClInclude>
+    <ClInclude Include="..\Core\App\Engine.h"><Filter>Core\App</Filter></ClInclude>
+    <ClInclude Include="..\Core\System\Camera.h"><Filter>Core\System</Filter></ClInclude>
+    <ClInclude Include="..\Core\System\HighResolutionClock.h"><Filter>Core\System</Filter></ClInclude>
+    <ClInclude Include="..\Core\System\MeshInstance.h"><Filter>Core\System</Filter></ClInclude>
+    <ClInclude Include="..\Core\System\TransformNode.h"><Filter>Core\System</Filter></ClInclude>
+    <ClInclude Include="..\Core\Scene\GameScene.h"><Filter>Core\Scene</Filter></ClInclude>
+    <ClInclude Include="..\Core\Scene\SceneManager.h"><Filter>Core\Scene</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Platform.Win32\Input\Input.cpp"><Filter>Platform.Win32\Input</Filter></ClCompile>
+    <ClCompile Include="..\Platform.Win32\System\ComApartment.cpp"><Filter>Platform.Win32\System</Filter></ClCompile>
+    <ClCompile Include="..\Platform.Win32\System\RuntimePaths.cpp"><Filter>Platform.Win32\System</Filter></ClCompile>
+    <ClCompile Include="..\Platform.Win32\Window\Win32Window.cpp"><Filter>Platform.Win32\Window</Filter></ClCompile>
+    <ClCompile Include="..\Audio\System\AudioSystem.cpp"><Filter>Audio\System</Filter></ClCompile>
+    <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBackend.cpp"><Filter>Audio\Backend\Fmod</Filter></ClCompile>
+    <ClCompile Include="..\Collision\Query\Collision.cpp"><Filter>Collision\Query</Filter></ClCompile>
+    <ClCompile Include="..\Geometry\Shape\Shape.cpp"><Filter>Geometry\Shape</Filter></ClCompile>
+    <ClCompile Include="..\Geometry\Primitive\RectangleShape.cpp"><Filter>Geometry\Primitive</Filter></ClCompile>
+    <ClCompile Include="..\Geometry\Primitive\CubeShape.cpp"><Filter>Geometry\Primitive</Filter></ClCompile>
+    <ClCompile Include="..\Geometry\Primitive\SphereShape.cpp"><Filter>Geometry\Primitive</Filter></ClCompile>
+    <ClCompile Include="..\Graphics.D3D12\Renderer\D3D12Renderer.cpp"><Filter>Graphics.D3D12\Renderer</Filter></ClCompile>
+    <ClCompile Include="..\Graphics.D3D12\Mesh\MeshRendering.cpp"><Filter>Graphics.D3D12\Mesh</Filter></ClCompile>
+    <ClCompile Include="..\Graphics.D3D12\Texture\TextureManager.cpp"><Filter>Graphics.D3D12\Texture</Filter></ClCompile>
+    <ClCompile Include="..\Graphics.D3D12\Text\TextRendering.cpp"><Filter>Graphics.D3D12\Text</Filter></ClCompile>
+    <ClCompile Include="..\Graphics.D3D12\Shader\ShaderCompiler.cpp"><Filter>Graphics.D3D12\Shader</Filter></ClCompile>
+    <ClCompile Include="..\Core\Client\IGameClient.cpp"><Filter>Core\Client</Filter></ClCompile>
+    <ClCompile Include="..\Core\Client\SceneGameClient.cpp"><Filter>Core\Client</Filter></ClCompile>
+    <ClCompile Include="..\Core\App\Engine.cpp"><Filter>Core\App</Filter></ClCompile>
+    <ClCompile Include="..\Core\System\Camera.cpp"><Filter>Core\System</Filter></ClCompile>
+    <ClCompile Include="..\Core\System\HighResolutionClock.cpp"><Filter>Core\System</Filter></ClCompile>
+    <ClCompile Include="..\Core\System\MeshInstance.cpp"><Filter>Core\System</Filter></ClCompile>
+    <ClCompile Include="..\Core\System\TransformNode.cpp"><Filter>Core\System</Filter></ClCompile>
+    <ClCompile Include="..\Core\Scene\GameScene.cpp"><Filter>Core\Scene</Filter></ClCompile>
+    <ClCompile Include="..\Core\Scene\SceneManager.cpp"><Filter>Core\Scene</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GenerateCoreHeader.ps1" />
+    <None Include="..\Graphics.D3D12\Shader\GenerateEmbeddedShaders.ps1"><Filter>Graphics.D3D12\Shader</Filter></None>
+    <None Include="..\Graphics.D3D12\Shader\UnlitVertexColorInstanced.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>
+    <None Include="..\Graphics.D3D12\Shader\UnlitVertexColorTextureArrayInstanced.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>
+    <None Include="..\Graphics.D3D12\Shader\Text.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>
+  </ItemGroup>
+</Project>

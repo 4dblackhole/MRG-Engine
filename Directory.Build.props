@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MRGEngineRoot>$(MSBuildThisFileDirectory)</MRGEngineRoot>
+    <BaseOutputPath>$(MRGEngineRoot)bin\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MRGEngineRoot)build\obj\</BaseIntermediateOutputPath>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+
+    <FmodRoot Condition="'$(FmodRoot)' == '' and '$(FMOD_ROOT)' != ''">$(FMOD_ROOT)</FmodRoot>
+    <FmodRoot Condition="'$(FmodRoot)' == '' and Exists('C:\Program Files (x86)\FMOD SoundSystem\FMOD Studio API Windows\api\core\inc\fmod.hpp')">C:\Program Files (x86)\FMOD SoundSystem\FMOD Studio API Windows</FmodRoot>
+    <FmodIncludeDir>$(FmodRoot)\api\core\inc</FmodIncludeDir>
+    <FmodLibraryDir>$(FmodRoot)\api\core\lib\x64</FmodLibraryDir>
+  </PropertyGroup>
+</Project>

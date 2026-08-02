@@ -37,6 +37,12 @@ This file applies to the entire repository.
   not subclass the Canvas. D3D12 drawing belongs in `Graphics.D3D12/UI`.
 - Treat absolute mouse position as UI placement data. Rhythm judgement must
   continue to use the ordered Raw Input QPC event stream.
+- Keep functions readable as they grow. If a function performs multiple
+  operations, extract each operation into a clearly named helper/private
+  function. If a long function still represents one cohesive operation, add
+  short section comments at each meaningful phase boundary to explain the
+  intent and required ordering; do not add comments that merely restate an
+  obvious statement.
 
 ## Verification
 

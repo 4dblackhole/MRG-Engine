@@ -114,9 +114,13 @@ namespace mrg::audio
             errorMessage = "The audio system is not initialized.";
             return false;
         }
-        if (device.driverIndex < 0 ||
-            (device.backend != AudioOutputBackend::Wasapi &&
-                device.backend != AudioOutputBackend::Asio))
+        const bool automaticDefault =
+            device.backend == AudioOutputBackend::Automatic &&
+            device.driverIndex == -1;
+        const bool explicitDriver = device.driverIndex >= 0 &&
+            (device.backend == AudioOutputBackend::Wasapi ||
+                device.backend == AudioOutputBackend::Asio);
+        if (!automaticDefault && !explicitDriver)
         {
             errorMessage = "The selected audio output device is invalid.";
             return false;

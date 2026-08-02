@@ -2,8 +2,14 @@
 
 `AudioSystem`은 Client에 FMOD 타입을 노출하지 않는 backend-neutral 서비스다. 현재
 기본 backend는 시작할 때 FMOD probe system으로 WASAPI와 ASIO 출력 장치를 각각
-열거하며, 각 `AudioDeviceInfo`에는 backend 종류와 해당 backend 안의 driver index가
-들어 있다.
+열거하고, 별도로 `SYSTEM DEFAULT (FMOD AUTO)` 항목을 만든다. 각
+`AudioDeviceInfo`에는 backend 종류와 해당 backend 안의 driver index가 들어 있다.
+
+현재 사용 중인 FMOD 2.x Windows API에는 `FMOD_OUTPUTTYPE_DSOUND`가 없으므로
+DirectSound를 실제 output backend로 선택할 수 없다. UI의 기본 출력 항목은
+DirectSound라는 이름을 사용하지 않고 FMOD 자동 선택으로 표시한다. 이 경로는 Windows
+기본 출력 장치를 FMOD가 선택하게 하며, 명시적인 저지연 장치 선택은 WASAPI 또는
+ASIO를 사용한다.
 
 ## 실행 중 장치 전환
 

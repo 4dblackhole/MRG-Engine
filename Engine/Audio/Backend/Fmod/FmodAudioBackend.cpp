@@ -80,6 +80,15 @@ namespace mrg::audio
     {
         Shutdown();
         outputDevices_.clear();
+        // FMOD 2.x no longer exposes a DirectSound output type. Keep the
+        // standard Windows path selectable as one explicit automatic entry;
+        // FMOD resolves it to the current default output at initialization.
+        outputDevices_.push_back(AudioDeviceInfo{
+            AudioOutputBackend::Automatic,
+            -1,
+            "Windows default output (FMOD automatic)",
+            0,
+            0});
         EnumerateDevices(AudioOutputBackend::Wasapi);
         EnumerateDevices(AudioOutputBackend::Asio);
 

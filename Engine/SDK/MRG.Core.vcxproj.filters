@@ -107,6 +107,7 @@
     <ClInclude Include="..\Geometry\Shape\Vertex.h"><Filter>Geometry\Shape</Filter></ClInclude>
     <ClInclude Include="..\Geometry\Shape\Shape.h"><Filter>Geometry\Shape</Filter></ClInclude>
     <ClInclude Include="..\Geometry\Primitive\RectangleShape.h"><Filter>Geometry\Primitive</Filter></ClInclude>
+    <ClInclude Include="..\Geometry\Primitive\CurvedRectangleShape.h"><Filter>Geometry\Primitive</Filter></ClInclude>
     <ClInclude Include="..\Geometry\Primitive\CubeShape.h"><Filter>Geometry\Primitive</Filter></ClInclude>
     <ClInclude Include="..\Geometry\Primitive\SphereShape.h"><Filter>Geometry\Primitive</Filter></ClInclude>
     <ClInclude Include="..\UI\Core\UiElement.h"><Filter>UI\Core</Filter></ClInclude>
@@ -141,6 +142,7 @@
     <ClCompile Include="..\Collision\Query\Collision.cpp"><Filter>Collision\Query</Filter></ClCompile>
     <ClCompile Include="..\Geometry\Shape\Shape.cpp"><Filter>Geometry\Shape</Filter></ClCompile>
     <ClCompile Include="..\Geometry\Primitive\RectangleShape.cpp"><Filter>Geometry\Primitive</Filter></ClCompile>
+    <ClCompile Include="..\Geometry\Primitive\CurvedRectangleShape.cpp"><Filter>Geometry\Primitive</Filter></ClCompile>
     <ClCompile Include="..\Geometry\Primitive\CubeShape.cpp"><Filter>Geometry\Primitive</Filter></ClCompile>
     <ClCompile Include="..\Geometry\Primitive\SphereShape.cpp"><Filter>Geometry\Primitive</Filter></ClCompile>
     <ClCompile Include="..\UI\Core\UiElement.cpp"><Filter>UI\Core</Filter></ClCompile>
@@ -167,6 +169,7 @@
   <ItemGroup>
     <None Include="GenerateCoreHeader.ps1" />
     <None Include="..\Graphics.D3D12\Shader\GenerateEmbeddedShaders.ps1"><Filter>Graphics.D3D12\Shader</Filter></None>
+    <None Include="..\Graphics.D3D12\Shader\UiRectangle.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>
     <None Include="..\Graphics.D3D12\Shader\UnlitVertexColorInstanced.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>
     <None Include="..\Graphics.D3D12\Shader\UnlitVertexColorTextureArrayInstanced.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>
     <None Include="..\Graphics.D3D12\Shader\Text.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>

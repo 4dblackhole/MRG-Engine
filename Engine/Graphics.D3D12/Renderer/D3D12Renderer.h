@@ -32,8 +32,14 @@ namespace mrg::graphics
         std::uint32_t width{};
         std::uint32_t height{};
         std::uint32_t frameIndex{};
+        // Monotonic BeginFrame sequence, distinct from the reusable back-
+        // buffer index. Pass adapters use it to detect duplicate work within
+        // one frame even after a feature was inactive for several frames.
+        std::uint64_t renderIndex{};
         DXGI_FORMAT renderTargetFormat{DXGI_FORMAT_R8G8B8A8_UNORM};
         DXGI_FORMAT depthStencilFormat{DXGI_FORMAT_D32_FLOAT};
+        D3D12_CPU_DESCRIPTOR_HANDLE renderTargetView{};
+        D3D12_CPU_DESCRIPTOR_HANDLE depthStencilView{};
         // Non-owning queue/service for high-level mesh submissions during
         // this BeginFrame/EndFrame pair.
         MeshRenderSystem* meshRendering{};
@@ -91,6 +97,7 @@ namespace mrg::graphics
         std::uint32_t width_{};
         std::uint32_t height_{};
         std::uint32_t frameIndex_{};
+        std::uint64_t nextRenderIndex_{1};
         std::uint32_t rtvDescriptorSize_{};
         bool tearingSupported_{};
         bool frameOpen_{};

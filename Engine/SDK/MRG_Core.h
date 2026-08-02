@@ -23,13 +23,20 @@
 // Audio feature: backend-neutral public service and backend contract.
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace mrg::audio
 {
+    using AudioSoundHandle = std::uint64_t;
+    using BackendSoundHandle = std::uint64_t;
+    inline constexpr AudioSoundHandle InvalidAudioSoundHandle = 0;
+    inline constexpr BackendSoundHandle InvalidBackendSoundHandle = 0;
+
     enum class AudioOutputBackend
     {
         Automatic,
@@ -76,6 +83,14 @@ namespace mrg::audio
         [[nodiscard]] virtual std::uint64_t DspClock() const noexcept = 0;
         [[nodiscard]] virtual const std::vector<AudioDeviceInfo>&
             OutputDevices() const noexcept = 0;
+        [[nodiscard]] virtual int ActiveDriverIndex() const noexcept = 0;
+        [[nodiscard]] virtual BackendSoundHandle LoadSound(
+            const std::filesystem::path& path,
+            std::string& errorMessage) = 0;
+        [[nodiscard]] virtual bool PlaySound(
+            BackendSoundHandle sound,
+            std::string& errorMessage) = 0;
+        virtual void UnloadSound(BackendSoundHandle sound) noexcept = 0;
     };
 
     using AudioBackendFactory = std::unique_ptr<IAudioBackend> (*)();
@@ -109,9 +124,36 @@ namespace mrg::audio
         [[nodiscard]] std::uint64_t DspClock() const noexcept;
         [[nodiscard]] const std::vector<AudioDeviceInfo>&
             OutputDevices() const noexcept;
+        [[nodiscard]] int ActiveDriverIndex() const noexcept;
+
+        // Initializes a replacement backend first and commits the device
+        // change only after every registered sound has been recreated. A
+        // failed switch therefore leaves the currently active output intact.
+        [[nodiscard]] bool SelectOutputDevice(
+            const AudioDeviceInfo& device,
+            std::string& errorMessage);
+        [[nodiscard]] AudioSoundHandle LoadSound(
+            const std::filesystem::path& path,
+            std::string& errorMessage);
+        [[nodiscard]] bool PlaySound(
+            AudioSoundHandle sound,
+            std::string& errorMessage);
+        void UnloadSound(AudioSoundHandle sound) noexcept;
 
     private:
+        struct RegisteredSound
+        {
+            std::filesystem::path path;
+            BackendSoundHandle backendHandle{InvalidBackendSoundHandle};
+        };
+
+        [[nodiscard]] std::unique_ptr<IAudioBackend> CreateBackend() const;
+
         std::unique_ptr<IAudioBackend> backend_;
+        std::unordered_map<AudioSoundHandle, RegisteredSound> sounds_;
+        AudioConfig config_{};
+        AudioBackendFactory factory_{};
+        AudioSoundHandle nextSoundHandle_{1};
         bool initialized_{};
     };
 }
@@ -691,6 +733,27 @@ namespace mrg::geometry
     };
 }
 // ===== END Engine\Geometry\Primitive\RectangleShape.h =====
+
+// ===== BEGIN Engine\Geometry\Primitive\CurvedRectangleShape.h =====
+
+
+#include <cstdint>
+
+namespace mrg::geometry
+{
+    // A vertically straight, horizontally curved rectangle centered at the
+    // origin. UVs span the complete surface, so it can host a rendered canvas.
+    class CurvedRectangleShape final : public Shape
+    {
+    public:
+        CurvedRectangleShape(
+            float width = 2.0F,
+            float height = 2.0F,
+            float curvatureRadians = 0.785398163F,
+            std::uint32_t horizontalSegments = 32);
+    };
+}
+// ===== END Engine\Geometry\Primitive\CurvedRectangleShape.h =====
 
 // ===== BEGIN Engine\Geometry\Primitive\CubeShape.h =====
 
@@ -1389,6 +1452,7 @@ namespace mrg::graphics
 
 namespace mrg::graphics
 {
+    class D3D12UiRenderer;
     // One descriptor table reserves this many entries.  Each entry can point
     // at an independently sized Texture2D resource; this is not a
     // D3D12 Texture2DArray and therefore does not require equal dimensions.
@@ -1435,6 +1499,38 @@ namespace mrg::graphics
 
     using TextureSetHandle = std::shared_ptr<const TextureSet>;
 
+    // One GPU texture that can alternate between a render target and a
+    // shader resource. TextureManager owns its SRV allocation while the
+    // target keeps the RTV and resource state required by a render pass.
+    class RenderTargetTexture final
+    {
+    public:
+        RenderTargetTexture(const RenderTargetTexture&) = delete;
+        RenderTargetTexture& operator=(const RenderTargetTexture&) = delete;
+
+        [[nodiscard]] const TextureSetHandle& Textures() const noexcept;
+        [[nodiscard]] std::uint32_t Width() const noexcept;
+        [[nodiscard]] std::uint32_t Height() const noexcept;
+
+    private:
+        friend class D3D12UiRenderer;
+        friend class TextureManager;
+
+        RenderTargetTexture() = default;
+
+        TextureSetHandle textures_;
+        Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv_{};
+        D3D12_RESOURCE_STATES state_{
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE};
+        std::uint32_t width_{};
+        std::uint32_t height_{};
+    };
+
+    using RenderTargetTextureHandle =
+        std::shared_ptr<RenderTargetTexture>;
+
     // Decodes common image formats through WIC and owns the shader-visible
     // descriptor heap used by textured materials.  Initial uploads are
     // synchronous so temporary upload buffers can be released immediately;
@@ -1455,6 +1551,9 @@ namespace mrg::graphics
 
         [[nodiscard]] TextureSetHandle LoadTextureSet(
             std::span<const std::filesystem::path> paths);
+        [[nodiscard]] RenderTargetTextureHandle CreateRenderTargetTexture(
+            std::uint32_t width,
+            std::uint32_t height);
 
         [[nodiscard]] ID3D12DescriptorHeap* DescriptorHeap() const noexcept;
 
@@ -1688,6 +1787,7 @@ namespace mrg::graphics
             BuiltInMaterial material);
         [[nodiscard]] TextureManager& Textures() noexcept;
         [[nodiscard]] const TextureManager& Textures() const noexcept;
+        [[nodiscard]] ID3D12Device* Device() const noexcept;
 
         // Called by D3D12Renderer after the selected frame resource is safe.
         void BeginFrame(std::uint32_t frameIndex);
@@ -1807,8 +1907,14 @@ namespace mrg::graphics
         std::uint32_t width{};
         std::uint32_t height{};
         std::uint32_t frameIndex{};
+        // Monotonic BeginFrame sequence, distinct from the reusable back-
+        // buffer index. Pass adapters use it to detect duplicate work within
+        // one frame even after a feature was inactive for several frames.
+        std::uint64_t renderIndex{};
         DXGI_FORMAT renderTargetFormat{DXGI_FORMAT_R8G8B8A8_UNORM};
         DXGI_FORMAT depthStencilFormat{DXGI_FORMAT_D32_FLOAT};
+        D3D12_CPU_DESCRIPTOR_HANDLE renderTargetView{};
+        D3D12_CPU_DESCRIPTOR_HANDLE depthStencilView{};
         // Non-owning queue/service for high-level mesh submissions during
         // this BeginFrame/EndFrame pair.
         MeshRenderSystem* meshRendering{};
@@ -1866,6 +1972,7 @@ namespace mrg::graphics
         std::uint32_t width_{};
         std::uint32_t height_{};
         std::uint32_t frameIndex_{};
+        std::uint64_t nextRenderIndex_{1};
         std::uint32_t rtvDescriptorSize_{};
         bool tearingSupported_{};
         bool frameOpen_{};
@@ -1904,12 +2011,18 @@ namespace mrg::graphics
 
 #include <DirectXMath.h>
 
+#include <memory>
+
 namespace mrg::graphics
 {
     class D3D12UiRenderer final
     {
     public:
-        D3D12UiRenderer() = default;
+        D3D12UiRenderer();
+        ~D3D12UiRenderer();
+
+        D3D12UiRenderer(const D3D12UiRenderer&) = delete;
+        D3D12UiRenderer& operator=(const D3D12UiRenderer&) = delete;
 
         void Initialize(
             MeshRenderSystem& meshRendering,
@@ -1923,10 +2036,9 @@ namespace mrg::graphics
             const RenderContext& context,
             ui::UiPoint screenOrigin = {});
 
-        // Renders rectangles directly onto a finite local XY plane. The
-        // transform positions that plane in the world. Rich text and curved
-        // visual warping require a canvas-to-texture presenter; input mapping
-        // remains fully supported by PlaneUiSurface/MeshUvUiSurface.
+        // Renders rectangles directly onto a finite local XY plane. Use
+        // RenderToTexture plus a textured mesh when text or curvature is
+        // required. Input mapping remains independent of either path.
         void SubmitPlane(
             const ui::UiCanvas& canvas,
             const RenderContext& context,
@@ -1934,14 +2046,23 @@ namespace mrg::graphics
             ui::UiSize surfaceWorldSize,
             const DirectX::XMFLOAT4X4& viewProjection);
 
+        [[nodiscard]] RenderTargetTextureHandle CreateCanvasRenderTarget(
+            std::uint32_t width,
+            std::uint32_t height);
+
+        // Records an immediate off-screen pass. Rectangles and DirectWrite
+        // glyphs are rendered into target, transitioned to an SRV, and can
+        // then be sampled by a curved mesh submitted later in the frame.
+        void RenderToTexture(
+            const ui::UiCanvas& canvas,
+            const RenderTargetTextureHandle& target,
+            const RenderContext& context);
+
     private:
         [[nodiscard]] bool IsInitialized() const noexcept;
 
-        MeshRenderSystem* meshRendering_{};
-        TextRenderSystem* textRendering_{};
-        GpuMeshHandle rectangleMesh_;
-        MaterialInstanceHandle rectangleMaterial_;
-        FontHandle defaultFont_;
+        struct Impl;
+        std::unique_ptr<Impl> implementation_;
     };
 }
 // ===== END Engine\Graphics.D3D12\UI\UiRendering.h =====

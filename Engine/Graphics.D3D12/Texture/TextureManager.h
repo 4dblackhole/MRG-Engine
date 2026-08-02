@@ -14,6 +14,7 @@
 
 namespace mrg::graphics
 {
+    class D3D12UiRenderer;
     // One descriptor table reserves this many entries.  Each entry can point
     // at an independently sized Texture2D resource; this is not a
     // D3D12 Texture2DArray and therefore does not require equal dimensions.
@@ -60,6 +61,38 @@ namespace mrg::graphics
 
     using TextureSetHandle = std::shared_ptr<const TextureSet>;
 
+    // One GPU texture that can alternate between a render target and a
+    // shader resource. TextureManager owns its SRV allocation while the
+    // target keeps the RTV and resource state required by a render pass.
+    class RenderTargetTexture final
+    {
+    public:
+        RenderTargetTexture(const RenderTargetTexture&) = delete;
+        RenderTargetTexture& operator=(const RenderTargetTexture&) = delete;
+
+        [[nodiscard]] const TextureSetHandle& Textures() const noexcept;
+        [[nodiscard]] std::uint32_t Width() const noexcept;
+        [[nodiscard]] std::uint32_t Height() const noexcept;
+
+    private:
+        friend class D3D12UiRenderer;
+        friend class TextureManager;
+
+        RenderTargetTexture() = default;
+
+        TextureSetHandle textures_;
+        Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv_{};
+        D3D12_RESOURCE_STATES state_{
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE};
+        std::uint32_t width_{};
+        std::uint32_t height_{};
+    };
+
+    using RenderTargetTextureHandle =
+        std::shared_ptr<RenderTargetTexture>;
+
     // Decodes common image formats through WIC and owns the shader-visible
     // descriptor heap used by textured materials.  Initial uploads are
     // synchronous so temporary upload buffers can be released immediately;
@@ -80,6 +113,9 @@ namespace mrg::graphics
 
         [[nodiscard]] TextureSetHandle LoadTextureSet(
             std::span<const std::filesystem::path> paths);
+        [[nodiscard]] RenderTargetTextureHandle CreateRenderTargetTexture(
+            std::uint32_t width,
+            std::uint32_t height);
 
         [[nodiscard]] ID3D12DescriptorHeap* DescriptorHeap() const noexcept;
 

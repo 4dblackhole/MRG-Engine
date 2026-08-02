@@ -260,6 +260,11 @@ namespace mrg::graphics
         return textureManager_;
     }
 
+    ID3D12Device* MeshRenderSystem::Device() const noexcept
+    {
+        return device_;
+    }
+
     void MeshRenderSystem::BeginFrame(const std::uint32_t frameIndex)
     {
         if (!initialized_ || frameIndex >= FrameCount)

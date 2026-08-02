@@ -134,6 +134,21 @@ namespace mrg::graphics
         return transform;
     }
 
+    const TextureSetHandle& RenderTargetTexture::Textures() const noexcept
+    {
+        return textures_;
+    }
+
+    std::uint32_t RenderTargetTexture::Width() const noexcept
+    {
+        return width_;
+    }
+
+    std::uint32_t RenderTargetTexture::Height() const noexcept
+    {
+        return height_;
+    }
+
     TextureManager::~TextureManager()
     {
         Shutdown();
@@ -281,6 +296,81 @@ namespace mrg::graphics
         ExecuteUploadAndWait();
         nextDescriptorBlock_ += MaxTexturesPerSet;
         return textureSet;
+    }
+
+    RenderTargetTextureHandle TextureManager::CreateRenderTargetTexture(
+        const std::uint32_t width,
+        const std::uint32_t height)
+    {
+        if (!initialized_ || device_ == nullptr ||
+            width == 0 || height == 0)
+        {
+            throw std::invalid_argument(
+                "A render-target texture requires an initialized manager "
+                "and a positive size.");
+        }
+        if (nextDescriptorBlock_ >
+            DescriptorHeapCapacity - MaxTexturesPerSet)
+        {
+            throw std::runtime_error(
+                "The texture descriptor heap has no free material block.");
+        }
+
+        auto target = std::shared_ptr<RenderTargetTexture>(
+            new RenderTargetTexture());
+        auto textureSet = std::shared_ptr<TextureSet>(new TextureSet());
+        const D3D12_CPU_DESCRIPTOR_HANDLE descriptorBlock =
+            InitializeDescriptorBlock(*textureSet);
+
+        D3D12_RESOURCE_DESC description = TextureDescription(width, height);
+        description.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        D3D12_HEAP_PROPERTIES defaultHeap{};
+        defaultHeap.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_CLEAR_VALUE clearValue{};
+        clearValue.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        ThrowIfFailed(
+            device_->CreateCommittedResource(
+                &defaultHeap,
+                D3D12_HEAP_FLAG_NONE,
+                &description,
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                &clearValue,
+                IID_PPV_ARGS(target->resource_.ReleaseAndGetAddressOf())),
+            "Create render-target texture");
+
+        D3D12_SHADER_RESOURCE_VIEW_DESC shaderView{};
+        shaderView.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        shaderView.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        shaderView.Shader4ComponentMapping =
+            D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        shaderView.Texture2D.MipLevels = 1;
+        device_->CreateShaderResourceView(
+            target->resource_.Get(),
+            &shaderView,
+            descriptorBlock);
+
+        D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDescription{};
+        rtvHeapDescription.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        rtvHeapDescription.NumDescriptors = 1;
+        ThrowIfFailed(
+            device_->CreateDescriptorHeap(
+                &rtvHeapDescription,
+                IID_PPV_ARGS(target->rtvHeap_.ReleaseAndGetAddressOf())),
+            "Create render-target texture RTV heap");
+        target->rtv_ =
+            target->rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+        device_->CreateRenderTargetView(
+            target->resource_.Get(),
+            nullptr,
+            target->rtv_);
+
+        textureSet->textureInfo_.push_back({width, height});
+        textureSet->resources_.push_back(target->resource_);
+        target->textures_ = textureSet;
+        target->width_ = width;
+        target->height_ = height;
+        nextDescriptorBlock_ += MaxTexturesPerSet;
+        return target;
     }
 
     void TextureManager::ValidateTextureSetRequest(

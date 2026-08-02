@@ -197,6 +197,7 @@ namespace mrg::graphics
             BuiltInMaterial material);
         [[nodiscard]] TextureManager& Textures() noexcept;
         [[nodiscard]] const TextureManager& Textures() const noexcept;
+        [[nodiscard]] ID3D12Device* Device() const noexcept;
 
         // Called by D3D12Renderer after the selected frame resource is safe.
         void BeginFrame(std::uint32_t frameIndex);

@@ -6,6 +6,7 @@
 #include <Windows.h>
 
 #include <array>
+#include <filesystem>
 #include <string>
 #include <utility>
 
@@ -56,6 +57,15 @@ namespace mrg::audio
         void DebugLog(const std::string& message)
         {
             OutputDebugStringA(("[MRG.Audio] " + message + "\n").c_str());
+        }
+
+        [[nodiscard]] std::string Utf8Path(
+            const std::filesystem::path& path)
+        {
+            const std::u8string value = path.u8string();
+            return std::string(
+                reinterpret_cast<const char*>(value.data()),
+                value.size());
         }
     }
 
@@ -114,6 +124,15 @@ namespace mrg::audio
 
     void FmodAudioBackend::Shutdown() noexcept
     {
+        for (auto& [handle, sound] : sounds_)
+        {
+            static_cast<void>(handle);
+            if (sound != nullptr)
+            {
+                sound->release();
+            }
+        }
+        sounds_.clear();
         masterChannelGroup_ = nullptr;
         if (system_ != nullptr)
         {
@@ -124,6 +143,8 @@ namespace mrg::audio
 
         activeOutput_ = AudioOutputBackend::NoSound;
         sampleRate_ = 0;
+        activeDriverIndex_ = -1;
+        nextSoundHandle_ = 1;
     }
 
     std::string_view FmodAudioBackend::Name() const noexcept
@@ -161,6 +182,85 @@ namespace mrg::audio
     FmodAudioBackend::OutputDevices() const noexcept
     {
         return outputDevices_;
+    }
+
+    int FmodAudioBackend::ActiveDriverIndex() const noexcept
+    {
+        return activeDriverIndex_;
+    }
+
+    BackendSoundHandle FmodAudioBackend::LoadSound(
+        const std::filesystem::path& path,
+        std::string& errorMessage)
+    {
+        if (system_ == nullptr)
+        {
+            errorMessage = "FMOD is not initialized.";
+            return InvalidBackendSoundHandle;
+        }
+
+        FMOD::Sound* sound = nullptr;
+        const std::string utf8Path = Utf8Path(path);
+        const FMOD_RESULT result = system_->createSound(
+            utf8Path.c_str(),
+            FMOD_DEFAULT | FMOD_CREATESAMPLE,
+            nullptr,
+            &sound);
+        if (result != FMOD_OK || sound == nullptr)
+        {
+            errorMessage = MakeFmodError("FMOD::System::createSound", result);
+            return InvalidBackendSoundHandle;
+        }
+
+        const BackendSoundHandle handle = nextSoundHandle_++;
+        sounds_.emplace(handle, sound);
+        errorMessage.clear();
+        return handle;
+    }
+
+    bool FmodAudioBackend::PlaySound(
+        const BackendSoundHandle sound,
+        std::string& errorMessage)
+    {
+        if (system_ == nullptr)
+        {
+            errorMessage = "FMOD is not initialized.";
+            return false;
+        }
+        const auto found = sounds_.find(sound);
+        if (found == sounds_.end())
+        {
+            errorMessage = "The FMOD sound handle is invalid.";
+            return false;
+        }
+
+        const FMOD_RESULT result = system_->playSound(
+            found->second,
+            nullptr,
+            false,
+            nullptr);
+        if (result != FMOD_OK)
+        {
+            errorMessage = MakeFmodError("FMOD::System::playSound", result);
+            return false;
+        }
+        errorMessage.clear();
+        return true;
+    }
+
+    void FmodAudioBackend::UnloadSound(
+        const BackendSoundHandle sound) noexcept
+    {
+        const auto found = sounds_.find(sound);
+        if (found == sounds_.end())
+        {
+            return;
+        }
+        if (found->second != nullptr)
+        {
+            found->second->release();
+        }
+        sounds_.erase(found);
     }
 
     bool FmodAudioBackend::TryInitialize(
@@ -267,6 +367,10 @@ namespace mrg::audio
         }
 
         RefreshDspState();
+        if (system_->getDriver(&activeDriverIndex_) != FMOD_OK)
+        {
+            activeDriverIndex_ = config.driverIndex;
+        }
         errorMessage.clear();
         return true;
     }

@@ -66,6 +66,9 @@
     <None Include="Shader\GenerateEmbeddedShaders.ps1">
       <Filter>Shader</Filter>
     </None>
+    <None Include="Shader\UiRectangle.hlsl">
+      <Filter>Shader</Filter>
+    </None>
     <None Include="Shader\UnlitVertexColorInstanced.hlsl">
       <Filter>Shader</Filter>
     </None>

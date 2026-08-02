@@ -18,6 +18,9 @@
     <ClInclude Include="Primitive\RectangleShape.h">
       <Filter>Primitive</Filter>
     </ClInclude>
+    <ClInclude Include="Primitive\CurvedRectangleShape.h">
+      <Filter>Primitive</Filter>
+    </ClInclude>
     <ClInclude Include="Primitive\CubeShape.h">
       <Filter>Primitive</Filter>
     </ClInclude>
@@ -30,6 +33,9 @@
       <Filter>Shape</Filter>
     </ClCompile>
     <ClCompile Include="Primitive\RectangleShape.cpp">
+      <Filter>Primitive</Filter>
+    </ClCompile>
+    <ClCompile Include="Primitive\CurvedRectangleShape.cpp">
       <Filter>Primitive</Filter>
     </ClCompile>
     <ClCompile Include="Primitive\CubeShape.cpp">

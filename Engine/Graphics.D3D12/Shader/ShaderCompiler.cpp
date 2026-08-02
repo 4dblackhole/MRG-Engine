@@ -40,6 +40,10 @@ namespace mrg::graphics::detail
                 return {
                     "Text.hlsl",
                     generated::Text};
+            case BuiltInShader::UiRectangle:
+                return {
+                    "UiRectangle.hlsl",
+                    generated::UiRectangle};
             default:
                 throw std::invalid_argument(
                     "The requested built-in shader is unknown.");

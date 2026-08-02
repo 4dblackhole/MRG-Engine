@@ -224,6 +224,26 @@ namespace
                     NearlyEqual(meshHit->uv.y, 0.5F),
                 "barycentric interpolation preserves rectangle UV");
         }
+
+        const mrg::geometry::CurvedRectangleShape curvedRectangle(
+            3.2F,
+            2.1F,
+            DirectX::XM_PIDIV4,
+            32);
+        Check(
+            curvedRectangle.VertexCount() == 66 &&
+                curvedRectangle.IndexCount() == 192,
+            "curved rectangle creates a segmented indexed strip");
+        const mrg::ui::MeshUvUiSurface curvedMesh(curvedRectangle, identity);
+        const auto curvedHit = curvedMesh.Raycast(centerRay);
+        Check(curvedHit.has_value(), "curved UI surface is raycastable");
+        if (curvedHit)
+        {
+            Check(
+                NearlyEqual(curvedHit->uv.x, 0.5F) &&
+                    NearlyEqual(curvedHit->uv.y, 0.5F),
+                "curved surface center maps to center Canvas UV");
+        }
     }
 
     void TestUiRouting()

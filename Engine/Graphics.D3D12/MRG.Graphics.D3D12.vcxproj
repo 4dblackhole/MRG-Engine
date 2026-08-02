@@ -79,6 +79,7 @@
     <None Include="Shader\UnlitVertexColorInstanced.hlsl" />
     <None Include="Shader\UnlitVertexColorTextureArrayInstanced.hlsl" />
     <None Include="Shader\Text.hlsl" />
+    <None Include="Shader\UiRectangle.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Geometry\MRG.Geometry.vcxproj">
@@ -88,7 +89,7 @@
       <Project>{E7777777-7777-4777-8777-777777777777}</Project>
     </ProjectReference>
   </ItemGroup>
-  <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile" Inputs="$(ProjectDir)Shader\GenerateEmbeddedShaders.ps1;$(ProjectDir)Shader\UnlitVertexColorInstanced.hlsl;$(ProjectDir)Shader\UnlitVertexColorTextureArrayInstanced.hlsl;$(ProjectDir)Shader\Text.hlsl" Outputs="$(ProjectDir)Shader\Generated\BuiltInShaders.inl">
+  <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile" Inputs="$(ProjectDir)Shader\GenerateEmbeddedShaders.ps1;$(ProjectDir)Shader\UnlitVertexColorInstanced.hlsl;$(ProjectDir)Shader\UnlitVertexColorTextureArrayInstanced.hlsl;$(ProjectDir)Shader\Text.hlsl;$(ProjectDir)Shader\UiRectangle.hlsl" Outputs="$(ProjectDir)Shader\Generated\BuiltInShaders.inl">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Shader\GenerateEmbeddedShaders.ps1&quot; -ShaderDirectory &quot;$(ProjectDir)Shader&quot; -OutputPath &quot;$(ProjectDir)Shader\Generated\BuiltInShaders.inl&quot;" />
   </Target>
   <Target Name="RemoveLegacyRuntimeShaders" AfterTargets="Build">

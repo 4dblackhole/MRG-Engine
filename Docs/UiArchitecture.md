@@ -55,13 +55,21 @@ QPC timestamp를 계속 사용해야 한다.
 
 - `SubmitScreen`: 사각형과 DirectWrite 글자를 화면 픽셀 공간에 표시한다.
 - `SubmitPlane`: 사각형 draw command를 임의의 월드 XY 평면에 표시한다.
+- `CreateCanvasRenderTarget`: Canvas가 그려질 shader-resource/render-target 겸용
+  RGBA8 텍스처를 만든다.
+- `RenderToTexture`: 사각형과 DirectWrite 글자를 해당 텍스처에 그린 뒤 mesh가
+  샘플링할 수 있는 상태로 전환한다.
 
-곡면 입력은 `MeshUvUiSurface`로 동작한다. 다만 글자를 포함한 전체 Canvas를 임의의
-곡면에 시각적으로 휘어 표시하려면 Canvas를 render-target texture로 먼저 그린 뒤
-그 텍스처를 메시 UV로 샘플링해야 한다. 현재 `TextureManager`에는 동적 render target
-등록 경로가 없으므로 이 그래픽 전용 단계는 의도적으로 `D3D12UiRenderer` 밖의 다음
-확장 지점으로 남겨 두었다. 이를 추가할 때도 `UiCanvas`, Widget, `UiInputRouter`,
-`MeshUvUiSurface`는 변경하지 않는다.
+글자를 포함한 전체 Canvas를 곡면에 표시할 때에는 `RenderToTexture`를 먼저 기록하고,
+그 target의 `Textures()`를 사용하는 textured Material을 곡면 mesh에 연결한다.
+`CurvedRectangleShape`는 이 경로를 바로 시험할 수 있는 수평 원호 primitive다. 보이는
+메시와 입력용 `MeshUvUiSurface`에 반드시 같은 Shape와 world transform을 사용해야
+표시된 Widget과 hit-test 위치가 일치한다.
+
+현재 한 `D3D12UiRenderer`는 프레임당 Canvas texture pass 하나를 기록한다. 여러 월드
+Canvas가 필요하면 renderer 인스턴스를 분리하거나 후속 다중-pass 배처를 추가한다.
+render target은 `D3D12UiRenderer::Shutdown`보다 먼저 해제하고, 매 프레임 main scene
+mesh를 제출하기 전이나 후에 `RenderToTexture`를 호출한 뒤 곡면 mesh를 제출한다.
 
 ## 수명과 이벤트
 

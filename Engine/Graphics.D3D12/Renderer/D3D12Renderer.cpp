@@ -251,8 +251,11 @@ namespace mrg::graphics
             width_,
             height_,
             frameIndex_,
+            nextRenderIndex_++,
             renderTargetFormat_,
             depthStencilFormat_,
+            renderTargetView,
+            depthStencilView,
             meshRenderSystem_.get(),
             textRenderSystem_.get()};
     }

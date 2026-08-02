@@ -61,12 +61,14 @@
     <ClInclude Include="Shape\Vertex.h" />
     <ClInclude Include="Shape\Shape.h" />
     <ClInclude Include="Primitive\RectangleShape.h" />
+    <ClInclude Include="Primitive\CurvedRectangleShape.h" />
     <ClInclude Include="Primitive\CubeShape.h" />
     <ClInclude Include="Primitive\SphereShape.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Shape\Shape.cpp" />
     <ClCompile Include="Primitive\RectangleShape.cpp" />
+    <ClCompile Include="Primitive\CurvedRectangleShape.cpp" />
     <ClCompile Include="Primitive\CubeShape.cpp" />
     <ClCompile Include="Primitive\SphereShape.cpp" />
   </ItemGroup>

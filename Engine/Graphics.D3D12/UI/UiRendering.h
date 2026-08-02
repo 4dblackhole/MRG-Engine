@@ -9,12 +9,18 @@
 
 #include <DirectXMath.h>
 
+#include <memory>
+
 namespace mrg::graphics
 {
     class D3D12UiRenderer final
     {
     public:
-        D3D12UiRenderer() = default;
+        D3D12UiRenderer();
+        ~D3D12UiRenderer();
+
+        D3D12UiRenderer(const D3D12UiRenderer&) = delete;
+        D3D12UiRenderer& operator=(const D3D12UiRenderer&) = delete;
 
         void Initialize(
             MeshRenderSystem& meshRendering,
@@ -28,10 +34,9 @@ namespace mrg::graphics
             const RenderContext& context,
             ui::UiPoint screenOrigin = {});
 
-        // Renders rectangles directly onto a finite local XY plane. The
-        // transform positions that plane in the world. Rich text and curved
-        // visual warping require a canvas-to-texture presenter; input mapping
-        // remains fully supported by PlaneUiSurface/MeshUvUiSurface.
+        // Renders rectangles directly onto a finite local XY plane. Use
+        // RenderToTexture plus a textured mesh when text or curvature is
+        // required. Input mapping remains independent of either path.
         void SubmitPlane(
             const ui::UiCanvas& canvas,
             const RenderContext& context,
@@ -39,13 +44,22 @@ namespace mrg::graphics
             ui::UiSize surfaceWorldSize,
             const DirectX::XMFLOAT4X4& viewProjection);
 
+        [[nodiscard]] RenderTargetTextureHandle CreateCanvasRenderTarget(
+            std::uint32_t width,
+            std::uint32_t height);
+
+        // Records an immediate off-screen pass. Rectangles and DirectWrite
+        // glyphs are rendered into target, transitioned to an SRV, and can
+        // then be sampled by a curved mesh submitted later in the frame.
+        void RenderToTexture(
+            const ui::UiCanvas& canvas,
+            const RenderTargetTextureHandle& target,
+            const RenderContext& context);
+
     private:
         [[nodiscard]] bool IsInitialized() const noexcept;
 
-        MeshRenderSystem* meshRendering_{};
-        TextRenderSystem* textRendering_{};
-        GpuMeshHandle rectangleMesh_;
-        MaterialInstanceHandle rectangleMaterial_;
-        FontHandle defaultFont_;
+        struct Impl;
+        std::unique_ptr<Impl> implementation_;
     };
 }

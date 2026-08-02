@@ -12,6 +12,7 @@ namespace mrg::graphics::detail
         UnlitVertexColorInstanced,
         UnlitVertexColorTextureArrayInstanced,
         Text,
+        UiRectangle,
     };
 
     [[nodiscard]] Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(

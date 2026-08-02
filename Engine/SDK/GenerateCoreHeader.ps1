@@ -16,6 +16,7 @@ $publicHeaders = @(
     'Engine\Geometry\Shape\Vertex.h',
     'Engine\Geometry\Shape\Shape.h',
     'Engine\Geometry\Primitive\RectangleShape.h',
+    'Engine\Geometry\Primitive\CurvedRectangleShape.h',
     'Engine\Geometry\Primitive\CubeShape.h',
     'Engine\Geometry\Primitive\SphereShape.h',
     'Engine\UI\Core\UiElement.h',

@@ -5,6 +5,8 @@
 
 #include <fmod.hpp>
 
+#include <unordered_map>
+
 namespace mrg::audio
 {
     class FmodAudioBackend final : public IAudioBackend
@@ -24,6 +26,14 @@ namespace mrg::audio
         [[nodiscard]] std::uint64_t DspClock() const noexcept override;
         [[nodiscard]] const std::vector<AudioDeviceInfo>&
             OutputDevices() const noexcept override;
+        [[nodiscard]] int ActiveDriverIndex() const noexcept override;
+        [[nodiscard]] BackendSoundHandle LoadSound(
+            const std::filesystem::path& path,
+            std::string& errorMessage) override;
+        [[nodiscard]] bool PlaySound(
+            BackendSoundHandle sound,
+            std::string& errorMessage) override;
+        void UnloadSound(BackendSoundHandle sound) noexcept override;
 
     private:
         [[nodiscard]] bool TryInitialize(
@@ -37,6 +47,9 @@ namespace mrg::audio
         FMOD::ChannelGroup* masterChannelGroup_{};
         AudioOutputBackend activeOutput_{AudioOutputBackend::NoSound};
         int sampleRate_{};
+        int activeDriverIndex_{-1};
+        BackendSoundHandle nextSoundHandle_{1};
+        std::unordered_map<BackendSoundHandle, FMOD::Sound*> sounds_;
         std::vector<AudioDeviceInfo> outputDevices_;
     };
 }

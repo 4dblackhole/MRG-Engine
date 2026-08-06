@@ -26,6 +26,8 @@ namespace mrg::audio
         [[nodiscard]] std::uint64_t DspClock() const noexcept override;
         [[nodiscard]] const std::vector<AudioDeviceInfo>&
             OutputDevices() const noexcept override;
+        [[nodiscard]] bool RefreshOutputDevices(
+            std::string& errorMessage) override;
         [[nodiscard]] int ActiveDriverIndex() const noexcept override;
         [[nodiscard]] BackendSoundHandle LoadSound(
             const std::filesystem::path& path,
@@ -40,7 +42,10 @@ namespace mrg::audio
             const AudioConfig& config,
             AudioOutputBackend backend,
             std::string& errorMessage);
-        void EnumerateDevices(AudioOutputBackend backend);
+        [[nodiscard]] bool EnumerateDevices(
+            AudioOutputBackend backend,
+            std::vector<AudioDeviceInfo>& destination,
+            std::string& errorMessage);
         void RefreshDspState() noexcept;
 
         FMOD::System* system_{};

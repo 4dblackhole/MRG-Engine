@@ -100,6 +100,16 @@ namespace mrg::audio
         return backend_ != nullptr ? backend_->OutputDevices() : empty;
     }
 
+    bool AudioSystem::RefreshOutputDevices(std::string& errorMessage)
+    {
+        if (!initialized_ || backend_ == nullptr)
+        {
+            errorMessage = "The audio system is not initialized.";
+            return false;
+        }
+        return backend_->RefreshOutputDevices(errorMessage);
+    }
+
     int AudioSystem::ActiveDriverIndex() const noexcept
     {
         return backend_ != nullptr ? backend_->ActiveDriverIndex() : -1;

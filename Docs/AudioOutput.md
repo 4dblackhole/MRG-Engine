@@ -5,6 +5,17 @@
 열거하고, 별도로 `SYSTEM DEFAULT (FMOD AUTO)` 항목을 만든다. 각
 `AudioDeviceInfo`에는 backend 종류와 해당 backend 안의 driver index가 들어 있다.
 
+`AudioSystem::RefreshOutputDevices`는 실행 중인 출력은 유지한 채 별도의 초기화 전
+FMOD probe system으로 WASAPI와 ASIO 목록을 다시 만든다. 장치 선택 UI를 열거나
+출력 API를 바꾸기 직전에 호출하면 엔진 시작 후 연결·설치된 ASIO 드라이버도
+최신 목록에 반영할 수 있다. 한 output API의 probe가 실패하면 성공한 API는 새
+결과를 사용하고 실패한 API는 마지막으로 성공한 항목을 유지한다.
+
+FMOD의 `System_Create`, `setOutput`, `getNumDrivers`, `getDriverInfo` 중 어느 단계가
+실패했는지는 Visual Studio Debug Output의 `[MRG.Audio]` 메시지에서 backend와
+driver index를 포함해 확인할 수 있다. 잘못 등록된 한 ASIO 드라이버의
+`getDriverInfo`가 실패해도 나머지 driver index 열거는 계속한다.
+
 현재 사용 중인 FMOD 2.x Windows API에는 `FMOD_OUTPUTTYPE_DSOUND`가 없으므로
 DirectSound를 실제 output backend로 선택할 수 없다. UI의 기본 출력 항목은
 DirectSound라는 이름을 사용하지 않고 FMOD 자동 선택으로 표시한다. 이 경로는 Windows

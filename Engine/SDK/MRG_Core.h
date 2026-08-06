@@ -83,6 +83,14 @@ namespace mrg::audio
         [[nodiscard]] virtual std::uint64_t DspClock() const noexcept = 0;
         [[nodiscard]] virtual const std::vector<AudioDeviceInfo>&
             OutputDevices() const noexcept = 0;
+        // Rebuilds the backend's output-device snapshot. Backends without
+        // dynamic enumeration may keep their current list and return true.
+        [[nodiscard]] virtual bool RefreshOutputDevices(
+            std::string& errorMessage)
+        {
+            errorMessage.clear();
+            return true;
+        }
         [[nodiscard]] virtual int ActiveDriverIndex() const noexcept = 0;
         [[nodiscard]] virtual BackendSoundHandle LoadSound(
             const std::filesystem::path& path,
@@ -124,6 +132,9 @@ namespace mrg::audio
         [[nodiscard]] std::uint64_t DspClock() const noexcept;
         [[nodiscard]] const std::vector<AudioDeviceInfo>&
             OutputDevices() const noexcept;
+        // Refresh before presenting a device picker so drivers installed or
+        // connected after engine startup can become visible.
+        [[nodiscard]] bool RefreshOutputDevices(std::string& errorMessage);
         [[nodiscard]] int ActiveDriverIndex() const noexcept;
 
         // Initializes a replacement backend first and commits the device

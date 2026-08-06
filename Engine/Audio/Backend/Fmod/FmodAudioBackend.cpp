@@ -45,6 +45,23 @@ namespace mrg::audio
             }
         }
 
+        const char* OutputBackendName(
+            const AudioOutputBackend backend) noexcept
+        {
+            switch (backend)
+            {
+            case AudioOutputBackend::Wasapi:
+                return "WASAPI";
+            case AudioOutputBackend::Asio:
+                return "ASIO";
+            case AudioOutputBackend::NoSound:
+                return "NoSound";
+            case AudioOutputBackend::Automatic:
+            default:
+                return "Automatic";
+            }
+        }
+
         std::string MakeFmodError(
             const char* operation,
             const FMOD_RESULT result)
@@ -79,18 +96,14 @@ namespace mrg::audio
         std::string& errorMessage)
     {
         Shutdown();
-        outputDevices_.clear();
-        // FMOD 2.x no longer exposes a DirectSound output type. Keep the
-        // standard Windows path selectable as one explicit automatic entry;
-        // FMOD resolves it to the current default output at initialization.
-        outputDevices_.push_back(AudioDeviceInfo{
-            AudioOutputBackend::Automatic,
-            -1,
-            "Windows default output (FMOD automatic)",
-            0,
-            0});
-        EnumerateDevices(AudioOutputBackend::Wasapi);
-        EnumerateDevices(AudioOutputBackend::Asio);
+        std::string enumerationError;
+        if (!RefreshOutputDevices(enumerationError))
+        {
+            // Device discovery failure does not prevent the automatic output
+            // path from initializing, but the exact FMOD stage remains in the
+            // Visual Studio Debug Output for diagnosis.
+            DebugLog(enumerationError);
+        }
 
         if (TryInitialize(config, config.preferredBackend, errorMessage))
         {
@@ -191,6 +204,77 @@ namespace mrg::audio
     FmodAudioBackend::OutputDevices() const noexcept
     {
         return outputDevices_;
+    }
+
+    bool FmodAudioBackend::RefreshOutputDevices(std::string& errorMessage)
+    {
+        // Build a replacement list first so a temporary probe failure does
+        // not erase a device snapshot that was previously usable.
+        std::vector<AudioDeviceInfo> refreshedDevices;
+        refreshedDevices.push_back(AudioDeviceInfo{
+            AudioOutputBackend::Automatic,
+            -1,
+            "Windows default output (FMOD automatic)",
+            0,
+            0});
+
+        std::string wasapiError;
+        std::string asioError;
+        const bool wasapiEnumerated = EnumerateDevices(
+            AudioOutputBackend::Wasapi,
+            refreshedDevices,
+            wasapiError);
+        const bool asioEnumerated = EnumerateDevices(
+            AudioOutputBackend::Asio,
+            refreshedDevices,
+            asioError);
+
+        if (!wasapiEnumerated || !asioEnumerated)
+        {
+            errorMessage.clear();
+            if (!wasapiEnumerated)
+            {
+                errorMessage += wasapiError;
+            }
+            if (!asioEnumerated)
+            {
+                if (!errorMessage.empty())
+                {
+                    errorMessage += " | ";
+                }
+                errorMessage += asioError;
+            }
+
+            // A successful ASIO probe must still become visible when WASAPI
+            // probing failed (and vice versa). For each failed output type,
+            // retain only its last known entries instead of discarding them.
+            const auto preservePreviousBackend =
+                [this, &refreshedDevices](
+                    const AudioOutputBackend failedBackend)
+            {
+                for (const AudioDeviceInfo& device : outputDevices_)
+                {
+                    if (device.backend == failedBackend)
+                    {
+                        refreshedDevices.push_back(device);
+                    }
+                }
+            };
+            if (!wasapiEnumerated)
+            {
+                preservePreviousBackend(AudioOutputBackend::Wasapi);
+            }
+            if (!asioEnumerated)
+            {
+                preservePreviousBackend(AudioOutputBackend::Asio);
+            }
+            outputDevices_ = std::move(refreshedDevices);
+            return false;
+        }
+
+        outputDevices_ = std::move(refreshedDevices);
+        errorMessage.clear();
+        return true;
     }
 
     int FmodAudioBackend::ActiveDriverIndex() const noexcept
@@ -384,28 +468,62 @@ namespace mrg::audio
         return true;
     }
 
-    void FmodAudioBackend::EnumerateDevices(const AudioOutputBackend backend)
+    bool FmodAudioBackend::EnumerateDevices(
+        const AudioOutputBackend backend,
+        std::vector<AudioDeviceInfo>& destination,
+        std::string& errorMessage)
     {
+        // Phase 1: create an uninitialized probe. FMOD driver enumeration is
+        // specific to the selected output type and should happen before init.
         FMOD::System* probe = nullptr;
-        if (FMOD::System_Create(&probe) != FMOD_OK || probe == nullptr)
+        FMOD_RESULT result = FMOD::System_Create(&probe);
+        if (result != FMOD_OK || probe == nullptr)
         {
-            return;
+            errorMessage = MakeFmodError("FMOD::System_Create", result) +
+                " while enumerating " + OutputBackendName(backend);
+            return false;
         }
+
+        const auto releaseProbe = [&probe, backend]()
+        {
+            const FMOD_RESULT releaseResult = probe->release();
+            if (releaseResult != FMOD_OK)
+            {
+                DebugLog(
+                    MakeFmodError("FMOD::System::release", releaseResult) +
+                    " after enumerating " + OutputBackendName(backend));
+            }
+            probe = nullptr;
+        };
 
         const FMOD_OUTPUTTYPE output = ToFmodOutput(backend);
-        if (probe->setOutput(output) != FMOD_OK)
+        result = probe->setOutput(output);
+        if (result != FMOD_OK)
         {
-            probe->release();
-            return;
+            errorMessage = MakeFmodError(
+                "FMOD::System::setOutput",
+                result) + " for " + OutputBackendName(backend);
+            releaseProbe();
+            return false;
         }
 
+        // Phase 2: FMOD now reports only the drivers belonging to the output
+        // selected above. A zero count is valid when no such driver exists.
         int driverCount = 0;
-        if (probe->getNumDrivers(&driverCount) != FMOD_OK)
+        result = probe->getNumDrivers(&driverCount);
+        if (result != FMOD_OK)
         {
-            probe->release();
-            return;
+            errorMessage = MakeFmodError(
+                "FMOD::System::getNumDrivers",
+                result) + " for " + OutputBackendName(backend);
+            releaseProbe();
+            return false;
         }
 
+        // Phase 3: keep every valid FMOD index. A malformed third-party ASIO
+        // entry is skipped without preventing later valid drivers from being
+        // exposed to the Client.
+        int detectedCount = 0;
         for (int driverIndex = 0; driverIndex < driverCount; ++driverIndex)
         {
             std::array<char, 512> name{};
@@ -414,27 +532,39 @@ namespace mrg::audio
             FMOD_SPEAKERMODE speakerMode = FMOD_SPEAKERMODE_DEFAULT;
             int speakerChannels = 0;
 
-            if (probe->getDriverInfo(
+            result = probe->getDriverInfo(
                     driverIndex,
                     name.data(),
                     static_cast<int>(name.size()),
                     &guid,
                     &systemRate,
                     &speakerMode,
-                    &speakerChannels) != FMOD_OK)
+                    &speakerChannels);
+            if (result != FMOD_OK)
             {
+                DebugLog(
+                    MakeFmodError("FMOD::System::getDriverInfo", result) +
+                    " for " + OutputBackendName(backend) + " driver " +
+                    std::to_string(driverIndex));
                 continue;
             }
 
-            outputDevices_.push_back(AudioDeviceInfo{
+            destination.push_back(AudioDeviceInfo{
                 backend,
                 driverIndex,
                 name.data(),
                 systemRate,
                 speakerChannels});
+            ++detectedCount;
         }
 
-        probe->release();
+        DebugLog(
+            std::string(OutputBackendName(backend)) + " enumeration found " +
+            std::to_string(detectedCount) + " of " +
+            std::to_string(driverCount) + " FMOD drivers.");
+        releaseProbe();
+        errorMessage.clear();
+        return true;
     }
 
     void FmodAudioBackend::RefreshDspState() noexcept

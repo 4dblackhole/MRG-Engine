@@ -7,6 +7,26 @@ using namespace DirectX;
 
 namespace mrg::scene
 {
+    namespace
+    {
+        [[nodiscard]] bool Equal(
+            const XMFLOAT3& value,
+            const float x,
+            const float y,
+            const float z) noexcept
+        {
+            return value.x == x && value.y == y && value.z == z;
+        }
+
+        [[nodiscard]] bool Equal(
+            const XMFLOAT4& left,
+            const XMFLOAT4& right) noexcept
+        {
+            return left.x == right.x && left.y == right.y &&
+                left.z == right.z && left.w == right.w;
+        }
+    }
+
     TransformNode::TransformNode()
     {
         XMStoreFloat4x4(&world_, XMMatrixIdentity());
@@ -27,6 +47,10 @@ namespace mrg::scene
         const float y,
         const float z) noexcept
     {
+        if (Equal(position_, x, y, z))
+        {
+            return;
+        }
         position_ = {x, y, z};
         MarkWorldDirty();
     }
@@ -36,6 +60,10 @@ namespace mrg::scene
         const float y,
         const float z) noexcept
     {
+        if (Equal(scale_, x, y, z))
+        {
+            return;
+        }
         scale_ = {x, y, z};
         MarkWorldDirty();
     }
@@ -45,6 +73,10 @@ namespace mrg::scene
         const float y,
         const float z) noexcept
     {
+        if (Equal(pivot_, x, y, z))
+        {
+            return;
+        }
         pivot_ = {x, y, z};
         MarkWorldDirty();
     }
@@ -54,9 +86,15 @@ namespace mrg::scene
         const float yaw,
         const float roll) noexcept
     {
+        XMFLOAT4 rotation{};
         XMStoreFloat4(
-            &rotation_,
+            &rotation,
             XMQuaternionRotationRollPitchYaw(pitch, yaw, roll));
+        if (Equal(rotation_, rotation))
+        {
+            return;
+        }
+        rotation_ = rotation;
         MarkWorldDirty();
     }
 
@@ -66,9 +104,15 @@ namespace mrg::scene
         const float z,
         const float w) noexcept
     {
+        XMFLOAT4 rotation{};
         XMStoreFloat4(
-            &rotation_,
+            &rotation,
             XMQuaternionNormalize(XMVectorSet(x, y, z, w)));
+        if (Equal(rotation_, rotation))
+        {
+            return;
+        }
+        rotation_ = rotation;
         MarkWorldDirty();
     }
 
@@ -152,6 +196,10 @@ namespace mrg::scene
     {
         // A parent transform affects every descendant world matrix, so defer
         // recomputation until WorldMatrix()/UpdateWorldRecursive is requested.
+        if (worldDirty_)
+        {
+            return;
+        }
         worldDirty_ = true;
         for (TransformNode* child : children_)
         {

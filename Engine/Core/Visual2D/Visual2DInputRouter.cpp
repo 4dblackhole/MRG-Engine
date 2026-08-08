@@ -6,6 +6,30 @@ namespace mrg::visual2d
         Visual2DCanvas& canvas,
         const PointerInput& input)
     {
+        const bool pointerChanged =
+            !hasPointerSnapshot_ ||
+            input.available != previousAvailable_ ||
+            (input.available &&
+                (input.position.x != previousPosition_.x ||
+                    input.position.y != previousPosition_.y));
+        const bool hasTransientInput =
+            input.leftButtonPressed || input.leftButtonReleased ||
+            input.wheelDelta != 0.0F;
+        const bool refreshHitTest = hitTestInvalidated_ || pointerChanged;
+
+        previousPosition_ = input.position;
+        previousAvailable_ = input.available;
+        hasPointerSnapshot_ = true;
+
+        // The unlimited Update loop commonly observes the same pointer state
+        // thousands of times between OS input messages. Preserve hover and
+        // capture without traversing the Canvas or emitting synthetic moves.
+        if (!refreshHitTest && !hasTransientInput)
+        {
+            return;
+        }
+        hitTestInvalidated_ = false;
+
         Visual2DNode::HitResult hit{};
         if (input.available)
         {
@@ -29,9 +53,11 @@ namespace mrg::visual2d
                 PointerButton::Left);
         }
 
-        Visual2DNode* captured = canvas.FindNode(captured_);
+        Visual2DNode* captured = captured_ != 0
+            ? canvas.FindNode(captured_)
+            : nullptr;
         Visual2DNode* moveTarget = captured != nullptr ? captured : hit.node;
-        if (moveTarget != nullptr)
+        if (moveTarget != nullptr && refreshHitTest)
         {
             Dispatch(canvas, *moveTarget, PointerEventType::Move, input);
         }
@@ -78,6 +104,15 @@ namespace mrg::visual2d
         }
         hovered_ = 0;
         captured_ = 0;
+        previousPosition_ = {};
+        previousAvailable_ = false;
+        hasPointerSnapshot_ = false;
+        hitTestInvalidated_ = true;
+    }
+
+    void Visual2DInputRouter::InvalidateHitTest() noexcept
+    {
+        hitTestInvalidated_ = true;
     }
 
     NodeId Visual2DInputRouter::HoveredNode() const noexcept

@@ -108,6 +108,10 @@ namespace mrg::visual2d
         {
             throw std::invalid_argument("Visual2D position must be finite.");
         }
+        if (position_.x == position.x && position_.y == position.y)
+        {
+            return;
+        }
         position_ = position;
         UpdateTransformLayout();
     }
@@ -124,6 +128,10 @@ namespace mrg::visual2d
             throw std::invalid_argument(
                 "Visual2D node size must be finite and non-negative.");
         }
+        if (size_.width == size.width && size_.height == size.height)
+        {
+            return;
+        }
         size_ = size;
         UpdateTransformLayout();
     }
@@ -138,6 +146,11 @@ namespace mrg::visual2d
         if (!IsFinite(normalizedPivot))
         {
             throw std::invalid_argument("Visual2D pivot must be finite.");
+        }
+        if (pivot_.x == normalizedPivot.x &&
+            pivot_.y == normalizedPivot.y)
+        {
+            return;
         }
         pivot_ = normalizedPivot;
         UpdateTransformLayout();
@@ -156,8 +169,14 @@ namespace mrg::visual2d
             throw std::invalid_argument(
                 "Visual2D bounds must be finite and non-negative.");
         }
+        if (position_.x == bounds.x && position_.y == bounds.y &&
+            size_.width == bounds.width && size_.height == bounds.height)
+        {
+            return;
+        }
         position_ = {bounds.x, bounds.y};
-        SetSize({bounds.width, bounds.height});
+        size_ = {bounds.width, bounds.height};
+        UpdateTransformLayout();
     }
 
     Rect Visual2DNode::BoundsInCanvas() const
@@ -190,7 +209,15 @@ namespace mrg::visual2d
 
     void Visual2DNode::SetZIndex(const std::int32_t zIndex) noexcept
     {
+        if (zIndex_ == zIndex)
+        {
+            return;
+        }
         zIndex_ = zIndex;
+        if (parent_ != nullptr)
+        {
+            parent_->InvalidatePaintOrder();
+        }
     }
 
     bool Visual2DNode::IsVisible() const noexcept
@@ -261,6 +288,7 @@ namespace mrg::visual2d
         child->transform_.SetParent(&transform_);
         Visual2DNode& result = *child;
         children_.push_back(std::move(child));
+        InvalidatePaintOrder();
         return result;
     }
 
@@ -284,6 +312,7 @@ namespace mrg::visual2d
         (*iterator)->transform_.SetParent(nullptr);
         (*iterator)->parent_ = nullptr;
         children_.erase(iterator);
+        InvalidatePaintOrder();
         return true;
     }
 
@@ -295,21 +324,9 @@ namespace mrg::visual2d
             return {};
         }
 
-        std::vector<Visual2DNode*> paintOrder;
-        paintOrder.reserve(children_.size());
-        for (const std::unique_ptr<Visual2DNode>& child : children_)
-        {
-            paintOrder.push_back(child.get());
-        }
-        std::stable_sort(
-            paintOrder.begin(),
-            paintOrder.end(),
-            [](const Visual2DNode* left, const Visual2DNode* right)
-            {
-                return left->zIndex_ < right->zIndex_;
-            });
-        for (auto iterator = paintOrder.rbegin();
-            iterator != paintOrder.rend(); ++iterator)
+        EnsurePaintOrder();
+        for (auto iterator = paintOrder_.rbegin();
+            iterator != paintOrder_.rend(); ++iterator)
         {
             HitResult childHit = (*iterator)->HitTest(canvasPosition);
             if (childHit.node != nullptr)
@@ -424,20 +441,8 @@ namespace mrg::visual2d
             packets[index].nodeTransform = world;
         }
 
-        std::vector<const Visual2DNode*> paintOrder;
-        paintOrder.reserve(children_.size());
-        for (const std::unique_ptr<Visual2DNode>& child : children_)
-        {
-            paintOrder.push_back(child.get());
-        }
-        std::stable_sort(
-            paintOrder.begin(),
-            paintOrder.end(),
-            [](const Visual2DNode* left, const Visual2DNode* right)
-            {
-                return left->zIndex_ < right->zIndex_;
-            });
-        for (const Visual2DNode* child : paintOrder)
+        EnsurePaintOrder();
+        for (const Visual2DNode* child : paintOrder_)
         {
             child->CollectDrawPackets(packets);
         }
@@ -451,6 +456,34 @@ namespace mrg::visual2d
         {
             component->OnPointerEvent(event, actions);
         }
+    }
+
+    void Visual2DNode::InvalidatePaintOrder() noexcept
+    {
+        paintOrderDirty_ = true;
+    }
+
+    void Visual2DNode::EnsurePaintOrder() const
+    {
+        if (!paintOrderDirty_)
+        {
+            return;
+        }
+
+        paintOrder_.clear();
+        paintOrder_.reserve(children_.size());
+        for (const std::unique_ptr<Visual2DNode>& child : children_)
+        {
+            paintOrder_.push_back(child.get());
+        }
+        std::stable_sort(
+            paintOrder_.begin(),
+            paintOrder_.end(),
+            [](const Visual2DNode* left, const Visual2DNode* right)
+            {
+                return left->zIndex_ < right->zIndex_;
+            });
+        paintOrderDirty_ = false;
     }
 
     void Visual2DNode::SetHovered(const bool hovered) noexcept

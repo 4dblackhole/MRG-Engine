@@ -1232,6 +1232,8 @@ namespace mrg::visual2d
         void DispatchPointerEvent(
             const PointerEvent& event,
             std::vector<Action>& actions);
+        void InvalidatePaintOrder() noexcept;
+        void EnsurePaintOrder() const;
         void SetHovered(bool hovered) noexcept;
         void SetPressed(bool pressed) noexcept;
         void UpdateTransformLayout() noexcept;
@@ -1245,6 +1247,8 @@ namespace mrg::visual2d
         std::int32_t zIndex_{};
         Visual2DNode* parent_{};
         std::vector<std::unique_ptr<Visual2DNode>> children_;
+        mutable std::vector<Visual2DNode*> paintOrder_;
+        mutable bool paintOrderDirty_{true};
         std::vector<std::unique_ptr<Visual2DComponent>> components_;
         bool visible_{true};
         bool enabled_{true};
@@ -1596,6 +1600,9 @@ namespace mrg::visual2d
     public:
         void Process(Visual2DCanvas& canvas, const PointerInput& input);
         void Reset(Visual2DCanvas& canvas) noexcept;
+        // Call after moving or resizing interactive Canvas content beneath a
+        // stationary pointer. The next Process refreshes hover and hit state.
+        void InvalidateHitTest() noexcept;
 
         [[nodiscard]] NodeId HoveredNode() const noexcept;
         [[nodiscard]] NodeId CapturedNode() const noexcept;
@@ -1615,6 +1622,10 @@ namespace mrg::visual2d
 
         NodeId hovered_{};
         NodeId captured_{};
+        Point previousPosition_{};
+        bool previousAvailable_{};
+        bool hasPointerSnapshot_{};
+        bool hitTestInvalidated_{true};
     };
 }
 // ===== END Engine\Core\Visual2D\Visual2DInputRouter.h =====

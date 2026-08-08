@@ -131,11 +131,19 @@ namespace mrg::visual2d
 
     Visual2DNode* Visual2DCanvas::FindNode(const NodeId id) noexcept
     {
+        if (id == 0)
+        {
+            return nullptr;
+        }
         return root_.Find(id);
     }
 
     const Visual2DNode* Visual2DCanvas::FindNode(const NodeId id) const noexcept
     {
+        if (id == 0)
+        {
+            return nullptr;
+        }
         return root_.Find(id);
     }
 

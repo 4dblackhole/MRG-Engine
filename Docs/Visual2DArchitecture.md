@@ -87,9 +87,16 @@ click, wheel 이벤트로 바꾼다. 누른 노드는 release까지 ID로 captur
 ComboBox 드래그가 영역 밖에서도 이어진다. 삭제 전에 `Reset`하면 hover/capture가
 안전하게 해제된다.
 
+Router는 무제한 Update 루프에서 동일한 포인터 스냅샷이 반복되면 이전 hover와
+capture를 재사용하고 hit-test와 move 이벤트를 생략한다. 포인터가 정지한 동안
+상호작용 가능한 노드를 이동하거나 크기를 바꾼 경우에는 변경 후
+`InvalidateHitTest()`를 호출한다. 다음 `Process`가 새 트리 위치를 한 번 검사한다.
+
 각 부모는 하나의 stacking context다. 형제는 `ZIndex` 오름차순으로 그리고,
 같은 값은 삽입 순서를 유지한다. Hit-test는 그 정확한 역순이다. 렌더러는 투명
-순서를 깨지 않도록 트리에서 평탄화된 순서를 유지한다.
+순서를 깨지 않도록 트리에서 평탄화된 순서를 유지한다. 정렬된 형제 순서는
+자식 추가·삭제 또는 `SetZIndex` 전까지 캐시되므로 매 Update/Render마다 다시
+할당하고 정렬하지 않는다.
 
 ## Sprite 이미지와 인스턴싱
 

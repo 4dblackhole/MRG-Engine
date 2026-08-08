@@ -56,9 +56,13 @@ This file applies to the entire repository.
 - After approved PRs are merged, fast-forward both `main` branches and run the
   Client's recursive submodule synchronization/update before declaring the
   repositories current.
+- After validation succeeds, publish the task branch, create or update its PR,
+  mark it ready, and merge it into `main` as part of the normal completion
+  workflow. For combined changes, merge the engine first and update the Client
+  gitlink to the resulting engine `main` commit before merging the Client.
 - Never claim that `main` is current while a required PR remains open. Do not
-  merge a PR or otherwise change remote `main` without explicit authorization;
-  report that remaining integration step instead.
+  bypass failed checks, merge conflicts, or branch protection; report such a
+  blocker instead. Preserve unrelated working-tree files while synchronizing.
 
 ## Verification
 

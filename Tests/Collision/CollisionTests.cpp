@@ -313,6 +313,50 @@ namespace
             imageCommandFound,
             "UI image widgets emit reusable image draw commands");
 
+        auto& pointerProbe = canvas.CreateNode(
+            mrg::visual2d::Anchor::TopLeft,
+            "StationaryPointerProbe");
+        pointerProbe.SetBounds({240.0F, 130.0F, 60.0F, 30.0F});
+        std::size_t hitTestCount{};
+        pointerProbe.AddComponent<
+            mrg::visual2d::CustomCollider2DComponent>(
+            [&hitTestCount](
+                const mrg::visual2d::Visual2DNode&,
+                const mrg::visual2d::Point localPosition)
+            {
+                ++hitTestCount;
+                const mrg::visual2d::Rect bounds{
+                    0.0F, 0.0F, 60.0F, 30.0F};
+                return bounds.Contains(localPosition);
+            });
+        std::size_t moveEventCount{};
+        pointerProbe.AddComponent<
+            mrg::visual2d::PointerReceiverComponent>(
+            [&moveEventCount](
+                mrg::visual2d::Visual2DNode&,
+                const mrg::visual2d::PointerEvent& event,
+                std::vector<mrg::visual2d::Action>&)
+            {
+                if (event.type == mrg::visual2d::PointerEventType::Move)
+                {
+                    ++moveEventCount;
+                }
+            });
+
+        mrg::visual2d::Visual2DInputRouter cachedRouter;
+        const mrg::visual2d::PointerInput stationaryPointer{
+            {260.0F, 145.0F}, true, false, false, false, 0.0F, 60};
+        cachedRouter.Process(canvas, stationaryPointer);
+        cachedRouter.Process(canvas, stationaryPointer);
+        Check(
+            hitTestCount == 1 && moveEventCount == 1,
+            "stationary pointer snapshots skip hit tests and UI moves");
+        cachedRouter.InvalidateHitTest();
+        cachedRouter.Process(canvas, stationaryPointer);
+        Check(
+            hitTestCount == 2 && moveEventCount == 2,
+            "invalidated UI geometry refreshes a stationary pointer hit");
+
         auto& combo = mrg::visual2d::CreateComboBox(
             canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
             {20.0F, 130.0F, 180.0F, 30.0F},
@@ -422,8 +466,27 @@ namespace
             actions.size() == 1 && actions.front().source == front.Id(),
             "hit testing uses the reverse of sibling paint order");
 
-        // Outside the visible front rectangle, the same point must no longer
-        // target it even though the lower sibling remains underneath.
+        back.SetZIndex(20);
+        const std::vector<mrg::visual2d::DrawPacket> reorderedCommands =
+            canvas.BuildDrawList();
+        Check(
+            !reorderedCommands.empty() &&
+                reorderedCommands.back().text == L"Back",
+            "changing a sibling Z-index invalidates the cached paint order");
+
+        router.Process(
+            canvas,
+            {{60.0F, 60.0F}, true, true, true, false, 0.0F, 25});
+        router.Process(
+            canvas,
+            {{60.0F, 60.0F}, true, false, false, true, 0.0F, 26});
+        actions = canvas.TakeActions();
+        Check(
+            actions.size() == 1 && actions.front().source == back.Id(),
+            "hit testing observes a dynamically changed cached Z-order");
+
+        // This point is inside only the larger back widget, so its displayed
+        // rectangle and interactive region must still agree.
         router.Process(
             canvas,
             {{30.0F, 30.0F}, true, true, true, false, 0.0F, 30});

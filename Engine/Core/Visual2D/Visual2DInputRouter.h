@@ -21,6 +21,9 @@ namespace mrg::visual2d
     public:
         void Process(Visual2DCanvas& canvas, const PointerInput& input);
         void Reset(Visual2DCanvas& canvas) noexcept;
+        // Call after moving or resizing interactive Canvas content beneath a
+        // stationary pointer. The next Process refreshes hover and hit state.
+        void InvalidateHitTest() noexcept;
 
         [[nodiscard]] NodeId HoveredNode() const noexcept;
         [[nodiscard]] NodeId CapturedNode() const noexcept;
@@ -40,5 +43,9 @@ namespace mrg::visual2d
 
         NodeId hovered_{};
         NodeId captured_{};
+        Point previousPosition_{};
+        bool previousAvailable_{};
+        bool hasPointerSnapshot_{};
+        bool hitTestInvalidated_{true};
     };
 }

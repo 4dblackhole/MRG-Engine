@@ -310,6 +310,8 @@ namespace mrg::visual2d
         void DispatchPointerEvent(
             const PointerEvent& event,
             std::vector<Action>& actions);
+        void InvalidatePaintOrder() noexcept;
+        void EnsurePaintOrder() const;
         void SetHovered(bool hovered) noexcept;
         void SetPressed(bool pressed) noexcept;
         void UpdateTransformLayout() noexcept;
@@ -323,6 +325,8 @@ namespace mrg::visual2d
         std::int32_t zIndex_{};
         Visual2DNode* parent_{};
         std::vector<std::unique_ptr<Visual2DNode>> children_;
+        mutable std::vector<Visual2DNode*> paintOrder_;
+        mutable bool paintOrderDirty_{true};
         std::vector<std::unique_ptr<Visual2DComponent>> components_;
         bool visible_{true};
         bool enabled_{true};

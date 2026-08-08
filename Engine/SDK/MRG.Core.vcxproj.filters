@@ -112,6 +112,7 @@
     <ClInclude Include="..\Graphics.D3D12\Shader\ShaderCompiler.h"><Filter>Graphics.D3D12\Shader</Filter></ClInclude>
     <ClInclude Include="..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl"><Filter>Graphics.D3D12\Shader\Generated</Filter></ClInclude>
     <ClInclude Include="..\Graphics.D3D12\Visual2D\Visual2DRendering.h"><Filter>Graphics.D3D12\Visual2D</Filter></ClInclude>
+    <ClInclude Include="..\Graphics.D3D12\Visual2D\D3D12Visual2DRenderer.h"><Filter>Graphics.D3D12\Visual2D</Filter></ClInclude>
     <ClInclude Include="..\Core\Client\IGameClient.h"><Filter>Core\Client</Filter></ClInclude>
     <ClInclude Include="..\Core\Client\SceneGameClient.h"><Filter>Core\Client</Filter></ClInclude>
     <ClInclude Include="..\Core\App\Engine.h"><Filter>Core\App</Filter></ClInclude>

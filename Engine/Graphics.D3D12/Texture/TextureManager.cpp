@@ -298,6 +298,57 @@ namespace mrg::graphics
         return textureSet;
     }
 
+    TextureSetHandle TextureManager::AppendTexture(
+        const TextureSetHandle& textureSet,
+        const std::filesystem::path& path)
+    {
+        if (!initialized_ || device_ == nullptr || commandQueue_ == nullptr)
+        {
+            throw std::logic_error(
+                "TextureManager must be initialized before appending images.");
+        }
+        if (textureSet == nullptr || path.empty())
+        {
+            throw std::invalid_argument(
+                "Appending a texture requires an existing set and path.");
+        }
+        if (textureSet->Size() >= MaxTexturesPerSet)
+        {
+            throw std::length_error(
+                "A texture descriptor table cannot contain more than 64 images.");
+        }
+
+        // Decode before opening the upload list so invalid user assets cannot
+        // leave the reusable allocator in a recording state.
+        const DecodedImage decodedImage = DecodeImage(path);
+        std::shared_ptr<TextureSet> mutableSet =
+            std::const_pointer_cast<TextureSet>(textureSet);
+        BeginUploadCommands();
+        std::vector<ComPtr<ID3D12Resource>> uploadBuffers;
+        uploadBuffers.reserve(1);
+
+        try
+        {
+            RecordTextureUpload(
+                decodedImage,
+                mutableSet->Size(),
+                mutableSet->cpuDescriptorStart_,
+                *mutableSet,
+                uploadBuffers);
+            ThrowIfFailed(
+                uploadCommandList_->Close(),
+                "Close appended texture upload command list");
+        }
+        catch (...)
+        {
+            uploadCommandList_->Close();
+            throw;
+        }
+
+        ExecuteUploadAndWait();
+        return textureSet;
+    }
+
     RenderTargetTextureHandle TextureManager::CreateRenderTargetTexture(
         const std::uint32_t width,
         const std::uint32_t height)
@@ -488,6 +539,7 @@ namespace mrg::graphics
                 descriptorHeap_->GetCPUDescriptorHandleForHeapStart(),
                 nextDescriptorBlock_,
                 descriptorSize_);
+        textureSet.cpuDescriptorStart_ = cpuBlockStart;
         textureSet.gpuDescriptorStart_ = OffsetGpuDescriptor(
             descriptorHeap_->GetGPUDescriptorHandleForHeapStart(),
             nextDescriptorBlock_,
@@ -670,5 +722,91 @@ namespace mrg::graphics
     ID3D12DescriptorHeap* TextureManager::DescriptorHeap() const noexcept
     {
         return descriptorHeap_.Get();
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GpuDescriptorStart(
+        const TextureSetHandle& textureSet) const
+    {
+        if (!initialized_ || textureSet == nullptr)
+        {
+            throw std::invalid_argument(
+                "A GPU descriptor table requires an initialized manager and texture set.");
+        }
+        return textureSet->gpuDescriptorStart_;
+    }
+
+    void TextureManager::BeginRenderTargetPass(
+        ID3D12GraphicsCommandList& commandList,
+        const RenderTargetTextureHandle& target,
+        const DirectX::XMFLOAT4& clearColor)
+    {
+        if (!initialized_ || target == nullptr)
+        {
+            throw std::invalid_argument(
+                "Beginning a texture pass requires an initialized manager and target.");
+        }
+
+        if (target->state_ != D3D12_RESOURCE_STATE_RENDER_TARGET)
+        {
+            D3D12_RESOURCE_BARRIER barrier{};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Transition.pResource = target->resource_.Get();
+            barrier.Transition.Subresource =
+                D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            barrier.Transition.StateBefore = target->state_;
+            barrier.Transition.StateAfter =
+                D3D12_RESOURCE_STATE_RENDER_TARGET;
+            commandList.ResourceBarrier(1, &barrier);
+            target->state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        }
+
+        const D3D12_VIEWPORT viewport{
+            0.0F,
+            0.0F,
+            static_cast<float>(target->width_),
+            static_cast<float>(target->height_),
+            0.0F,
+            1.0F};
+        const D3D12_RECT scissor{
+            0,
+            0,
+            static_cast<LONG>(target->width_),
+            static_cast<LONG>(target->height_)};
+        commandList.RSSetViewports(1, &viewport);
+        commandList.RSSetScissorRects(1, &scissor);
+        commandList.OMSetRenderTargets(1, &target->rtv_, FALSE, nullptr);
+        const float color[]{
+            clearColor.x,
+            clearColor.y,
+            clearColor.z,
+            clearColor.w};
+        commandList.ClearRenderTargetView(
+            target->rtv_, color, 0, nullptr);
+    }
+
+    void TextureManager::EndRenderTargetPass(
+        ID3D12GraphicsCommandList& commandList,
+        const RenderTargetTextureHandle& target)
+    {
+        if (!initialized_ || target == nullptr)
+        {
+            throw std::invalid_argument(
+                "Ending a texture pass requires an initialized manager and target.");
+        }
+        if (target->state_ == D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+        {
+            return;
+        }
+
+        D3D12_RESOURCE_BARRIER barrier{};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = target->resource_.Get();
+        barrier.Transition.Subresource =
+            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = target->state_;
+        barrier.Transition.StateAfter =
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        commandList.ResourceBarrier(1, &barrier);
+        target->state_ = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     }
 }

@@ -102,7 +102,12 @@ namespace mrg::graphics
         [[nodiscard]] FontHandle LoadFontFile(
             const std::filesystem::path& fontFile);
 
-        void BeginFrame(std::uint32_t frameIndex);
+        // renderIndex identifies one engine frame. Multiple BeginFrame/Flush
+        // pairs with the same value are independent off-screen text passes
+        // and append to the same fence-protected upload arena.
+        void BeginFrame(
+            std::uint32_t frameIndex,
+            std::uint64_t renderIndex);
         void Submit(
             std::wstring_view text,
             const TextDrawCommand& command);

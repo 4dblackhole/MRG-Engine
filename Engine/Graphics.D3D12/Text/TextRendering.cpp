@@ -202,12 +202,19 @@ namespace mrg::graphics
 
         static_assert(sizeof(GpuGlyphInstance) == 116);
 
-        struct FrameInstanceBuffer final
+        struct FrameInstancePage final
         {
             ComPtr<ID3D12Resource> resource;
             std::byte* mappedData{};
             std::size_t capacity{};
+            std::size_t used{};
+        };
+
+        struct FrameInstanceBuffer final
+        {
+            std::vector<FrameInstancePage> pages;
             std::vector<ComPtr<ID3D12Resource>> uploadResources;
+            std::uint64_t renderIndex{};
         };
 
         struct AtlasPage final
@@ -514,10 +521,13 @@ namespace mrg::graphics
         {
             for (FrameInstanceBuffer& frame : frameBuffers)
             {
-                if (frame.resource != nullptr &&
-                    frame.mappedData != nullptr)
+                for (FrameInstancePage& page : frame.pages)
                 {
-                    frame.resource->Unmap(0, nullptr);
+                    if (page.resource != nullptr &&
+                        page.mappedData != nullptr)
+                    {
+                        page.resource->Unmap(0, nullptr);
+                    }
                 }
                 frame = {};
             }
@@ -644,7 +654,9 @@ namespace mrg::graphics
                 new Font(std::move(fontImplementation)));
         }
 
-        void BeginFrame(const std::uint32_t frameIndex)
+        void BeginFrame(
+            const std::uint32_t frameIndex,
+            const std::uint64_t renderIndex)
         {
             RequireInitialized();
             if (frameIndex >= FrameCount)
@@ -661,7 +673,16 @@ namespace mrg::graphics
             currentFrameIndex = frameIndex;
             pendingInstances.clear();
             pendingUploads.clear();
-            frameBuffers[frameIndex].uploadResources.clear();
+            FrameInstanceBuffer& frame = frameBuffers[frameIndex];
+            if (frame.renderIndex != renderIndex)
+            {
+                frame.renderIndex = renderIndex;
+                frame.uploadResources.clear();
+                for (FrameInstancePage& page : frame.pages)
+                {
+                    page.used = 0;
+                }
+            }
             frameOpen = true;
         }
 
@@ -743,12 +764,16 @@ namespace mrg::graphics
                     {
                         return first.pageIndex < second.pageIndex;
                     });
-                EnsureInstanceCapacity(pendingInstances.size());
-
                 FrameInstanceBuffer& frame =
                     frameBuffers[currentFrameIndex];
+                std::size_t allocationStart = 0;
+                FrameInstancePage& page = AllocateInstanceRange(
+                    frame,
+                    pendingInstances.size(),
+                    allocationStart);
                 auto* destination =
-                    reinterpret_cast<GpuGlyphInstance*>(frame.mappedData);
+                    reinterpret_cast<GpuGlyphInstance*>(page.mappedData) +
+                    allocationStart;
                 for (std::size_t index = 0;
                      index < pendingInstances.size();
                      ++index)
@@ -807,8 +832,9 @@ namespace mrg::graphics
                         pageDescriptor);
                     commandList.SetGraphicsRootShaderResourceView(
                         1,
-                        frame.resource->GetGPUVirtualAddress() +
-                            static_cast<UINT64>(firstInstance) *
+                        page.resource->GetGPUVirtualAddress() +
+                            static_cast<UINT64>(
+                                allocationStart + firstInstance) *
                             sizeof(GpuGlyphInstance));
                     commandList.DrawInstanced(
                         6,
@@ -1329,23 +1355,22 @@ namespace mrg::graphics
                 toShaderResource.data());
         }
 
-        void EnsureInstanceCapacity(const std::size_t requiredCapacity)
+        [[nodiscard]] FrameInstancePage& AllocateInstanceRange(
+            FrameInstanceBuffer& frame,
+            const std::size_t requiredCapacity,
+            std::size_t& firstInstance)
         {
-            FrameInstanceBuffer& frame =
-                frameBuffers[currentFrameIndex];
-            if (frame.capacity >= requiredCapacity)
+            for (FrameInstancePage& page : frame.pages)
             {
-                return;
+                if (page.capacity - page.used >= requiredCapacity)
+                {
+                    firstInstance = page.used;
+                    page.used += requiredCapacity;
+                    return page;
+                }
             }
 
-            if (frame.resource != nullptr && frame.mappedData != nullptr)
-            {
-                frame.resource->Unmap(0, nullptr);
-            }
-            frame.resource.Reset();
-            frame.mappedData = nullptr;
-
-            std::size_t capacity = std::max<std::size_t>(256, frame.capacity);
+            std::size_t capacity = 256;
             while (capacity < requiredCapacity)
             {
                 capacity *= 2;
@@ -1356,6 +1381,7 @@ namespace mrg::graphics
                 HeapProperties(D3D12_HEAP_TYPE_UPLOAD);
             const D3D12_RESOURCE_DESC description =
                 BufferDescription(sizeBytes);
+            FrameInstancePage page{};
             ThrowIfFailed(
                 device->CreateCommittedResource(
                     &properties,
@@ -1364,15 +1390,19 @@ namespace mrg::graphics
                     D3D12_RESOURCE_STATE_GENERIC_READ,
                     nullptr,
                     IID_PPV_ARGS(
-                        frame.resource.ReleaseAndGetAddressOf())),
+                        page.resource.ReleaseAndGetAddressOf())),
                 "ID3D12Device::CreateCommittedResource(text instances)");
             ThrowIfFailed(
-                frame.resource->Map(
+                page.resource->Map(
                     0,
                     nullptr,
-                    reinterpret_cast<void**>(&frame.mappedData)),
+                    reinterpret_cast<void**>(&page.mappedData)),
                 "ID3D12Resource::Map(text instances)");
-            frame.capacity = capacity;
+            page.capacity = capacity;
+            page.used = requiredCapacity;
+            firstInstance = 0;
+            frame.pages.push_back(std::move(page));
+            return frame.pages.back();
         }
 
         void CreateDescriptorHeap()
@@ -1640,9 +1670,11 @@ namespace mrg::graphics
         return implementation_->LoadFontFile(fontFile);
     }
 
-    void TextRenderSystem::BeginFrame(const std::uint32_t frameIndex)
+    void TextRenderSystem::BeginFrame(
+        const std::uint32_t frameIndex,
+        const std::uint64_t renderIndex)
     {
-        implementation_->BeginFrame(frameIndex);
+        implementation_->BeginFrame(frameIndex, renderIndex);
     }
 
     void TextRenderSystem::Submit(

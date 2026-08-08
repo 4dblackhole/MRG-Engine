@@ -15,6 +15,7 @@ namespace mrg::graphics
 {
     class MeshRenderSystem;
     class TextRenderSystem;
+    class Visual2DRenderSystem;
 
     struct ClearColor
     {
@@ -45,6 +46,9 @@ namespace mrg::graphics
         MeshRenderSystem* meshRendering{};
         // Non-owning queue/service for screen-space text submissions.
         TextRenderSystem* textRendering{};
+        // Non-owning engine-wide Visual2D service. Scenes submit Canvas data
+        // through this pointer but never initialize or release the renderer.
+        Visual2DRenderSystem* visual2DRendering{};
     };
 
     // Public D3D12 frame lifecycle, device, and presentation service.
@@ -56,7 +60,7 @@ namespace mrg::graphics
     public:
         static constexpr std::uint32_t FrameCount = 2;
 
-        D3D12Renderer() = default;
+        D3D12Renderer();
         ~D3D12Renderer();
 
         D3D12Renderer(const D3D12Renderer&) = delete;
@@ -79,6 +83,7 @@ namespace mrg::graphics
         [[nodiscard]] ID3D12Device* Device() const noexcept;
         [[nodiscard]] MeshRenderSystem& MeshRendering() const noexcept;
         [[nodiscard]] TextRenderSystem& TextRendering() const noexcept;
+        [[nodiscard]] Visual2DRenderSystem& Visual2DRendering() const noexcept;
         [[nodiscard]] DXGI_FORMAT RenderTargetFormat() const noexcept;
         [[nodiscard]] DXGI_FORMAT DepthStencilFormat() const noexcept;
         [[nodiscard]] bool SupportsTearing() const noexcept;
@@ -125,5 +130,7 @@ namespace mrg::graphics
         HANDLE fenceEvent_{};
         std::unique_ptr<MeshRenderSystem> meshRenderSystem_;
         std::unique_ptr<TextRenderSystem> textRenderSystem_;
+        // Declared after its dependencies so it is destroyed before them.
+        std::unique_ptr<Visual2DRenderSystem> visual2DRenderSystem_;
     };
 }

@@ -474,7 +474,8 @@ namespace mrg::graphics
         {
             commandList.SetGraphicsRootDescriptorTable(
                 0,
-                first.material->Textures()->gpuDescriptorStart_);
+                textureManager_.GpuDescriptorStart(
+                    first.material->Textures()));
         }
         commandList.IASetPrimitiveTopology(
             D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

@@ -453,6 +453,7 @@ namespace mrg
             const EngineServices services{
                 renderer.MeshRendering(),
                 renderer.TextRendering(),
+                renderer.Visual2DRendering(),
                 audioSystem,
                 window.ClientWidth(),
                 window.ClientHeight()};

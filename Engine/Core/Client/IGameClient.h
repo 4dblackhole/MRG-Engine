@@ -73,6 +73,7 @@ namespace mrg
     {
         graphics::MeshRenderSystem& meshRendering;
         graphics::TextRenderSystem& textRendering;
+        graphics::Visual2DRenderSystem& visual2DRendering;
         audio::AudioSystem& audio;
         std::uint32_t windowWidth{};
         std::uint32_t windowHeight{};

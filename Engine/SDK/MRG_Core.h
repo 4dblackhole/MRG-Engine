@@ -1887,7 +1887,12 @@ namespace mrg::graphics
         [[nodiscard]] FontHandle LoadFontFile(
             const std::filesystem::path& fontFile);
 
-        void BeginFrame(std::uint32_t frameIndex);
+        // renderIndex identifies one engine frame. Multiple BeginFrame/Flush
+        // pairs with the same value are independent off-screen text passes
+        // and append to the same fence-protected upload arena.
+        void BeginFrame(
+            std::uint32_t frameIndex,
+            std::uint64_t renderIndex);
         void Submit(
             std::wstring_view text,
             const TextDrawCommand& command);
@@ -1919,7 +1924,6 @@ namespace mrg::graphics
 
 namespace mrg::graphics
 {
-    class D3D12Visual2DRenderer;
     // One descriptor table reserves this many entries.  Each entry can point
     // at an independently sized Texture2D resource; this is not a
     // D3D12 Texture2DArray and therefore does not require equal dimensions.
@@ -1954,14 +1958,13 @@ namespace mrg::graphics
             float targetAspectRatio = 1.0F) const;
 
     private:
-        friend class D3D12Visual2DRenderer;
-        friend class MeshRenderSystem;
         friend class TextureManager;
 
         TextureSet() = default;
 
         std::vector<TextureInfo> textureInfo_;
         std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> resources_;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptorStart_{};
         D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptorStart_{};
     };
 
@@ -1981,7 +1984,6 @@ namespace mrg::graphics
         [[nodiscard]] std::uint32_t Height() const noexcept;
 
     private:
-        friend class D3D12Visual2DRenderer;
         friend class TextureManager;
 
         RenderTargetTexture() = default;
@@ -2019,11 +2021,31 @@ namespace mrg::graphics
 
         [[nodiscard]] TextureSetHandle LoadTextureSet(
             std::span<const std::filesystem::path> paths);
+        // Adds one independently sized texture to an existing descriptor
+        // table without allocating another 64-entry block. The returned
+        // handle aliases the same TextureSet and remains valid for materials
+        // that already reference it.
+        [[nodiscard]] TextureSetHandle AppendTexture(
+            const TextureSetHandle& textureSet,
+            const std::filesystem::path& path);
         [[nodiscard]] RenderTargetTextureHandle CreateRenderTargetTexture(
             std::uint32_t width,
             std::uint32_t height);
 
         [[nodiscard]] ID3D12DescriptorHeap* DescriptorHeap() const noexcept;
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GpuDescriptorStart(
+            const TextureSetHandle& textureSet) const;
+
+        // TextureManager owns render-target resource state and descriptor
+        // details. Render features request a pass instead of reaching into a
+        // RenderTargetTexture through friendship.
+        void BeginRenderTargetPass(
+            ID3D12GraphicsCommandList& commandList,
+            const RenderTargetTextureHandle& target,
+            const DirectX::XMFLOAT4& clearColor);
+        void EndRenderTargetPass(
+            ID3D12GraphicsCommandList& commandList,
+            const RenderTargetTextureHandle& target);
 
     private:
         struct DecodedImage;
@@ -2358,6 +2380,7 @@ namespace mrg::graphics
 {
     class MeshRenderSystem;
     class TextRenderSystem;
+    class Visual2DRenderSystem;
 
     struct ClearColor
     {
@@ -2388,6 +2411,9 @@ namespace mrg::graphics
         MeshRenderSystem* meshRendering{};
         // Non-owning queue/service for screen-space text submissions.
         TextRenderSystem* textRendering{};
+        // Non-owning engine-wide Visual2D service. Scenes submit Canvas data
+        // through this pointer but never initialize or release the renderer.
+        Visual2DRenderSystem* visual2DRendering{};
     };
 
     // Public D3D12 frame lifecycle, device, and presentation service.
@@ -2399,7 +2425,7 @@ namespace mrg::graphics
     public:
         static constexpr std::uint32_t FrameCount = 2;
 
-        D3D12Renderer() = default;
+        D3D12Renderer();
         ~D3D12Renderer();
 
         D3D12Renderer(const D3D12Renderer&) = delete;
@@ -2422,6 +2448,7 @@ namespace mrg::graphics
         [[nodiscard]] ID3D12Device* Device() const noexcept;
         [[nodiscard]] MeshRenderSystem& MeshRendering() const noexcept;
         [[nodiscard]] TextRenderSystem& TextRendering() const noexcept;
+        [[nodiscard]] Visual2DRenderSystem& Visual2DRendering() const noexcept;
         [[nodiscard]] DXGI_FORMAT RenderTargetFormat() const noexcept;
         [[nodiscard]] DXGI_FORMAT DepthStencilFormat() const noexcept;
         [[nodiscard]] bool SupportsTearing() const noexcept;
@@ -2468,78 +2495,71 @@ namespace mrg::graphics
         HANDLE fenceEvent_{};
         std::unique_ptr<MeshRenderSystem> meshRenderSystem_;
         std::unique_ptr<TextRenderSystem> textRenderSystem_;
+        // Declared after its dependencies so it is destroyed before them.
+        std::unique_ptr<Visual2DRenderSystem> visual2DRenderSystem_;
     };
 }
 // ===== END Engine\Graphics.D3D12\Renderer\D3D12Renderer.h =====
 
 // ===== BEGIN Engine\Graphics.D3D12\Visual2D\Visual2DRendering.h =====
 
-// D3D12 presentation adapter for backend-neutral Visual2DCanvas draw commands.
+// Client-facing Visual2D rendering service. The engine owns one concrete
+// backend and exposes only Canvas/resource operations through this contract.
 
 
 #include <DirectXMath.h>
 
 #include <cstdint>
 #include <filesystem>
-#include <memory>
 
 namespace mrg::graphics
 {
-    class D3D12Visual2DRenderer final
+    class Visual2DRenderSystem
     {
     public:
-        D3D12Visual2DRenderer();
-        ~D3D12Visual2DRenderer();
+        virtual ~Visual2DRenderSystem() = default;
 
-        D3D12Visual2DRenderer(const D3D12Visual2DRenderer&) = delete;
-        D3D12Visual2DRenderer& operator=(const D3D12Visual2DRenderer&) = delete;
-
-        void Initialize(
-            MeshRenderSystem& meshRendering,
-            TextRenderSystem& textRendering);
-        void Shutdown() noexcept;
+        Visual2DRenderSystem(const Visual2DRenderSystem&) = delete;
+        Visual2DRenderSystem& operator=(const Visual2DRenderSystem&) = delete;
 
         // Loads a PNG/WIC-supported image once and returns an opaque handle
         // that can be assigned to a SpriteVisualComponent or widget style.
-        [[nodiscard]] visual2d::ImageHandle LoadImage(
-            const std::filesystem::path& path);
+        [[nodiscard]] virtual visual2d::ImageHandle LoadImage(
+            const std::filesystem::path& path) = 0;
 
         // Renders at pixel size with a top-left screen origin. A larger Canvas
         // Z-order places the Canvas and its complete element tree in front of
         // a smaller one. Values above 31 are clamped to the front-most band.
-        void SubmitScreen(
+        virtual void SubmitScreen(
             const visual2d::Visual2DCanvas& canvas,
             const RenderContext& context,
             visual2d::Point screenOrigin = {},
-            std::uint32_t canvasZOrder = 0);
+            std::uint32_t canvasZOrder = 0) = 0;
 
         // Renders rectangles directly onto a finite local XY plane. Use
         // RenderToTexture plus a textured mesh when text or curvature is
         // required. Input mapping remains independent of either path.
-        void SubmitPlane(
+        virtual void SubmitPlane(
             const visual2d::Visual2DCanvas& canvas,
             const RenderContext& context,
             const DirectX::XMFLOAT4X4& surfaceWorld,
             visual2d::Size surfaceWorldSize,
-            const DirectX::XMFLOAT4X4& viewProjection);
+            const DirectX::XMFLOAT4X4& viewProjection) = 0;
 
-        [[nodiscard]] RenderTargetTextureHandle CreateCanvasRenderTarget(
+        [[nodiscard]] virtual RenderTargetTextureHandle CreateCanvasRenderTarget(
             std::uint32_t width,
-            std::uint32_t height);
+            std::uint32_t height) = 0;
 
         // Records an immediate off-screen pass. Rectangles, images, and
         // DirectWrite glyphs are rendered into target, transitioned to an
         // SRV, and can then be sampled by a curved mesh later in the frame.
-        void RenderToTexture(
+        virtual void RenderToTexture(
             const visual2d::Visual2DCanvas& canvas,
             const RenderTargetTextureHandle& target,
-            const RenderContext& context);
+            const RenderContext& context) = 0;
 
-    private:
-        [[nodiscard]] bool IsInitialized() const noexcept;
-
-        struct Impl;
-        std::unique_ptr<Impl> implementation_;
+    protected:
+        Visual2DRenderSystem() = default;
     };
 }
 // ===== END Engine\Graphics.D3D12\Visual2D\Visual2DRendering.h =====
@@ -2614,6 +2634,7 @@ namespace mrg
     {
         graphics::MeshRenderSystem& meshRendering;
         graphics::TextRenderSystem& textRendering;
+        graphics::Visual2DRenderSystem& visual2DRendering;
         audio::AudioSystem& audio;
         std::uint32_t windowWidth{};
         std::uint32_t windowHeight{};

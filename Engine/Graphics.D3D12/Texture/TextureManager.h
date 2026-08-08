@@ -14,7 +14,6 @@
 
 namespace mrg::graphics
 {
-    class D3D12Visual2DRenderer;
     // One descriptor table reserves this many entries.  Each entry can point
     // at an independently sized Texture2D resource; this is not a
     // D3D12 Texture2DArray and therefore does not require equal dimensions.
@@ -49,14 +48,13 @@ namespace mrg::graphics
             float targetAspectRatio = 1.0F) const;
 
     private:
-        friend class D3D12Visual2DRenderer;
-        friend class MeshRenderSystem;
         friend class TextureManager;
 
         TextureSet() = default;
 
         std::vector<TextureInfo> textureInfo_;
         std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> resources_;
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptorStart_{};
         D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptorStart_{};
     };
 
@@ -76,7 +74,6 @@ namespace mrg::graphics
         [[nodiscard]] std::uint32_t Height() const noexcept;
 
     private:
-        friend class D3D12Visual2DRenderer;
         friend class TextureManager;
 
         RenderTargetTexture() = default;
@@ -114,11 +111,31 @@ namespace mrg::graphics
 
         [[nodiscard]] TextureSetHandle LoadTextureSet(
             std::span<const std::filesystem::path> paths);
+        // Adds one independently sized texture to an existing descriptor
+        // table without allocating another 64-entry block. The returned
+        // handle aliases the same TextureSet and remains valid for materials
+        // that already reference it.
+        [[nodiscard]] TextureSetHandle AppendTexture(
+            const TextureSetHandle& textureSet,
+            const std::filesystem::path& path);
         [[nodiscard]] RenderTargetTextureHandle CreateRenderTargetTexture(
             std::uint32_t width,
             std::uint32_t height);
 
         [[nodiscard]] ID3D12DescriptorHeap* DescriptorHeap() const noexcept;
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GpuDescriptorStart(
+            const TextureSetHandle& textureSet) const;
+
+        // TextureManager owns render-target resource state and descriptor
+        // details. Render features request a pass instead of reaching into a
+        // RenderTargetTexture through friendship.
+        void BeginRenderTargetPass(
+            ID3D12GraphicsCommandList& commandList,
+            const RenderTargetTextureHandle& target,
+            const DirectX::XMFLOAT4& clearColor);
+        void EndRenderTargetPass(
+            ID3D12GraphicsCommandList& commandList,
+            const RenderTargetTextureHandle& target);
 
     private:
         struct DecodedImage;

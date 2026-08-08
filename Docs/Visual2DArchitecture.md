@@ -13,6 +13,15 @@ MRG.Graphics.D3D12/Visual2D
   D3D12Visual2DRenderer
 ```
 
+`D3D12Visual2DRenderer`는 Scene이 생성하는 객체가 아니다. 엔진의
+`D3D12Renderer`가 실행 중 하나만 생성하고 Mesh/Text 렌더러 다음에
+초기화한다. 구체 D3D12 클래스는 엔진 내부 헤더에만 있으며 Client에는
+생명주기 함수가 없는 `Visual2DRenderSystem` 계약만 공개된다. Client는
+`EngineServices::visual2DRendering`으로 이미지와
+렌더 타깃을 만들고, Render 중에는
+`RenderContext::visual2DRendering`으로 Canvas를 제출한다. Scene은
+Canvas, 입력 라우터, 리소스 핸들만 소유한다.
+
 `Visual2DNode`는 상속용 인터페이스가 아니라 구체적인 컴포넌트 컨테이너다.
 
 ```text
@@ -84,7 +93,7 @@ ComboBox 드래그가 영역 밖에서도 이어진다. 삭제 전에 `Reset`하
 
 ## Sprite 이미지와 인스턴싱
 
-`D3D12Visual2DRenderer::LoadImage`는 서로 크기가 다른 PNG를 각각 독립된
+`Visual2DRenderSystem::LoadImage`는 서로 크기가 다른 PNG를 각각 독립된
 `Texture2D`로 올린다. 같은 Descriptor Table 안의 texture index를 인스턴스 데이터로
 전달하므로 크기를 강제로 통일하는 `Texture2DArray`가 필요하지 않다. 화면과 평면
 Sprite는 같은 mesh/material 조합을 사용하여 `DrawIndexedInstanced` 배치에 들어간다.
@@ -134,5 +143,5 @@ sprite.AddComponent<mrg::visual2d::PointerReceiverComponent>(handler);
 mrg::visual2d::Visual2DInputRouter input;
 input.Process(canvas, pointerSnapshot);
 
-renderer.SubmitScreen(canvas, renderContext);
+renderContext.visual2DRendering->SubmitScreen(canvas, renderContext);
 ```

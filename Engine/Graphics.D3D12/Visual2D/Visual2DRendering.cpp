@@ -1,7 +1,8 @@
-#include "Visual2D/Visual2DRendering.h"
+#include "Visual2D/D3D12Visual2DRenderer.h"
 
 #include "Primitive/RectangleShape.h"
 #include "Shader/ShaderCompiler.h"
+#include "Text/TextRendering.h"
 
 #include <d3dcompiler.h>
 
@@ -11,10 +12,10 @@
 #include <cstring>
 #include <filesystem>
 #include <limits>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 using Microsoft::WRL::ComPtr;
@@ -96,16 +97,36 @@ namespace mrg::graphics
         static_assert(sizeof(RectangleInstance) == 96);
         static_assert(sizeof(VisualInstance) == 128);
 
-        struct FrameBuffer
+        struct FrameBufferPage
         {
             ComPtr<ID3D12Resource> resource;
             std::byte* mappedData{};
             std::size_t capacity{};
+            std::size_t used{};
+        };
+
+        struct FrameUploadArena
+        {
+            std::vector<FrameBufferPage> pages;
+            std::uint64_t renderIndex{};
         };
 
         struct ImageResource
         {
+            std::uint32_t pageIndex{};
             std::uint32_t textureIndex{};
+        };
+
+        struct ImagePage
+        {
+            TextureSetHandle textures;
+            MaterialInstanceHandle material;
+        };
+
+        struct FrameRenderTargetLifetime
+        {
+            std::vector<RenderTargetTextureHandle> targets;
+            std::uint64_t renderIndex{};
         };
 
         ~Impl()
@@ -155,21 +176,27 @@ namespace mrg::graphics
 
         void Shutdown() noexcept
         {
-            for (FrameBuffer& frame : rectangleBuffers)
+            for (FrameUploadArena& arena : rectangleArenas)
             {
-                if (frame.resource != nullptr && frame.mappedData != nullptr)
+                for (FrameBufferPage& page : arena.pages)
                 {
-                    frame.resource->Unmap(0, nullptr);
+                    if (page.resource != nullptr && page.mappedData != nullptr)
+                    {
+                        page.resource->Unmap(0, nullptr);
+                    }
                 }
-                frame = {};
+                arena = {};
             }
-            for (FrameBuffer& frame : visualBuffers)
+            for (FrameUploadArena& arena : visualArenas)
             {
-                if (frame.resource != nullptr && frame.mappedData != nullptr)
+                for (FrameBufferPage& page : arena.pages)
                 {
-                    frame.resource->Unmap(0, nullptr);
+                    if (page.resource != nullptr && page.mappedData != nullptr)
+                    {
+                        page.resource->Unmap(0, nullptr);
+                    }
                 }
-                frame = {};
+                arena = {};
             }
             rectanglePipeline.Reset();
             rectangleRootSignature.Reset();
@@ -181,16 +208,14 @@ namespace mrg::graphics
             rectangleMaterial.reset();
             imagesByHandle.clear();
             imageHandlesByPath.clear();
-            imagePaths.clear();
-            imageTextures.reset();
-            imageMaterial.reset();
+            imagePages.clear();
+            renderTargetsInFlight = {};
             nextImageHandle = 1;
             imageMesh.reset();
             rectangleMesh.reset();
             screenTextRendering = nullptr;
             meshRendering = nullptr;
             device = nullptr;
-            lastTexturePassRenderIndex.reset();
             initialized = false;
         }
 
@@ -257,26 +282,36 @@ namespace mrg::graphics
                 return visual2d::ImageHandle{existing->second};
             }
 
-            if (imagePaths.size() >= MaxTexturesPerSet)
+            const bool requiresNewPage = imagePages.empty() ||
+                imagePages.back().textures->Size() >= MaxTexturesPerSet;
+            if (requiresNewPage)
             {
-                throw std::length_error(
-                    "One Visual2D renderer supports at most 64 shared images.");
-            }
-            imagePaths.push_back(normalized);
-            imageTextures = meshRendering->Textures().LoadTextureSet(imagePaths);
-            if (imageMaterial == nullptr)
-            {
-                imageMaterial = meshRendering->CreateMaterial(
+                const std::array paths{normalized};
+                ImagePage page{};
+                page.textures = meshRendering->Textures().LoadTextureSet(paths);
+                page.material = meshRendering->CreateMaterial(
                     BuiltInMaterial::UnlitVertexColorTextureArray);
+                page.material->SetTextureSet(page.textures);
+                imagePages.push_back(std::move(page));
             }
-            imageMaterial->SetTextureSet(imageTextures);
+            else
+            {
+                ImagePage& page = imagePages.back();
+                page.textures = meshRendering->Textures().AppendTexture(
+                    page.textures,
+                    normalized);
+            }
 
             const std::uint64_t handleValue = nextImageHandle++;
+            const std::uint32_t pageIndex = static_cast<std::uint32_t>(
+                imagePages.size() - 1);
             imageHandlesByPath.emplace(cacheKey, handleValue);
             imagesByHandle.emplace(
                 handleValue,
                 ImageResource{
-                    static_cast<std::uint32_t>(imagePaths.size() - 1)});
+                    pageIndex,
+                    static_cast<std::uint32_t>(
+                        imagePages.back().textures->Size() - 1)});
             return visual2d::ImageHandle{handleValue};
         }
 
@@ -483,20 +518,32 @@ namespace mrg::graphics
                 "Create Visual2D image pipeline");
         }
 
-        void EnsureRectangleCapacity(
-            const std::uint32_t frameIndex,
-            const std::size_t required)
+        [[nodiscard]] FrameBufferPage& AllocateUploadRange(
+            FrameUploadArena& arena,
+            const std::uint64_t renderIndex,
+            const std::size_t required,
+            const std::size_t instanceSize,
+            const char* operation,
+            std::size_t& firstInstance)
         {
-            FrameBuffer& frame = rectangleBuffers[frameIndex];
-            if (frame.capacity >= required)
+            if (arena.renderIndex != renderIndex)
             {
-                return;
+                arena.renderIndex = renderIndex;
+                for (FrameBufferPage& page : arena.pages)
+                {
+                    page.used = 0;
+                }
             }
-            if (frame.resource != nullptr && frame.mappedData != nullptr)
+
+            for (FrameBufferPage& page : arena.pages)
             {
-                frame.resource->Unmap(0, nullptr);
+                if (page.capacity - page.used >= required)
+                {
+                    firstInstance = page.used;
+                    page.used += required;
+                    return page;
+                }
             }
-            frame = {};
 
             std::size_t capacity = 64;
             while (capacity < required)
@@ -506,7 +553,8 @@ namespace mrg::graphics
             D3D12_HEAP_PROPERTIES uploadHeap{};
             uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
             const D3D12_RESOURCE_DESC description = BufferDescription(
-                capacity * sizeof(RectangleInstance));
+                capacity * instanceSize);
+            FrameBufferPage page{};
             ThrowIfFailed(
                 device->CreateCommittedResource(
                     &uploadHeap,
@@ -514,20 +562,25 @@ namespace mrg::graphics
                     &description,
                     D3D12_RESOURCE_STATE_GENERIC_READ,
                     nullptr,
-                    IID_PPV_ARGS(frame.resource.ReleaseAndGetAddressOf())),
-                "Create UI rectangle instance buffer");
+                    IID_PPV_ARGS(page.resource.ReleaseAndGetAddressOf())),
+                operation);
             ThrowIfFailed(
-                frame.resource->Map(
+                page.resource->Map(
                     0,
                     nullptr,
-                    reinterpret_cast<void**>(&frame.mappedData)),
-                "Map UI rectangle instance buffer");
-            frame.capacity = capacity;
+                    reinterpret_cast<void**>(&page.mappedData)),
+                "Map Visual2D upload arena page");
+            page.capacity = capacity;
+            page.used = required;
+            firstInstance = 0;
+            arena.pages.push_back(std::move(page));
+            return arena.pages.back();
         }
 
         void DrawRectangles(
             ID3D12GraphicsCommandList& commandList,
             const std::uint32_t frameIndex,
+            const std::uint64_t renderIndex,
             const std::uint32_t width,
             const std::uint32_t height,
             const std::vector<RectangleInstance>& rectangles)
@@ -536,10 +589,16 @@ namespace mrg::graphics
             {
                 return;
             }
-            EnsureRectangleCapacity(frameIndex, rectangles.size());
-            FrameBuffer& frame = rectangleBuffers[frameIndex];
+            std::size_t firstInstance = 0;
+            FrameBufferPage& page = AllocateUploadRange(
+                rectangleArenas[frameIndex],
+                renderIndex,
+                rectangles.size(),
+                sizeof(RectangleInstance),
+                "Create Visual2D rectangle upload arena page",
+                firstInstance);
             std::memcpy(
-                frame.mappedData,
+                page.mappedData + firstInstance * sizeof(RectangleInstance),
                 rectangles.data(),
                 rectangles.size() * sizeof(RectangleInstance));
 
@@ -550,7 +609,8 @@ namespace mrg::graphics
                 D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             commandList.SetGraphicsRootShaderResourceView(
                 0,
-                frame.resource->GetGPUVirtualAddress());
+                page.resource->GetGPUVirtualAddress() +
+                    firstInstance * sizeof(RectangleInstance));
             const std::array constants{
                 std::bit_cast<std::uint32_t>(static_cast<float>(width)),
                 std::bit_cast<std::uint32_t>(static_cast<float>(height))};
@@ -566,63 +626,29 @@ namespace mrg::graphics
                 0);
         }
 
-        void EnsureVisualCapacity(
-            const std::uint32_t frameIndex,
-            const std::size_t required)
-        {
-            FrameBuffer& frame = visualBuffers[frameIndex];
-            if (frame.capacity >= required)
-            {
-                return;
-            }
-            if (frame.resource != nullptr && frame.mappedData != nullptr)
-            {
-                frame.resource->Unmap(0, nullptr);
-            }
-            frame = {};
-
-            std::size_t capacity = 64;
-            while (capacity < required)
-            {
-                capacity *= 2;
-            }
-            D3D12_HEAP_PROPERTIES uploadHeap{};
-            uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
-            const D3D12_RESOURCE_DESC description = BufferDescription(
-                capacity * sizeof(VisualInstance));
-            ThrowIfFailed(
-                device->CreateCommittedResource(
-                    &uploadHeap,
-                    D3D12_HEAP_FLAG_NONE,
-                    &description,
-                    D3D12_RESOURCE_STATE_GENERIC_READ,
-                    nullptr,
-                    IID_PPV_ARGS(frame.resource.ReleaseAndGetAddressOf())),
-                "Create Visual2D instance buffer");
-            ThrowIfFailed(
-                frame.resource->Map(
-                    0,
-                    nullptr,
-                    reinterpret_cast<void**>(&frame.mappedData)),
-                "Map Visual2D instance buffer");
-            frame.capacity = capacity;
-        }
-
         void DrawVisuals(
             ID3D12GraphicsCommandList& commandList,
             const std::uint32_t frameIndex,
+            const std::uint64_t renderIndex,
             const std::uint32_t width,
             const std::uint32_t height,
+            const TextureSetHandle& textures,
             const std::vector<VisualInstance>& visuals)
         {
-            if (visuals.empty() || imageTextures == nullptr)
+            if (visuals.empty() || textures == nullptr)
             {
                 return;
             }
-            EnsureVisualCapacity(frameIndex, visuals.size());
-            FrameBuffer& frame = visualBuffers[frameIndex];
+            std::size_t firstInstance = 0;
+            FrameBufferPage& page = AllocateUploadRange(
+                visualArenas[frameIndex],
+                renderIndex,
+                visuals.size(),
+                sizeof(VisualInstance),
+                "Create Visual2D image upload arena page",
+                firstInstance);
             std::memcpy(
-                frame.mappedData,
+                page.mappedData + firstInstance * sizeof(VisualInstance),
                 visuals.data(),
                 visuals.size() * sizeof(VisualInstance));
 
@@ -635,7 +661,8 @@ namespace mrg::graphics
                 D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             commandList.SetGraphicsRootShaderResourceView(
                 0,
-                frame.resource->GetGPUVirtualAddress());
+                page.resource->GetGPUVirtualAddress() +
+                    firstInstance * sizeof(VisualInstance));
             const std::array constants{
                 std::bit_cast<std::uint32_t>(static_cast<float>(width)),
                 std::bit_cast<std::uint32_t>(static_cast<float>(height))};
@@ -646,7 +673,7 @@ namespace mrg::graphics
                 0);
             commandList.SetGraphicsRootDescriptorTable(
                 2,
-                imageTextures->gpuDescriptorStart_);
+                meshRendering->Textures().GpuDescriptorStart(textures));
             commandList.DrawInstanced(
                 6,
                 static_cast<UINT>(visuals.size()),
@@ -662,20 +689,20 @@ namespace mrg::graphics
         MaterialInstanceHandle rectangleMaterial;
         std::unordered_map<std::uint64_t, ImageResource> imagesByHandle;
         std::unordered_map<std::wstring, std::uint64_t> imageHandlesByPath;
-        std::vector<std::filesystem::path> imagePaths;
-        TextureSetHandle imageTextures;
-        MaterialInstanceHandle imageMaterial;
+        std::vector<ImagePage> imagePages;
         std::uint64_t nextImageHandle{1};
         FontHandle screenFont;
         TextRenderSystem textureTextRendering;
         FontHandle textureFont;
         ComPtr<ID3D12RootSignature> rectangleRootSignature;
         ComPtr<ID3D12PipelineState> rectanglePipeline;
-        std::array<FrameBuffer, D3D12Renderer::FrameCount> rectangleBuffers{};
+        std::array<FrameUploadArena, D3D12Renderer::FrameCount>
+            rectangleArenas{};
         ComPtr<ID3D12RootSignature> visualRootSignature;
         ComPtr<ID3D12PipelineState> visualPipeline;
-        std::array<FrameBuffer, D3D12Renderer::FrameCount> visualBuffers{};
-        std::optional<std::uint64_t> lastTexturePassRenderIndex;
+        std::array<FrameUploadArena, D3D12Renderer::FrameCount> visualArenas{};
+        std::array<FrameRenderTargetLifetime, D3D12Renderer::FrameCount>
+            renderTargetsInFlight{};
         bool initialized{};
     };
 
@@ -815,7 +842,7 @@ namespace mrg::graphics
                         depth));
                 state.meshRendering->Submit(
                     state.imageMesh,
-                    state.imageMaterial,
+                    state.imagePages[image->second.pageIndex].material,
                     world,
                     viewProjection,
                     ToFloat4(command.color),
@@ -912,7 +939,7 @@ namespace mrg::graphics
 
                 state.meshRendering->Submit(
                     state.imageMesh,
-                    state.imageMaterial,
+                    state.imagePages[image->second.pageIndex].material,
                     world,
                     viewProjection,
                     ToFloat4(command.color),
@@ -967,57 +994,125 @@ namespace mrg::graphics
             throw std::invalid_argument(
                 "The Canvas texture pass received an invalid context.");
         }
-        if (state.lastTexturePassRenderIndex.has_value() &&
-            *state.lastTexturePassRenderIndex == context.renderIndex)
+
+        // A transient Scene may release its target immediately after this
+        // frame is recorded. Retain it until this frame-ring slot is reused,
+        // which happens only after D3D12Renderer has waited for its fence.
+        Impl::FrameRenderTargetLifetime& retainedTargets =
+            state.renderTargetsInFlight[context.frameIndex];
+        if (retainedTargets.renderIndex != context.renderIndex)
         {
-            throw std::logic_error(
-                "One D3D12Visual2DRenderer supports one Canvas texture pass per frame.");
+            retainedTargets.renderIndex = context.renderIndex;
+            retainedTargets.targets.clear();
         }
-        state.lastTexturePassRenderIndex = context.renderIndex;
+        retainedTargets.targets.push_back(target);
 
         ID3D12GraphicsCommandList& commandList = *context.commandList;
-        D3D12_RESOURCE_BARRIER toRenderTarget{};
-        toRenderTarget.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        toRenderTarget.Transition.pResource = target->resource_.Get();
-        toRenderTarget.Transition.Subresource =
-            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        toRenderTarget.Transition.StateBefore = target->state_;
-        toRenderTarget.Transition.StateAfter =
-            D3D12_RESOURCE_STATE_RENDER_TARGET;
-        commandList.ResourceBarrier(1, &toRenderTarget);
-        target->state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
-
-        const D3D12_VIEWPORT viewport{
-            0.0F,
-            0.0F,
-            static_cast<float>(target->width_),
-            static_cast<float>(target->height_),
-            0.0F,
-            1.0F};
-        const D3D12_RECT scissor{
-            0,
-            0,
-            static_cast<LONG>(target->width_),
-            static_cast<LONG>(target->height_)};
-        commandList.RSSetViewports(1, &viewport);
-        commandList.RSSetScissorRects(1, &scissor);
-        commandList.OMSetRenderTargets(1, &target->rtv_, FALSE, nullptr);
-        constexpr float clearColor[4]{0.0F, 0.0F, 0.0F, 0.0F};
-        commandList.ClearRenderTargetView(
-            target->rtv_, clearColor, 0, nullptr);
+        TextureManager& textureManager = state.meshRendering->Textures();
+        textureManager.BeginRenderTargetPass(
+            commandList,
+            target,
+            {0.0F, 0.0F, 0.0F, 0.0F});
+        const std::uint32_t targetWidth = target->Width();
+        const std::uint32_t targetHeight = target->Height();
 
         const visual2d::Size canvasSize = canvas.LogicalSize();
         const float scaleX =
-            static_cast<float>(target->width_) / canvasSize.width;
+            static_cast<float>(targetWidth) / canvasSize.width;
         const float scaleY =
-            static_cast<float>(target->height_) / canvasSize.height;
+            static_cast<float>(targetHeight) / canvasSize.height;
         const std::vector<visual2d::DrawPacket> commands = canvas.BuildDrawList();
         std::vector<Impl::RectangleInstance> rectangles;
         rectangles.reserve(commands.size());
         std::vector<Impl::VisualInstance> visuals;
         visuals.reserve(commands.size());
 
-        state.textureTextRendering.BeginFrame(context.frameIndex);
+        struct PendingText
+        {
+            std::wstring text;
+            TextDrawCommand command;
+        };
+        std::vector<PendingText> textCommands;
+        textCommands.reserve(commands.size());
+
+        enum class BatchType
+        {
+            None,
+            Rectangles,
+            Visuals,
+            Text,
+        };
+        BatchType batchType = BatchType::None;
+        std::uint32_t batchImagePage = 0;
+
+        // Preserve the Canvas tree's paint order. Consecutive primitives that
+        // use the same pipeline and descriptor page remain instanced, while a
+        // pipeline/page change closes the current batch before recording the
+        // next one.
+        const auto flushBatch = [&]()
+        {
+            switch (batchType)
+            {
+            case BatchType::Rectangles:
+                state.DrawRectangles(
+                    commandList,
+                    context.frameIndex,
+                    context.renderIndex,
+                    targetWidth,
+                    targetHeight,
+                    rectangles);
+                rectangles.clear();
+                break;
+
+            case BatchType::Visuals:
+                state.DrawVisuals(
+                    commandList,
+                    context.frameIndex,
+                    context.renderIndex,
+                    targetWidth,
+                    targetHeight,
+                    state.imagePages[batchImagePage].textures,
+                    visuals);
+                visuals.clear();
+                break;
+
+            case BatchType::Text:
+                state.textureTextRendering.BeginFrame(
+                    context.frameIndex,
+                    context.renderIndex);
+                for (const PendingText& text : textCommands)
+                {
+                    state.textureTextRendering.Submit(
+                        text.text,
+                        text.command);
+                }
+                state.textureTextRendering.Flush(
+                    commandList,
+                    targetWidth,
+                    targetHeight);
+                textCommands.clear();
+                break;
+
+            case BatchType::None:
+                break;
+            }
+            batchType = BatchType::None;
+        };
+
+        const auto selectBatch = [&flushBatch, &batchType, &batchImagePage](
+            const BatchType requestedType,
+            const std::uint32_t requestedImagePage = 0)
+        {
+            if (batchType != requestedType ||
+                (requestedType == BatchType::Visuals &&
+                 batchImagePage != requestedImagePage))
+            {
+                flushBatch();
+                batchType = requestedType;
+                batchImagePage = requestedImagePage;
+            }
+        };
+
         for (const visual2d::DrawPacket& command : commands)
         {
             if (command.bounds.width <= 0.0F ||
@@ -1033,28 +1128,14 @@ namespace mrg::graphics
                 DirectX::XMMatrixScaling(scaleX, scaleY, 0.0001F));
             if (command.type == visual2d::DrawPacketType::Rectangle)
             {
-                if (state.imageTextures != nullptr)
-                {
-                    visuals.push_back({
-                        {command.bounds.x,
-                         command.bounds.y,
-                         command.bounds.width,
-                         command.bounds.height},
-                        ToFloat4(command.color),
-                        primitiveTransform,
-                        {1.0F, 1.0F, 0.0F, 0.0F},
-                        NoTextureIndex});
-                }
-                else
-                {
-                    rectangles.push_back({
-                        {command.bounds.x,
-                         command.bounds.y,
-                         command.bounds.width,
-                         command.bounds.height},
-                        ToFloat4(command.color),
-                        primitiveTransform});
-                }
+                selectBatch(BatchType::Rectangles);
+                rectangles.push_back({
+                    {command.bounds.x,
+                     command.bounds.y,
+                     command.bounds.width,
+                     command.bounds.height},
+                    ToFloat4(command.color),
+                    primitiveTransform});
                 continue;
             }
 
@@ -1066,6 +1147,9 @@ namespace mrg::graphics
                 {
                     continue;
                 }
+                selectBatch(
+                    BatchType::Visuals,
+                    image->second.pageIndex);
                 visuals.push_back({
                     {command.bounds.x,
                      command.bounds.y,
@@ -1103,37 +1187,12 @@ namespace mrg::graphics
             text.style.fontSizePixels = command.fontSize *
                 std::min(scaleX, scaleY);
             text.style.color = ToFloat4(command.color);
-            state.textureTextRendering.Submit(command.text, text);
+            selectBatch(BatchType::Text);
+            textCommands.push_back({command.text, std::move(text)});
         }
+        flushBatch();
 
-        state.DrawRectangles(
-            commandList,
-            context.frameIndex,
-            target->width_,
-            target->height_,
-            rectangles);
-        state.DrawVisuals(
-            commandList,
-            context.frameIndex,
-            target->width_,
-            target->height_,
-            visuals);
-        state.textureTextRendering.Flush(
-            commandList,
-            target->width_,
-            target->height_);
-
-        D3D12_RESOURCE_BARRIER toShaderResource{};
-        toShaderResource.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        toShaderResource.Transition.pResource = target->resource_.Get();
-        toShaderResource.Transition.Subresource =
-            D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        toShaderResource.Transition.StateBefore =
-            D3D12_RESOURCE_STATE_RENDER_TARGET;
-        toShaderResource.Transition.StateAfter =
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-        commandList.ResourceBarrier(1, &toShaderResource);
-        target->state_ = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        textureManager.EndRenderTargetPass(commandList, target);
 
         commandList.RSSetViewports(1, &context.viewport);
         commandList.RSSetScissorRects(1, &context.scissorRectangle);

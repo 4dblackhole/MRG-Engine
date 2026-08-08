@@ -86,6 +86,7 @@
     <ClInclude Include="..\Graphics.D3D12\Shader\ShaderCompiler.h" />
     <ClInclude Include="..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl" />
     <ClInclude Include="..\Graphics.D3D12\Visual2D\Visual2DRendering.h" />
+    <ClInclude Include="..\Graphics.D3D12\Visual2D\D3D12Visual2DRenderer.h" />
     <ClInclude Include="..\Core\Client\IGameClient.h" />
     <ClInclude Include="..\Core\Client\SceneGameClient.h" />
     <ClInclude Include="..\Core\App\Engine.h" />

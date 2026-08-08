@@ -2,11 +2,13 @@
 
 #include "Mesh/MeshRendering.h"
 #include "Text/TextRendering.h"
+#include "Visual2D/D3D12Visual2DRenderer.h"
 
 #include <d3d12sdklayers.h>
 
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace mrg::graphics
 {
@@ -86,6 +88,8 @@ namespace mrg::graphics
         }
     }
 
+    D3D12Renderer::D3D12Renderer() = default;
+
     D3D12Renderer::~D3D12Renderer()
     {
         if (device_ != nullptr && commandQueue_ != nullptr && fence_ != nullptr)
@@ -137,6 +141,15 @@ namespace mrg::graphics
             *device_.Get(),
             renderTargetFormat_,
             depthStencilFormat_);
+
+        // Visual2D is one engine-owned service. Scenes share its pipelines,
+        // texture pages, font atlases, and frame upload arenas.
+        auto visual2DBackend =
+            std::make_unique<D3D12Visual2DRenderer>();
+        visual2DBackend->Initialize(
+            *meshRenderSystem_,
+            *textRenderSystem_);
+        visual2DRenderSystem_ = std::move(visual2DBackend);
     }
 
     void D3D12Renderer::Resize(
@@ -242,8 +255,9 @@ namespace mrg::graphics
             0,
             nullptr);
 
+        const std::uint64_t renderIndex = nextRenderIndex_++;
         meshRenderSystem_->BeginFrame(frameIndex_);
-        textRenderSystem_->BeginFrame(frameIndex_);
+        textRenderSystem_->BeginFrame(frameIndex_, renderIndex);
         frameOpen_ = true;
         return RenderContext{
             commandList_.Get(),
@@ -252,13 +266,14 @@ namespace mrg::graphics
             width_,
             height_,
             frameIndex_,
-            nextRenderIndex_++,
+            renderIndex,
             renderTargetFormat_,
             depthStencilFormat_,
             renderTargetView,
             depthStencilView,
             meshRenderSystem_.get(),
-            textRenderSystem_.get()};
+            textRenderSystem_.get(),
+            visual2DRenderSystem_.get()};
     }
 
     void D3D12Renderer::EndFrame()
@@ -349,6 +364,11 @@ namespace mrg::graphics
     TextRenderSystem& D3D12Renderer::TextRendering() const noexcept
     {
         return *textRenderSystem_;
+    }
+
+    Visual2DRenderSystem& D3D12Renderer::Visual2DRendering() const noexcept
+    {
+        return *visual2DRenderSystem_;
     }
 
     DXGI_FORMAT D3D12Renderer::RenderTargetFormat() const noexcept

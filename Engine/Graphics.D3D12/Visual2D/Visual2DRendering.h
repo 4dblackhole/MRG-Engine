@@ -1,74 +1,64 @@
 #pragma once
 
-// D3D12 presentation adapter for backend-neutral Visual2DCanvas draw commands.
+// Client-facing Visual2D rendering service. The engine owns one concrete
+// backend and exposes only Canvas/resource operations through this contract.
 
 #include "Visual2D/Visual2DCanvas.h"
 #include "Mesh/MeshRendering.h"
 #include "Renderer/D3D12Renderer.h"
-#include "Text/TextRendering.h"
 
 #include <DirectXMath.h>
 
 #include <cstdint>
 #include <filesystem>
-#include <memory>
 
 namespace mrg::graphics
 {
-    class D3D12Visual2DRenderer final
+    class Visual2DRenderSystem
     {
     public:
-        D3D12Visual2DRenderer();
-        ~D3D12Visual2DRenderer();
+        virtual ~Visual2DRenderSystem() = default;
 
-        D3D12Visual2DRenderer(const D3D12Visual2DRenderer&) = delete;
-        D3D12Visual2DRenderer& operator=(const D3D12Visual2DRenderer&) = delete;
-
-        void Initialize(
-            MeshRenderSystem& meshRendering,
-            TextRenderSystem& textRendering);
-        void Shutdown() noexcept;
+        Visual2DRenderSystem(const Visual2DRenderSystem&) = delete;
+        Visual2DRenderSystem& operator=(const Visual2DRenderSystem&) = delete;
 
         // Loads a PNG/WIC-supported image once and returns an opaque handle
         // that can be assigned to a SpriteVisualComponent or widget style.
-        [[nodiscard]] visual2d::ImageHandle LoadImage(
-            const std::filesystem::path& path);
+        [[nodiscard]] virtual visual2d::ImageHandle LoadImage(
+            const std::filesystem::path& path) = 0;
 
         // Renders at pixel size with a top-left screen origin. A larger Canvas
         // Z-order places the Canvas and its complete element tree in front of
         // a smaller one. Values above 31 are clamped to the front-most band.
-        void SubmitScreen(
+        virtual void SubmitScreen(
             const visual2d::Visual2DCanvas& canvas,
             const RenderContext& context,
             visual2d::Point screenOrigin = {},
-            std::uint32_t canvasZOrder = 0);
+            std::uint32_t canvasZOrder = 0) = 0;
 
         // Renders rectangles directly onto a finite local XY plane. Use
         // RenderToTexture plus a textured mesh when text or curvature is
         // required. Input mapping remains independent of either path.
-        void SubmitPlane(
+        virtual void SubmitPlane(
             const visual2d::Visual2DCanvas& canvas,
             const RenderContext& context,
             const DirectX::XMFLOAT4X4& surfaceWorld,
             visual2d::Size surfaceWorldSize,
-            const DirectX::XMFLOAT4X4& viewProjection);
+            const DirectX::XMFLOAT4X4& viewProjection) = 0;
 
-        [[nodiscard]] RenderTargetTextureHandle CreateCanvasRenderTarget(
+        [[nodiscard]] virtual RenderTargetTextureHandle CreateCanvasRenderTarget(
             std::uint32_t width,
-            std::uint32_t height);
+            std::uint32_t height) = 0;
 
         // Records an immediate off-screen pass. Rectangles, images, and
         // DirectWrite glyphs are rendered into target, transitioned to an
         // SRV, and can then be sampled by a curved mesh later in the frame.
-        void RenderToTexture(
+        virtual void RenderToTexture(
             const visual2d::Visual2DCanvas& canvas,
             const RenderTargetTextureHandle& target,
-            const RenderContext& context);
+            const RenderContext& context) = 0;
 
-    private:
-        [[nodiscard]] bool IsInitialized() const noexcept;
-
-        struct Impl;
-        std::unique_ptr<Impl> implementation_;
+    protected:
+        Visual2DRenderSystem() = default;
     };
 }

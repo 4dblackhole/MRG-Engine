@@ -45,6 +45,21 @@ This file applies to the entire repository.
   intent and required ordering; do not add comments that merely restate an
   obvious statement.
 
+## Repository synchronization
+
+- Treat synchronization as part of every completed engine task. Fetch the
+  engine and Client remotes, verify the local work branch matches its upstream,
+  and report exact commit IDs when handing work back.
+- In a combined engine/Client workspace, make the final engine commit available
+  on the engine remote before updating the Client submodule gitlink. Verify the
+  Client gitlink and the checked-out engine `HEAD` are identical.
+- After approved PRs are merged, fast-forward both `main` branches and run the
+  Client's recursive submodule synchronization/update before declaring the
+  repositories current.
+- Never claim that `main` is current while a required PR remains open. Do not
+  merge a PR or otherwise change remote `main` without explicit authorization;
+  report that remaining integration step instead.
+
 ## Verification
 
 After engine changes, rebuild `MRG-Engine.sln` in Debug and Release x64.

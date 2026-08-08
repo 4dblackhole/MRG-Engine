@@ -9,6 +9,8 @@
 
 #include <DirectXMath.h>
 
+#include <cstdint>
+#include <filesystem>
 #include <memory>
 
 namespace mrg::graphics
@@ -27,12 +29,19 @@ namespace mrg::graphics
             TextRenderSystem& textRendering);
         void Shutdown() noexcept;
 
-        // Renders at pixel size with a top-left screen origin. Text is
-        // supported by the existing DirectWrite-backed screen renderer.
+        // Loads a PNG/WIC-supported image once and returns an opaque handle
+        // that can be assigned to UiImage or UiVisualStyle image slots.
+        [[nodiscard]] ui::UiImageHandle LoadImage(
+            const std::filesystem::path& path);
+
+        // Renders at pixel size with a top-left screen origin. A larger Canvas
+        // Z-order places the Canvas and its complete element tree in front of
+        // a smaller one. Values above 31 are clamped to the front-most band.
         void SubmitScreen(
             const ui::UiCanvas& canvas,
             const RenderContext& context,
-            ui::UiPoint screenOrigin = {});
+            ui::UiPoint screenOrigin = {},
+            std::uint32_t canvasZOrder = 0);
 
         // Renders rectangles directly onto a finite local XY plane. Use
         // RenderToTexture plus a textured mesh when text or curvature is

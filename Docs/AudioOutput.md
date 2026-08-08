@@ -1,51 +1,99 @@
-# 오디오 출력 선택과 짧은 효과음
+# ?ㅻ뵒??異쒕젰怨?Client ?뚯쑀 Clip
 
-`AudioSystem`은 Client에 FMOD 타입을 노출하지 않는 backend-neutral 서비스다. 현재
-기본 backend는 시작할 때 FMOD probe system으로 WASAPI와 ASIO 출력 장치를 각각
-열거하고, 별도로 `SYSTEM DEFAULT (FMOD AUTO)` 항목을 만든다. 각
-`AudioDeviceInfo`에는 backend 종류와 해당 backend 안의 driver index가 들어 있다.
+`AudioSystem`? Client??怨듦컻?섎뒗 backend-neutral ?쒕퉬?ㅻ떎. FMOD ??낆?
+`Engine/Audio/Backend/Fmod` ?대??먮쭔 議댁옱?섎ŉ, ?앹꽦??`MRG_Core.h`?먮뒗 怨듦컻
+怨꾩빟留??ы븿?쒕떎.
 
-`AudioSystem::RefreshOutputDevices`는 실행 중인 출력은 유지한 채 별도의 초기화 전
-FMOD probe system으로 WASAPI와 ASIO 목록을 다시 만든다. 장치 선택 UI를 열거나
-출력 API를 바꾸기 직전에 호출하면 엔진 시작 후 연결·설치된 ASIO 드라이버도
-최신 목록에 반영할 수 있다. 한 output API의 probe가 실패하면 성공한 API는 새
-결과를 사용하고 실패한 API는 마지막으로 성공한 항목을 유지한다.
+## FMOD system ?섎챸
 
-FMOD의 `System_Create`, `setOutput`, `getNumDrivers`, `getDriverInfo` 중 어느 단계가
-실패했는지는 Visual Studio Debug Output의 `[MRG.Audio]` 메시지에서 backend와
-driver index를 포함해 확인할 수 있다. 잘못 등록된 한 ASIO 드라이버의
-`getDriverInfo`가 실패해도 나머지 driver index 열거는 계속한다.
+`FmodAudioBackend`???뺥솗???섎굹??`FMOD::System*`瑜??뚯쑀?쒕떎. 珥덇린???쒖꽌??
+?ㅼ쓬怨?媛숇떎.
 
-현재 사용 중인 FMOD 2.x Windows API에는 `FMOD_OUTPUTTYPE_DSOUND`가 없으므로
-DirectSound를 실제 output backend로 선택할 수 없다. UI의 기본 출력 항목은
-DirectSound라는 이름을 사용하지 않고 FMOD 자동 선택으로 표시한다. 이 경로는 Windows
-기본 출력 장치를 FMOD가 선택하게 하며, 명시적인 저지연 장치 선택은 WASAPI 또는
-ASIO를 사용한다.
+1. `FMOD::System_Create`? runtime version 寃??
+2. ?붿껌??output API, software sample rate, DSP buffer ?ㅼ젙
+3. `FMOD::System::init`
+4. ?ㅼ젣 output/sample/buffer ?곹깭 ?뺤씤
+5. ?꾩옱 output API??driver留??닿굅
+6. 紐낆떆?곸씤 driver index媛 ?덉쑝硫??대떦 driver ?좏깮
 
-## 실행 중 장치 전환
+FMOD ?쒖빟??`setSoftwareFormat`怨?`setDSPBufferSize`??`System::init` ?꾩뿉
+?몄텧?댁빞 ?쒕떎. 諛섎㈃ ?μ튂 ?닿굅??珥덇린?붽? ?깃났???ㅼ쓬?먮쭔 ?섑뻾?쒕떎. Backend???꾩떆
+probe system??留뚮뱾吏 ?딆쑝硫??쒖옉????WASAPI? ASIO瑜??④퍡 誘몃━ 議곗궗?섏? ?딅뒗??
 
-`SelectOutputDevice`는 현재 backend를 즉시 파괴하지 않는다.
+## Output API? driver ?좏깮
 
-1. 선택한 backend/driver 설정으로 새 backend를 초기화한다.
-2. `AudioSystem`에 등록된 모든 sound를 새 backend에 다시 생성한다.
-3. 두 단계가 모두 성공한 경우에만 이전 backend를 종료하고 새 backend로 교체한다.
+`Automatic`? ?붿껌 ?뺤콉?닿퀬 `ActiveOutput()`? FMOD媛 ?좏깮???ㅼ젣 output?대떎.
+Windows?먯꽌???쇰컲?곸쑝濡?WASAPI媛 ?좏깮?섎?濡???媛믪쓣 遺꾨━?댁꽌 ?쒓났?쒕떎.
 
-따라서 ASIO 초기화나 sound 재생성에 실패하면 오류를 반환하고 기존 출력과 기존
-sound handle을 그대로 유지한다. 명시적으로 선택한 장치가 실패했을 때 WASAPI나
-no-sound로 조용히 fallback하지 않는다.
+```cpp
+audio.RequestedOutput(); // Automatic, Wasapi, Asio, NoSound
+audio.ActiveOutput();    // FMOD媛 蹂닿퀬???ㅼ젣 output
+```
+
+`SetOutputBackend()`???ㅽ뻾 以묒씤 ?섎굹??FMOD system?먯꽌 output??蹂寃쏀븳?? ?대?
+媛숈? ?붿껌媛믪씠 ?좏깮?섏뼱 ?덉쑝硫??꾨Т寃껊룄 議곗궗?섏? ?딄퀬 諛섑솚?쒕떎. 蹂寃쎌뿉 ?깃났??
+寃쎌슦?먮쭔 ???꾩옱 output?????`getNumDrivers`? `getDriverInfo`瑜??몄텧?섍퀬 ?ㅼ쓬
+媛믪쓣 罹먯떆?쒕떎.
+
+- `DriverCount()`: FMOD媛 蹂닿퀬???먮옒 driver 媛쒖닔
+- `OutputDrivers()`: ?뺣낫瑜??뺤긽?곸쑝濡??쎌? driver? ?대떦 FMOD index
+- `ActiveDriverIndex()`: ?꾩옱 ?ъ슜 以묒씤 driver index
+
+`SetOutputDriver()`??罹먯떆??媛쒖닔濡?index瑜?寃利앺븳 ??`setDriver`瑜??몄텧?섎ŉ
+紐⑸줉???ㅼ떆 議곗궗?섏? ?딅뒗?? ?곕씪??Client????ComboBox??output API瑜??ㅼ젣濡?
+蹂寃쏀븯怨? ?꾨옒 ComboBox?먮뒗 ?꾩옱 API?먯꽌 議곗궗??driver留??섑??쒕떎.
+
+?쒖옉 ??ASIO?먯꽌 WASAPI ?먮뒗 no-sound濡?fallback?섎뒗 寃껋? `AudioSystem`??
+?뺤콉?대떎. `FmodAudioBackend`???꾨떖諛쏆? output ?붿껌留??ㅽ뻾?섎ŉ ?대??먯꽌 ?ㅻⅨ
+API瑜?議곗슜???좏깮?섏? ?딅뒗??
+
+## Sample rate? DSP buffer
+
+`AudioConfig::sampleRate`, `dspBufferLength`, `dspBufferCount`濡?珥덇린 mixer ?ㅼ젙??
+吏?뺥븳?? 珥덇린 sample rate媛 0?대㈃ output driver???좏샇媛믪쓣 ?ъ슜?섍퀬, 紐낆떆?곸씤
+媛믪? 8000~192000 Hz 踰붿쐞?ъ빞 ?쒕떎. ?붿껌媛믨낵 ?ㅼ젣 ?곸슜媛믪? ?ㅼ쓬 ?⑥닔濡??뺤씤?쒕떎.
+
+```cpp
+audio.RequestedSampleRate();
+audio.SampleRate();
+audio.DspBufferLength();
+audio.DspBufferCount();
+audio.EstimatedDspLatencyMilliseconds();
+```
+
+`SetSampleRate()`? `SetDspBufferSize()`??FMOD ?쒖빟??留욎떠
+`System::close`/`System::init` 怨쇱젙???섑뻾?쒕떎. ???ㅼ젙???ㅽ뙣?섎㈃ ?댁쟾??
+?뺤긽?곸쑝濡??묐룞?섎뜕 ?ㅼ젙?쇰줈 蹂듦뎄?쒕떎. `System::close`??FMOD ?먯떇 媛앹껜瑜?
+臾댄슚?뷀븯誘濡?Client ?뚯쑀 `AudioClip`???섎굹?쇰룄 ?⑥븘 ?덉쑝硫?蹂寃??붿껌??嫄곗젅?쒕떎.
+
+?ш린??DSP buffer??FMOD software mixer??buffer?? ?ㅻ뵒???명꽣?섏씠???쒖“??
+?쒖뼱?먯쓽 ASIO/USB streaming buffer??driver ?꾩슜 ?ㅼ젙?대?濡?FMOD Core??怨듯넻
+API濡?蹂寃쏀븷 ???녿떎.
+
+## Client ?뚯쑀 sound ?섎챸
+
+`FmodAudioBackend`??WAV handle 紐⑸줉????ν븯吏 ?딅뒗?? `AudioSystem::LoadSound`??
+RAII `AudioClip`??諛섑솚?섎ŉ Client媛 ??`std::unique_ptr`???섎챸??愿由ы븳??
 
 ```cpp
 std::string error;
-const auto sound = audio.LoadSound(path, error);
-audio.SelectOutputDevice(audio.OutputDevices()[index], error);
-audio.PlaySound(sound, error);
-audio.UnloadSound(sound);
+std::unique_ptr<mrg::audio::AudioClip> hitSound =
+    audio.LoadSound(path, error);
+
+if (hitSound != nullptr)
+{
+    hitSound->Play(error);
+}
+
+hitSound.reset();
 ```
 
-`AudioSoundHandle`은 backend 교체와 무관한 논리 handle이다. 실제 FMOD sound는
-교체 과정에서 다시 만들어진다. 파일을 삭제하거나 이동한 뒤 장치를 전환하면 재생성에
-실패할 수 있으므로 게임 실행 동안 등록한 원본 asset 경로를 유지해야 한다.
+Backend ?대???`FmodAudioClip`??`FMOD::Sound*`瑜??뚯쑀?섎?濡?Client?먮뒗 FMOD
+??낆씠 ?몄텧?섏? ?딅뒗?? Output API? driver 蹂寃쎌? 媛숈? FMOD system?먯꽌
+?대（?댁?誘濡??대? 濡쒕뱶??clip???ㅼ떆 ?깅줉???꾩슂媛 ?녿떎. Mixer sample/buffer瑜?
+諛붽씀湲??꾩뿉??紐⑤뱺 clip???쒓굅?댁빞 ?쒕떎. ?붿쭊 醫낅즺 ?쒖뿉??怨듭쑀 FMOD generation??
+臾댄슚?뷀븯????쾶 ?뚭눼?섎뒗 clip???대? ?댁젣??system??李몄“?섏? 紐삵븯寃??쒕떎.
 
-ASIO 장치는 제조사 driver가 설치된 경우에만 목록에 나타난다. 한 ASIO driver는 다른
-프로그램과 배타적으로 충돌할 수 있으며, sample rate나 장치 상태 때문에 초기화가
-실패할 수도 있으므로 UI는 실패 메시지를 표시하고 기존 선택을 유지해야 한다.
+ASIO ?μ튂 紐⑸줉? Client媛 ASIO瑜??좏깮?섍퀬 FMOD媛 洹?output???쒖꽦?뷀븳 ?ㅼ쓬?먮쭔
+?앹꽦?쒕떎. ????driver ?섎굹??`getDriverInfo`媛 ?ㅽ뙣?섎㈃ Visual Studio Debug
+Output??湲곕줉?섍퀬 ?대떦 ??ぉ留?嫄대꼫?대떎.

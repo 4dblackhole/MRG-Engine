@@ -65,6 +65,7 @@
     <ClInclude Include="..\Platform.Win32\Window\Win32Window.h" />
     <ClInclude Include="..\Audio\System\AudioSystem.h" />
     <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBackend.h" />
+    <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioClip.h" />
     <ClInclude Include="..\Collision\Query\Collision.h" />
     <ClInclude Include="..\Geometry\Shape\Vertex.h" />
     <ClInclude Include="..\Geometry\Shape\Shape.h" />
@@ -101,6 +102,7 @@
     <ClCompile Include="..\Platform.Win32\Window\Win32Window.cpp" />
     <ClCompile Include="..\Audio\System\AudioSystem.cpp" />
     <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBackend.cpp" />
+    <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioClip.cpp" />
     <ClCompile Include="..\Collision\Query\Collision.cpp" />
     <ClCompile Include="..\Geometry\Shape\Shape.cpp" />
     <ClCompile Include="..\Geometry\Primitive\RectangleShape.cpp" />

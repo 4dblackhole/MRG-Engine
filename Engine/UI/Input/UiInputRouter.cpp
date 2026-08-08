@@ -13,6 +13,15 @@ namespace mrg::ui
         }
         ChangeHovered(canvas, hit.element, input);
 
+        if (input.wheelDelta != 0.0F && hit.element != nullptr)
+        {
+            Dispatch(
+                canvas,
+                *hit.element,
+                UiPointerEventType::Wheel,
+                input);
+        }
+
         if (input.leftButtonPressed && hit.element != nullptr)
         {
             captured_ = hit.element->Id();
@@ -107,7 +116,8 @@ namespace mrg::ui
                 input.position,
                 {input.position.x - absoluteBounds.x,
                     input.position.y - absoluteBounds.y},
-                input.timestampTicks},
+                input.timestampTicks,
+                input.wheelDelta},
             canvas.actions_);
     }
 

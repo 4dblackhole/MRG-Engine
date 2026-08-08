@@ -9,8 +9,9 @@ namespace mrg::platform
     class ComApartment final
     {
     public:
-        explicit ComApartment(
-            DWORD concurrencyModel = COINIT_MULTITHREADED);
+        // Require every call site to choose an apartment deliberately. Some
+        // COM-backed APIs, including FMOD ASIO enumeration, require an STA.
+        explicit ComApartment(DWORD concurrencyModel);
         ~ComApartment();
 
         ComApartment(const ComApartment&) = delete;

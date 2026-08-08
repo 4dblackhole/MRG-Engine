@@ -402,7 +402,10 @@ namespace mrg
 
         try
         {
-            platform::ComApartment comApartment;
+            // The Win32 main thread owns the message pump and must remain an
+            // STA so COM-based ASIO drivers can be created by FMOD.
+            platform::ComApartment comApartment(
+                COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
             EngineConfig config = client->GetEngineConfig();
 
             // Stack order is intentional.  The Client is initialized only
@@ -440,6 +443,7 @@ namespace mrg
             if (!audioSystem.Initialize(
                     config.audio,
                     config.audioBackendFactory,
+                    config.audioClipBackendFactory,
                     audioError))
             {
                 throw std::runtime_error(

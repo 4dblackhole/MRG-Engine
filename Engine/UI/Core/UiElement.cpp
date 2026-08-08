@@ -65,6 +65,16 @@ namespace mrg::ui
         return result;
     }
 
+    std::int32_t UiElement::ZIndex() const noexcept
+    {
+        return zIndex_;
+    }
+
+    void UiElement::SetZIndex(const std::int32_t zIndex) noexcept
+    {
+        zIndex_ = zIndex;
+    }
+
     bool UiElement::IsVisible() const noexcept
     {
         return visible_;
@@ -187,13 +197,41 @@ namespace mrg::ui
         return hovered_ ? style_.hovered : style_.normal;
     }
 
+    UiImageHandle UiElement::CurrentBackgroundImage() const noexcept
+    {
+        if (!enabled_)
+        {
+            return style_.disabledImage;
+        }
+        if (pressed_)
+        {
+            return style_.pressedImage;
+        }
+        return hovered_ ? style_.hoveredImage : style_.normalImage;
+    }
+
     void UiElement::AppendDrawCommands(
         std::vector<UiDrawCommand>& commands,
         const UiRect& absoluteBounds) const
     {
         const UiColor color = CurrentBackgroundColor();
-        if (color.alpha > 0.0F &&
-            absoluteBounds.width > 0.0F && absoluteBounds.height > 0.0F)
+        if (absoluteBounds.width <= 0.0F || absoluteBounds.height <= 0.0F)
+        {
+            return;
+        }
+
+        if (const UiImageHandle image = CurrentBackgroundImage(); image)
+        {
+            UiDrawCommand command{};
+            command.type = UiDrawCommandType::Image;
+            command.bounds = absoluteBounds;
+            command.color = color;
+            command.image = image;
+            commands.push_back(std::move(command));
+            return;
+        }
+
+        if (color.alpha > 0.0F)
         {
             commands.push_back(UiDrawCommand{
                 UiDrawCommandType::Rectangle,
@@ -208,11 +246,17 @@ namespace mrg::ui
     {
     }
 
+    bool UiElement::ContainsLocalPoint(
+        const UiPoint localPosition) const noexcept
+    {
+        return UiRect{0.0F, 0.0F, bounds_.width, bounds_.height}.Contains(
+            localPosition);
+    }
+
     UiElement::HitResult UiElement::HitTest(
         const UiPoint parentPosition) noexcept
     {
-        if (!visible_ || !enabled_ ||
-            !bounds_.Contains(parentPosition))
+        if (!visible_ || !enabled_)
         {
             return {};
         }
@@ -220,14 +264,35 @@ namespace mrg::ui
         const UiPoint local{
             parentPosition.x - bounds_.x,
             parentPosition.y - bounds_.y};
-        for (auto iterator = children_.rbegin();
-            iterator != children_.rend(); ++iterator)
+        // Use exactly the reverse of paint order. This keeps the visible top
+        // child and the clickable top child identical, including equal-Z
+        // siblings whose insertion order acts as the tie breaker.
+        std::vector<UiElement*> childrenInPaintOrder;
+        childrenInPaintOrder.reserve(children_.size());
+        for (const std::unique_ptr<UiElement>& child : children_)
+        {
+            childrenInPaintOrder.push_back(child.get());
+        }
+        std::stable_sort(
+            childrenInPaintOrder.begin(),
+            childrenInPaintOrder.end(),
+            [](const UiElement* left, const UiElement* right)
+            {
+                return left->zIndex_ < right->zIndex_;
+            });
+        for (auto iterator = childrenInPaintOrder.rbegin();
+            iterator != childrenInPaintOrder.rend(); ++iterator)
         {
             HitResult childHit = (*iterator)->HitTest(local);
             if (childHit.element != nullptr)
             {
                 return childHit;
             }
+        }
+
+        if (!ContainsLocalPoint(local))
+        {
+            return {};
         }
 
         return hitTestVisible_ ? HitResult{this, local} : HitResult{};
@@ -269,7 +334,24 @@ namespace mrg::ui
             bounds_.height};
         AppendDrawCommands(commands, absoluteBounds);
         const UiPoint childOrigin{absoluteBounds.x, absoluteBounds.y};
+
+        // Every parent creates a stacking context. Sorting only siblings keeps
+        // each child's complete subtree together instead of interleaving draw
+        // commands from unrelated branches.
+        std::vector<const UiElement*> childrenInPaintOrder;
+        childrenInPaintOrder.reserve(children_.size());
         for (const std::unique_ptr<UiElement>& child : children_)
+        {
+            childrenInPaintOrder.push_back(child.get());
+        }
+        std::stable_sort(
+            childrenInPaintOrder.begin(),
+            childrenInPaintOrder.end(),
+            [](const UiElement* left, const UiElement* right)
+            {
+                return left->zIndex_ < right->zIndex_;
+            });
+        for (const UiElement* child : childrenInPaintOrder)
         {
             child->CollectDrawCommands(commands, childOrigin);
         }

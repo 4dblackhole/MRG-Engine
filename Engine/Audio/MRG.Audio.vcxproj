@@ -60,10 +60,12 @@
   <ItemGroup>
     <ClInclude Include="System\AudioSystem.h" />
     <ClInclude Include="Backend\Fmod\FmodAudioBackend.h" />
+    <ClInclude Include="Backend\Fmod\FmodAudioClip.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="System\AudioSystem.cpp" />
     <ClCompile Include="Backend\Fmod\FmodAudioBackend.cpp" />
+    <ClCompile Include="Backend\Fmod\FmodAudioClip.cpp" />
   </ItemGroup>
   <Target Name="EnsureFmodSdk" BeforeTargets="PrepareForBuild">
     <Error Condition="!Exists('$(FmodIncludeDir)\fmod.hpp')" Text="FMOD Core API was not found. Set FMOD_ROOT or pass /p:FmodRoot=&quot;path to FMOD Studio API Windows&quot;." />

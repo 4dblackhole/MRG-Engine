@@ -2,15 +2,51 @@
 
 #include "Backend/Fmod/FmodAudioBackend.h"
 
-#include <limits>
 #include <utility>
 
 namespace mrg::audio
 {
-    // The default factory is kept here so FMOD stays out of the public API.
     std::unique_ptr<IAudioBackend> CreateFmodAudioBackend()
     {
         return std::make_unique<FmodAudioBackend>();
+    }
+
+    AudioClip::AudioClip(
+        std::unique_ptr<IAudioClipBackend> implementation,
+        std::shared_ptr<std::atomic_size_t> liveClipCount)
+        : implementation_(std::move(implementation)),
+          liveClipCount_(std::move(liveClipCount))
+    {
+        if (liveClipCount_ != nullptr)
+        {
+            liveClipCount_->fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
+    AudioClip::~AudioClip()
+    {
+        // Release the native sound before decrementing the count so mixer
+        // reconfiguration cannot start while destruction is still in flight.
+        implementation_.reset();
+        if (liveClipCount_ != nullptr)
+        {
+            liveClipCount_->fetch_sub(1, std::memory_order_release);
+        }
+    }
+
+    bool AudioClip::IsValid() const noexcept
+    {
+        return implementation_ != nullptr;
+    }
+
+    bool AudioClip::Play(std::string& errorMessage)
+    {
+        if (implementation_ == nullptr)
+        {
+            errorMessage = "The audio clip is not initialized.";
+            return false;
+        }
+        return implementation_->Play(errorMessage);
     }
 
     AudioSystem::~AudioSystem()
@@ -20,35 +56,78 @@ namespace mrg::audio
 
     bool AudioSystem::Initialize(
         const AudioConfig& config,
-        const AudioBackendFactory factory,
+        const AudioBackendFactory backendFactory,
+        const AudioClipBackendFactory clipFactory,
         std::string& errorMessage)
     {
         Shutdown();
-        // A Client may inject another backend factory; the default remains
-        // private so FMOD types never leak into the public audio contract.
-        factory_ = factory != nullptr ? factory : &CreateFmodAudioBackend;
-        config_ = config;
-        backend_ = CreateBackend();
 
-        if (backend_ == nullptr)
+        const AudioBackendFactory selectedBackendFactory =
+            backendFactory != nullptr
+                ? backendFactory
+                : &CreateFmodAudioBackend;
+        clipFactory_ = clipFactory != nullptr
+            ? clipFactory
+            : (backendFactory == nullptr
+                ? &CreateFmodAudioClipBackend
+                : nullptr);
+        liveClipCount_ = std::make_shared<std::atomic_size_t>(0);
+
+        if (InitializeExactBackend(
+                config,
+                selectedBackendFactory,
+                errorMessage))
         {
-            errorMessage = "The audio backend factory returned null.";
-            return false;
+            return true;
         }
 
-        initialized_ = backend_->Initialize(config, errorMessage);
-        if (!initialized_)
+        std::string combinedError = errorMessage;
+        if (config.preferredBackend == AudioOutputBackend::Asio &&
+            config.fallBackToWasapi)
         {
-            backend_->Shutdown();
-            backend_.reset();
-            factory_ = nullptr;
+            AudioConfig fallback = config;
+            fallback.preferredBackend = AudioOutputBackend::Wasapi;
+            // Driver indices belong to one output API and cannot be reused
+            // when falling back to another API.
+            fallback.driverIndex = -1;
+            std::string fallbackError;
+            if (InitializeExactBackend(
+                    fallback,
+                    selectedBackendFactory,
+                    fallbackError))
+            {
+                errorMessage.clear();
+                return true;
+            }
+            combinedError += " | WASAPI fallback: " + fallbackError;
         }
-        return initialized_;
+
+        if (config.allowNoSoundFallback)
+        {
+            AudioConfig fallback = config;
+            fallback.preferredBackend = AudioOutputBackend::NoSound;
+            fallback.driverIndex = -1;
+            std::string fallbackError;
+            if (InitializeExactBackend(
+                    fallback,
+                    selectedBackendFactory,
+                    fallbackError))
+            {
+                errorMessage.clear();
+                return true;
+            }
+            combinedError += " | no-sound fallback: " + fallbackError;
+        }
+
+        errorMessage = std::move(combinedError);
+        clipFactory_ = nullptr;
+        liveClipCount_.reset();
+        return false;
     }
 
     void AudioSystem::Update()
     {
-        if (initialized_)
+        if (initialized_ && backend_ != nullptr)
         {
             backend_->Update();
         }
@@ -56,15 +135,15 @@ namespace mrg::audio
 
     void AudioSystem::Shutdown() noexcept
     {
-        sounds_.clear();
         if (backend_ != nullptr)
         {
             backend_->Shutdown();
             backend_.reset();
         }
         initialized_ = false;
-        factory_ = nullptr;
-        nextSoundHandle_ = 1;
+        clipFactory_ = nullptr;
+        config_ = {};
+        liveClipCount_.reset();
     }
 
     bool AudioSystem::IsInitialized() const noexcept
@@ -77,6 +156,13 @@ namespace mrg::audio
         return backend_ != nullptr ? backend_->Name() : "None";
     }
 
+    AudioOutputBackend AudioSystem::RequestedOutput() const noexcept
+    {
+        return backend_ != nullptr
+            ? backend_->RequestedOutput()
+            : AudioOutputBackend::NoSound;
+    }
+
     AudioOutputBackend AudioSystem::ActiveOutput() const noexcept
     {
         return backend_ != nullptr
@@ -84,30 +170,34 @@ namespace mrg::audio
             : AudioOutputBackend::NoSound;
     }
 
-    int AudioSystem::SampleRate() const noexcept
-    {
-        return backend_ != nullptr ? backend_->SampleRate() : 0;
-    }
-
-    std::uint64_t AudioSystem::DspClock() const noexcept
-    {
-        return backend_ != nullptr ? backend_->DspClock() : 0;
-    }
-
-    const std::vector<AudioDeviceInfo>& AudioSystem::OutputDevices() const noexcept
-    {
-        static const std::vector<AudioDeviceInfo> empty;
-        return backend_ != nullptr ? backend_->OutputDevices() : empty;
-    }
-
-    bool AudioSystem::RefreshOutputDevices(std::string& errorMessage)
+    bool AudioSystem::SetOutputBackend(
+        const AudioOutputBackend backend,
+        std::string& errorMessage)
     {
         if (!initialized_ || backend_ == nullptr)
         {
             errorMessage = "The audio system is not initialized.";
             return false;
         }
-        return backend_->RefreshOutputDevices(errorMessage);
+        if (!backend_->SetOutputBackend(backend, errorMessage))
+        {
+            return false;
+        }
+        config_.preferredBackend = backend;
+        config_.driverIndex = backend_->ActiveDriverIndex();
+        return true;
+    }
+
+    int AudioSystem::DriverCount() const noexcept
+    {
+        return backend_ != nullptr ? backend_->DriverCount() : 0;
+    }
+
+    const std::vector<AudioDeviceInfo>&
+    AudioSystem::OutputDrivers() const noexcept
+    {
+        static const std::vector<AudioDeviceInfo> empty;
+        return backend_ != nullptr ? backend_->OutputDrivers() : empty;
     }
 
     int AudioSystem::ActiveDriverIndex() const noexcept
@@ -115,8 +205,8 @@ namespace mrg::audio
         return backend_ != nullptr ? backend_->ActiveDriverIndex() : -1;
     }
 
-    bool AudioSystem::SelectOutputDevice(
-        const AudioDeviceInfo& device,
+    bool AudioSystem::SetOutputDriver(
+        const int driverIndex,
         std::string& errorMessage)
     {
         if (!initialized_ || backend_ == nullptr)
@@ -124,133 +214,154 @@ namespace mrg::audio
             errorMessage = "The audio system is not initialized.";
             return false;
         }
-        const bool automaticDefault =
-            device.backend == AudioOutputBackend::Automatic &&
-            device.driverIndex == -1;
-        const bool explicitDriver = device.driverIndex >= 0 &&
-            (device.backend == AudioOutputBackend::Wasapi ||
-                device.backend == AudioOutputBackend::Asio);
-        if (!automaticDefault && !explicitDriver)
+        if (!backend_->SetOutputDriver(driverIndex, errorMessage))
         {
-            errorMessage = "The selected audio output device is invalid.";
             return false;
         }
-        if (device.backend == backend_->ActiveOutput() &&
-            device.driverIndex == backend_->ActiveDriverIndex())
-        {
-            errorMessage.clear();
-            return true;
-        }
-
-        AudioConfig replacementConfig = config_;
-        replacementConfig.preferredBackend = device.backend;
-        replacementConfig.driverIndex = device.driverIndex;
-        // An explicit UI choice must report failure rather than silently
-        // selecting a different output path.
-        replacementConfig.fallBackToWasapi = false;
-        replacementConfig.allowNoSoundFallback = false;
-
-        std::unique_ptr<IAudioBackend> replacement = CreateBackend();
-        if (replacement == nullptr)
-        {
-            errorMessage = "The audio backend factory returned null.";
-            return false;
-        }
-        if (!replacement->Initialize(replacementConfig, errorMessage))
-        {
-            replacement->Shutdown();
-            return false;
-        }
-
-        std::unordered_map<AudioSoundHandle, BackendSoundHandle>
-            replacementHandles;
-        replacementHandles.reserve(sounds_.size());
-        for (const auto& [handle, sound] : sounds_)
-        {
-            const BackendSoundHandle replacementSound =
-                replacement->LoadSound(sound.path, errorMessage);
-            if (replacementSound == InvalidBackendSoundHandle)
-            {
-                replacement->Shutdown();
-                return false;
-            }
-            replacementHandles.emplace(handle, replacementSound);
-        }
-
-        backend_->Shutdown();
-        backend_ = std::move(replacement);
-        for (auto& [handle, sound] : sounds_)
-        {
-            sound.backendHandle = replacementHandles.at(handle);
-        }
-        config_ = replacementConfig;
-        errorMessage.clear();
+        config_.driverIndex = driverIndex;
         return true;
     }
 
-    AudioSoundHandle AudioSystem::LoadSound(
+    int AudioSystem::RequestedSampleRate() const noexcept
+    {
+        return backend_ != nullptr ? backend_->RequestedSampleRate() : 0;
+    }
+
+    int AudioSystem::SampleRate() const noexcept
+    {
+        return backend_ != nullptr ? backend_->SampleRate() : 0;
+    }
+
+    std::uint32_t AudioSystem::DspBufferLength() const noexcept
+    {
+        return backend_ != nullptr ? backend_->DspBufferLength() : 0;
+    }
+
+    int AudioSystem::DspBufferCount() const noexcept
+    {
+        return backend_ != nullptr ? backend_->DspBufferCount() : 0;
+    }
+
+    double AudioSystem::EstimatedDspLatencyMilliseconds() const noexcept
+    {
+        return backend_ != nullptr
+            ? backend_->EstimatedDspLatencyMilliseconds()
+            : 0.0;
+    }
+
+    bool AudioSystem::SetSampleRate(
+        const int sampleRate,
+        std::string& errorMessage)
+    {
+        if (!CanRestartMixer(errorMessage))
+        {
+            return false;
+        }
+        if (!backend_->SetSampleRate(sampleRate, errorMessage))
+        {
+            return false;
+        }
+        config_.sampleRate = sampleRate;
+        return true;
+    }
+
+    bool AudioSystem::SetDspBufferSize(
+        const std::uint32_t bufferLength,
+        const int bufferCount,
+        std::string& errorMessage)
+    {
+        if (!CanRestartMixer(errorMessage))
+        {
+            return false;
+        }
+        if (!backend_->SetDspBufferSize(
+                bufferLength,
+                bufferCount,
+                errorMessage))
+        {
+            return false;
+        }
+        config_.dspBufferLength = bufferLength;
+        config_.dspBufferCount = bufferCount;
+        return true;
+    }
+
+    std::uint64_t AudioSystem::DspClock() const noexcept
+    {
+        return backend_ != nullptr ? backend_->DspClock() : 0;
+    }
+
+    std::unique_ptr<AudioClip> AudioSystem::LoadSound(
         const std::filesystem::path& path,
         std::string& errorMessage)
     {
         if (!initialized_ || backend_ == nullptr)
         {
             errorMessage = "The audio system is not initialized.";
-            return InvalidAudioSoundHandle;
+            return nullptr;
         }
-        if (nextSoundHandle_ == InvalidAudioSoundHandle ||
-            nextSoundHandle_ == std::numeric_limits<AudioSoundHandle>::max())
+        if (clipFactory_ == nullptr)
         {
-            errorMessage = "The audio sound handle space is exhausted.";
-            return InvalidAudioSoundHandle;
+            errorMessage = "The selected audio backend has no clip factory.";
+            return nullptr;
         }
 
-        const BackendSoundHandle backendHandle =
-            backend_->LoadSound(path, errorMessage);
-        if (backendHandle == InvalidBackendSoundHandle)
+        std::unique_ptr<IAudioClipBackend> implementation =
+            clipFactory_(*backend_, path, errorMessage);
+        if (implementation == nullptr)
         {
-            return InvalidAudioSoundHandle;
+            return nullptr;
         }
-
-        const AudioSoundHandle result = nextSoundHandle_++;
-        sounds_.emplace(result, RegisteredSound{path, backendHandle});
-        errorMessage.clear();
-        return result;
+        return std::unique_ptr<AudioClip>(new AudioClip(
+            std::move(implementation),
+            liveClipCount_));
     }
 
-    bool AudioSystem::PlaySound(
-        const AudioSoundHandle sound,
+    bool AudioSystem::InitializeExactBackend(
+        const AudioConfig& config,
+        const AudioBackendFactory factory,
         std::string& errorMessage)
+    {
+        if (backend_ != nullptr)
+        {
+            backend_->Shutdown();
+            backend_.reset();
+        }
+
+        backend_ = factory != nullptr ? factory() : nullptr;
+        if (backend_ == nullptr)
+        {
+            errorMessage = "The audio backend factory returned null.";
+            initialized_ = false;
+            return false;
+        }
+
+        initialized_ = backend_->Initialize(config, errorMessage);
+        if (!initialized_)
+        {
+            backend_->Shutdown();
+            backend_.reset();
+            return false;
+        }
+        config_ = config;
+        return true;
+    }
+
+    bool AudioSystem::CanRestartMixer(std::string& errorMessage) const
     {
         if (!initialized_ || backend_ == nullptr)
         {
             errorMessage = "The audio system is not initialized.";
             return false;
         }
-        const auto found = sounds_.find(sound);
-        if (found == sounds_.end())
+        if (liveClipCount_ != nullptr &&
+            liveClipCount_->load(std::memory_order_acquire) != 0)
         {
-            errorMessage = "The audio sound handle is invalid.";
+            errorMessage =
+                "Release all Client-owned AudioClip objects before changing "
+                "the sample rate or DSP buffer size.";
             return false;
         }
-        return backend_->PlaySound(found->second.backendHandle, errorMessage);
-    }
-
-    void AudioSystem::UnloadSound(const AudioSoundHandle sound) noexcept
-    {
-        const auto found = sounds_.find(sound);
-        if (found == sounds_.end())
-        {
-            return;
-        }
-        if (backend_ != nullptr)
-        {
-            backend_->UnloadSound(found->second.backendHandle);
-        }
-        sounds_.erase(found);
-    }
-
-    std::unique_ptr<IAudioBackend> AudioSystem::CreateBackend() const
-    {
-        return factory_ != nullptr ? factory_() : nullptr;
+        return true;
     }
 }

@@ -11,6 +11,7 @@ namespace mrg::ui
         bool leftButtonDown{};
         bool leftButtonPressed{};
         bool leftButtonReleased{};
+        float wheelDelta{};
         std::int64_t timestampTicks{};
     };
 

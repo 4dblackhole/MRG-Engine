@@ -14,6 +14,18 @@ namespace mrg::ui
 {
     using UiElementId = std::uint64_t;
 
+    // Opaque image identifier allocated by the active presentation renderer.
+    // UI widgets remain backend-neutral and never store D3D12 resources.
+    struct UiImageHandle
+    {
+        std::uint64_t value{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return value != 0;
+        }
+    };
+
     struct UiPoint
     {
         float x{};
@@ -50,11 +62,16 @@ namespace mrg::ui
         UiColor hovered{0.28F, 0.32F, 0.40F, 1.0F};
         UiColor pressed{0.12F, 0.16F, 0.24F, 1.0F};
         UiColor disabled{0.14F, 0.14F, 0.16F, 0.65F};
+        UiImageHandle normalImage{};
+        UiImageHandle hoveredImage{};
+        UiImageHandle pressedImage{};
+        UiImageHandle disabledImage{};
     };
 
     enum class UiDrawCommandType : std::uint8_t
     {
         Rectangle,
+        Image,
         Text,
     };
 
@@ -73,6 +90,7 @@ namespace mrg::ui
         std::wstring text;
         float fontSize{18.0F};
         UiTextAlignment horizontalAlignment{UiTextAlignment::Leading};
+        UiImageHandle image{};
     };
 
     enum class UiPointerEventType : std::uint8_t
@@ -80,6 +98,7 @@ namespace mrg::ui
         Enter,
         Leave,
         Move,
+        Wheel,
         Press,
         Release,
         Click,
@@ -100,6 +119,7 @@ namespace mrg::ui
         UiPoint canvasPosition{};
         UiPoint localPosition{};
         std::int64_t timestampTicks{};
+        float wheelDelta{};
     };
 
     enum class UiActionType : std::uint8_t
@@ -136,6 +156,10 @@ namespace mrg::ui
         [[nodiscard]] const UiRect& Bounds() const noexcept;
         void SetBounds(const UiRect& bounds);
         [[nodiscard]] UiRect BoundsInCanvas() const noexcept;
+        // A parent's children form one stacking context. Larger values are
+        // drawn later and hit-tested first; equal values keep insertion order.
+        [[nodiscard]] std::int32_t ZIndex() const noexcept;
+        void SetZIndex(std::int32_t zIndex) noexcept;
 
         [[nodiscard]] bool IsVisible() const noexcept;
         void SetVisible(bool visible) noexcept;
@@ -171,12 +195,15 @@ namespace mrg::ui
 
     protected:
         [[nodiscard]] UiColor CurrentBackgroundColor() const noexcept;
+        [[nodiscard]] UiImageHandle CurrentBackgroundImage() const noexcept;
         virtual void AppendDrawCommands(
             std::vector<UiDrawCommand>& commands,
             const UiRect& absoluteBounds) const;
         virtual void OnPointerEvent(
             const UiPointerEvent& event,
             std::vector<UiAction>& actions);
+        [[nodiscard]] virtual bool ContainsLocalPoint(
+            UiPoint localPosition) const noexcept;
 
     private:
         friend class UiCanvas;
@@ -199,6 +226,7 @@ namespace mrg::ui
 
         UiElementId id_{};
         UiRect bounds_{};
+        std::int32_t zIndex_{};
         UiVisualStyle style_{};
         UiElement* parent_{};
         std::vector<std::unique_ptr<UiElement>> children_;

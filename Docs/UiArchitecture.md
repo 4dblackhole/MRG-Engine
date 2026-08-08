@@ -12,7 +12,9 @@ UiCanvas
    ├─ UiButton
    ├─ UiToggle
    ├─ UiSlider
-   └─ UiComboBox
+   ├─ UiCycleSelector
+   ├─ UiComboBox
+   └─ UiImage
 
 화면 포인터 ────────────────┐
 카메라 Ray → IUiSurface → UV ├→ Canvas 좌표 → UiInputRouter
@@ -22,6 +24,7 @@ UiCanvas
 - `UiCanvas`는 논리 크기, 요소 소유권, hit-test와 action queue를 가진다.
 - `UiElement`의 `Bounds`는 부모의 좌측 상단을 원점으로 하며 아래쪽이 +Y다.
 - `UiInputRouter`는 hover, press, pointer capture, release, click을 처리한다.
+  펼쳐진 `UiComboBox` 위에서는 wheel event도 같은 입력 경로로 전달한다.
 - `WorldSpaceCanvas`는 `UiCanvas`를 상속하지 않고 소유하며 `IUiSurface`를 합성한다.
   UI 문서와 표현 표면은 서로 다른 책임이기 때문이다.
 - UI 코어는 Win32와 D3D12 타입을 사용하지 않는다. 다른 그래픽 백엔드에서는
@@ -48,17 +51,38 @@ Win32 `InputState::MousePositionX/Y`는 UI 배치를 위한 현재 클라이언�
 스냅샷이다. 리듬 판정에는 이 값이 아니라 기존 `InputState::Events()`의 Raw Input
 QPC timestamp를 계속 사용해야 한다.
 
+## 트리 기반 Z-Order와 hit-test
+
+각 `UiElement` 부모는 하나의 stacking context다. 부모 배경을 먼저 그린 뒤 형제
+자식을 `ZIndex`가 낮은 순서로 그린다. 같은 값에서는 삽입 순서를 유지하며, 한
+자식의 전체 하위 트리는 다른 형제의 하위 트리와 섞이지 않는다. hit-test는 이
+paint order의 정확한 역순을 사용하므로 화면에서 앞에 보이는 요소가 입력도 먼저
+받는다. 펼친 `UiComboBox`를 형제보다 앞에 두려면 콤보박스 자체에 더 큰
+`SetZIndex`를 지정한다.
+
 ## D3D12 표시
 
 `D3D12UiRenderer`는 `UiCanvas::BuildDrawList()` 결과를 기존 mesh/text renderer로
-전달한다.
+전달한다. command의 순서는 위젯 트리의 paint order이며 화면 UI의 text glyph도
+같은 순서에서 계산한 depth 값을 사용한다. 따라서 mesh 배치와 text batch의 실제
+기록 시점이 달라도 부모·형제·자식 순서가 유지된다. 서로 다른 Canvas는
+`SubmitScreen`의 `canvasZOrder`로 순서를 지정하며, 각 Canvas가 독립된 depth 구간을
+사용하므로 한 Canvas의 command 수가 변해도 다른 Canvas와 순서가 뒤집히지 않는다.
 
-- `SubmitScreen`: 사각형과 DirectWrite 글자를 화면 픽셀 공간에 표시한다.
-- `SubmitPlane`: 사각형 draw command를 임의의 월드 XY 평면에 표시한다.
+- `SubmitScreen`: 사각형, PNG image command, DirectWrite 글자를 화면 픽셀 공간에
+  표시한다.
+- `SubmitPlane`: 사각형과 PNG image command를 임의의 월드 XY 평면에 표시한다.
 - `CreateCanvasRenderTarget`: Canvas가 그려질 shader-resource/render-target 겸용
   RGBA8 텍스처를 만든다.
 - `RenderToTexture`: 사각형과 DirectWrite 글자를 해당 텍스처에 그린 뒤 mesh가
   샘플링할 수 있는 상태로 전환한다.
+
+`D3D12UiRenderer::LoadImage(path)`는 PNG를 texture set으로 올리고 `UiImageHandle`을
+돌려준다. 이 핸들은 `UiImage::SetImage` 또는 `UiVisualStyle`의
+`normalImage`/`hoveredImage`/`pressedImage`/`disabledImage`에 넣는다. 색상은 image의
+알파를 보존하면서 tint로만 적용된다. 현재 곡면용 `RenderToTexture`는 사각형과 글자만
+배치하므로 PNG widget은 screen 또는 plane 경로에서 사용해야 한다. 곡면 PNG까지
+필요해질 때에는 texture-array 배치를 render-target pass에 추가한다.
 
 글자를 포함한 전체 Canvas를 곡면에 표시할 때에는 `RenderToTexture`를 먼저 기록하고,
 그 target의 `Textures()`를 사용하는 textured Material을 곡면 mesh에 연결한다.
@@ -78,8 +102,24 @@ mesh를 제출하기 전이나 후에 `RenderToTexture`를 호출한 뒤 곡면 
 찾는다. 한 Update가 끝난 뒤 `UiCanvas::TakeActions()`로 `Clicked`, `ValueChanged`,
 `SelectionChanged`를 소비한다.
 
-현재 `UiComboBox`는 단순 프레임 구현으로 클릭할 때 다음 항목을 선택한다. 팝업 목록,
-키보드 탐색, focus 순서는 후속 접근성/focus 계층에서 확장할 기능이다.
+`UiCycleSelector`는 API처럼 항목 수가 작은 설정에 쓰는 click-to-advance control이다.
+`UiComboBox`는 선택 필드를 클릭하면 아래에 popup 목록을 표시한다. 목록이
+`SetMaxVisibleItems`보다 길면 popup의 휠 또는 항목 영역 드래그로 행을 스크롤한다.
+popup은 부모 bounds 밖에서도 hit-test할 수 있다. 다른 형제보다 앞에 표시하고
+입력받아야 한다면 콤보박스에 더 큰 `ZIndex`를 지정한다. 키보드 탐색과 focus
+순서는 후속 접근성/focus 계층에서 확장할 기능이다.
+
+`UiLabel`도 `UiElement`이므로 `SetStyle`로 배경색을 지정할 수 있다. caption, 상태
+문구, 도움말처럼 텍스트만 표시하는 영역도 같은 방법으로 독립된 배경과 hover/disabled
+색을 가질 수 있다.
+
+```cpp
+auto& deviceIndex = canvas.Root().EmplaceChild<mrg::ui::UiComboBox>();
+deviceIndex.SetBounds({20.0F, 20.0F, 240.0F, 36.0F});
+deviceIndex.SetItems({L"Driver 0", L"Driver 1", L"Driver 2", L"Driver 3"});
+deviceIndex.SetMaxVisibleItems(3);
+deviceIndex.SetItemHeight(32.0F);
+```
 
 ```cpp
 mrg::ui::UiCanvas canvas({320.0F, 180.0F});

@@ -7,7 +7,12 @@ namespace mrg::platform
     ComApartment::ComApartment(const DWORD concurrencyModel)
     {
         result_ = CoInitializeEx(nullptr, concurrencyModel);
-        if (FAILED(result_) && result_ != RPC_E_CHANGED_MODE)
+        if (result_ == RPC_E_CHANGED_MODE)
+        {
+            throw std::runtime_error(
+                "The current thread already uses an incompatible COM apartment model.");
+        }
+        if (FAILED(result_))
         {
             throw std::runtime_error("CoInitializeEx failed.");
         }

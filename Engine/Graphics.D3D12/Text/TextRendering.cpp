@@ -185,6 +185,7 @@ namespace mrg::graphics
             DirectX::XMFLOAT2 sizePixels{};
             DirectX::XMFLOAT4 uvRectangle{};
             DirectX::XMFLOAT4 color{1.0F, 1.0F, 1.0F, 1.0F};
+            float depth{};
             std::uint32_t pageIndex{};
         };
 
@@ -194,9 +195,10 @@ namespace mrg::graphics
             DirectX::XMFLOAT2 sizePixels{};
             DirectX::XMFLOAT4 uvRectangle{};
             DirectX::XMFLOAT4 color{1.0F, 1.0F, 1.0F, 1.0F};
+            float depth{};
         };
 
-        static_assert(sizeof(GpuGlyphInstance) == 48);
+        static_assert(sizeof(GpuGlyphInstance) == 52);
 
         struct FrameInstanceBuffer final
         {
@@ -314,9 +316,11 @@ namespace mrg::graphics
         public:
             GlyphRunCollector(
                 Impl& owner,
-                const DirectX::XMFLOAT4& color) noexcept
+                const DirectX::XMFLOAT4& color,
+                const float depth) noexcept
                 : owner_(owner),
-                  color_(color)
+                  color_(color),
+                  depth_(depth)
             {
             }
 
@@ -418,7 +422,8 @@ namespace mrg::graphics
                         baselineOriginY,
                         measuringMode,
                         *glyphRun,
-                        color_);
+                        color_,
+                        depth_);
                     return S_OK;
                 }
                 catch (...)
@@ -469,12 +474,14 @@ namespace mrg::graphics
             std::atomic<ULONG> referenceCount_{1};
             Impl& owner_;
             DirectX::XMFLOAT4 color_{};
+            float depth_{};
             std::exception_ptr error_;
         };
 
         void Initialize(
             ID3D12Device& newDevice,
-            const DXGI_FORMAT renderTargetFormat)
+            const DXGI_FORMAT renderTargetFormat,
+            const DXGI_FORMAT newDepthStencilFormat)
         {
             if (initialized)
             {
@@ -483,6 +490,7 @@ namespace mrg::graphics
             }
 
             device = &newDevice;
+            depthStencilFormat = newDepthStencilFormat;
             ThrowIfFailed(
                 DWriteCreateFactory(
                     DWRITE_FACTORY_TYPE_SHARED,
@@ -518,6 +526,7 @@ namespace mrg::graphics
             atlasDescriptorHeap.Reset();
             directWriteFactory.Reset();
             device = nullptr;
+            depthStencilFormat = DXGI_FORMAT_UNKNOWN;
             currentFrameIndex = 0;
             initialized = false;
             frameOpen = false;
@@ -683,7 +692,10 @@ namespace mrg::graphics
                 FindOrCreateLayout(text, command);
             ComPtr<GlyphRunCollector> collector;
             collector.Attach(
-                new GlyphRunCollector(*this, command.style.color));
+                new GlyphRunCollector(
+                    *this,
+                    command.style.color,
+                    command.depth));
             const HRESULT drawResult = layout->Draw(
                 nullptr,
                 collector.Get(),
@@ -739,7 +751,8 @@ namespace mrg::graphics
                         source.positionPixels,
                         source.sizePixels,
                         source.uvRectangle,
-                        source.color};
+                        source.color,
+                        source.depth};
                 }
 
                 ID3D12DescriptorHeap* heaps[]{
@@ -808,7 +821,8 @@ namespace mrg::graphics
             const float baselineOriginY,
             const DWRITE_MEASURING_MODE measuringMode,
             const DWRITE_GLYPH_RUN& glyphRun,
-            const DirectX::XMFLOAT4& color)
+            const DirectX::XMFLOAT4& color,
+            const float depth)
         {
             float penX = baselineOriginX;
             const bool rightToLeft = (glyphRun.bidiLevel & 1U) != 0;
@@ -835,6 +849,7 @@ namespace mrg::graphics
                         glyph.sizePixels,
                         glyph.uvRectangle,
                         color,
+                        depth,
                         glyph.pageIndex});
                 }
 
@@ -1514,13 +1529,19 @@ namespace mrg::graphics
             pipeline.RasterizerState.ForcedSampleCount = 0;
             pipeline.RasterizerState.ConservativeRaster =
                 D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-            pipeline.DepthStencilState.DepthEnable = FALSE;
+            pipeline.DepthStencilState.DepthEnable =
+                depthStencilFormat != DXGI_FORMAT_UNKNOWN;
+            pipeline.DepthStencilState.DepthWriteMask =
+                D3D12_DEPTH_WRITE_MASK_ZERO;
+            pipeline.DepthStencilState.DepthFunc =
+                D3D12_COMPARISON_FUNC_LESS_EQUAL;
             pipeline.DepthStencilState.StencilEnable = FALSE;
             pipeline.InputLayout = {nullptr, 0};
             pipeline.PrimitiveTopologyType =
                 D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
             pipeline.NumRenderTargets = 1;
             pipeline.RTVFormats[0] = renderTargetFormat;
+            pipeline.DSVFormat = depthStencilFormat;
             pipeline.SampleDesc.Count = 1;
 
             ThrowIfFailed(
@@ -1551,6 +1572,7 @@ namespace mrg::graphics
         }
 
         ID3D12Device* device{};
+        DXGI_FORMAT depthStencilFormat{DXGI_FORMAT_UNKNOWN};
         ComPtr<IDWriteFactory5> directWriteFactory;
         ComPtr<ID3D12DescriptorHeap> atlasDescriptorHeap;
         ComPtr<ID3D12RootSignature> rootSignature;
@@ -1582,9 +1604,13 @@ namespace mrg::graphics
 
     void TextRenderSystem::Initialize(
         ID3D12Device& device,
-        const DXGI_FORMAT renderTargetFormat)
+        const DXGI_FORMAT renderTargetFormat,
+        const DXGI_FORMAT depthStencilFormat)
     {
-        implementation_->Initialize(device, renderTargetFormat);
+        implementation_->Initialize(
+            device,
+            renderTargetFormat,
+            depthStencilFormat);
     }
 
     void TextRenderSystem::Shutdown() noexcept

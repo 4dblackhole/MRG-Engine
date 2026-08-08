@@ -2,13 +2,21 @@
 
 #include "System/AudioSystem.h"
 
-
 #include <fmod.hpp>
 
-#include <unordered_map>
+#include <cstdint>
+#include <memory>
 
 namespace mrg::audio
 {
+    // Shared only with Client-owned FmodAudioClip objects so they can detect
+    // that their native FMOD objects were invalidated by system shutdown.
+    struct FmodSystemLifetime
+    {
+        FMOD::System* system{};
+        std::uint64_t generation{};
+    };
+
     class FmodAudioBackend final : public IAudioBackend
     {
     public:
@@ -21,40 +29,77 @@ namespace mrg::audio
         void Shutdown() noexcept override;
 
         [[nodiscard]] std::string_view Name() const noexcept override;
+        [[nodiscard]] AudioOutputBackend RequestedOutput() const noexcept override;
         [[nodiscard]] AudioOutputBackend ActiveOutput() const noexcept override;
-        [[nodiscard]] int SampleRate() const noexcept override;
-        [[nodiscard]] std::uint64_t DspClock() const noexcept override;
+        [[nodiscard]] bool SetOutputBackend(
+            AudioOutputBackend backend,
+            std::string& errorMessage) override;
+
+        [[nodiscard]] int DriverCount() const noexcept override;
         [[nodiscard]] const std::vector<AudioDeviceInfo>&
-            OutputDevices() const noexcept override;
-        [[nodiscard]] bool RefreshOutputDevices(
-            std::string& errorMessage) override;
+            OutputDrivers() const noexcept override;
         [[nodiscard]] int ActiveDriverIndex() const noexcept override;
-        [[nodiscard]] BackendSoundHandle LoadSound(
-            const std::filesystem::path& path,
+        [[nodiscard]] bool SetOutputDriver(
+            int driverIndex,
             std::string& errorMessage) override;
-        [[nodiscard]] bool PlaySound(
-            BackendSoundHandle sound,
+
+        [[nodiscard]] int RequestedSampleRate() const noexcept override;
+        [[nodiscard]] int SampleRate() const noexcept override;
+        [[nodiscard]] std::uint32_t DspBufferLength() const noexcept override;
+        [[nodiscard]] int DspBufferCount() const noexcept override;
+        [[nodiscard]] double EstimatedDspLatencyMilliseconds() const noexcept override;
+        [[nodiscard]] bool SetSampleRate(
+            int sampleRate,
             std::string& errorMessage) override;
-        void UnloadSound(BackendSoundHandle sound) noexcept override;
+        [[nodiscard]] bool SetDspBufferSize(
+            std::uint32_t bufferLength,
+            int bufferCount,
+            std::string& errorMessage) override;
+
+        [[nodiscard]] std::uint64_t DspClock() const noexcept override;
 
     private:
-        [[nodiscard]] bool TryInitialize(
-            const AudioConfig& config,
-            AudioOutputBackend backend,
+        friend std::unique_ptr<IAudioClipBackend>
+            CreateFmodAudioClipBackend(
+                IAudioBackend& backend,
+                const std::filesystem::path& path,
+                std::string& errorMessage);
+
+        [[nodiscard]] bool CreateSystem(std::string& errorMessage);
+        [[nodiscard]] bool InitializeMixer(
+            AudioOutputBackend output,
+            int sampleRate,
+            std::uint32_t bufferLength,
+            int bufferCount,
+            int driverIndex,
             std::string& errorMessage);
-        [[nodiscard]] bool EnumerateDevices(
-            AudioOutputBackend backend,
-            std::vector<AudioDeviceInfo>& destination,
+        [[nodiscard]] bool RestartMixer(
+            int sampleRate,
+            std::uint32_t bufferLength,
+            int bufferCount,
             std::string& errorMessage);
-        void RefreshDspState() noexcept;
+        void RestoreOutputAfterFailedSwitch(
+            AudioOutputBackend previousRequestedOutput,
+            const std::string& switchError,
+            std::string& errorMessage);
+        [[nodiscard]] bool EnumerateCurrentDrivers(std::string& errorMessage);
+        void RefreshRuntimeState() noexcept;
+        void InvalidateNativeObjects() noexcept;
 
         FMOD::System* system_{};
         FMOD::ChannelGroup* masterChannelGroup_{};
+        std::shared_ptr<FmodSystemLifetime> lifetime_;
+        AudioOutputBackend requestedOutput_{AudioOutputBackend::Automatic};
         AudioOutputBackend activeOutput_{AudioOutputBackend::NoSound};
-        int sampleRate_{};
+        int driverCount_{};
         int activeDriverIndex_{-1};
-        BackendSoundHandle nextSoundHandle_{1};
-        std::unordered_map<BackendSoundHandle, FMOD::Sound*> sounds_;
-        std::vector<AudioDeviceInfo> outputDevices_;
+        std::vector<AudioDeviceInfo> currentDrivers_;
+        int requestedSampleRate_{};
+        int sampleRate_{};
+        std::uint32_t dspBufferLength_{};
+        int dspBufferCount_{};
+        int maxVirtualChannels_{256};
+        void* nativeWindowHandle_{};
+        bool initialized_{};
     };
 }

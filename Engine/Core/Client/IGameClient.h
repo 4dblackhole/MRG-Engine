@@ -56,6 +56,7 @@ namespace mrg
 
         audio::AudioConfig audio{};
         audio::AudioBackendFactory audioBackendFactory{};
+        audio::AudioClipBackendFactory audioClipBackendFactory{};
         double audioUpdateRateHz{500.0};
         double renderRateOverrideHz{};
         double maximumUpdateDeltaSeconds{0.1};

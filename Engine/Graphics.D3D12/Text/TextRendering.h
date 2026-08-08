@@ -58,6 +58,10 @@ namespace mrg::graphics
     {
         DirectX::XMFLOAT2 positionPixels{};
         DirectX::XMFLOAT2 layoutSizePixels{512.0F, 128.0F};
+        // Smaller values are closer to the viewer. Screen UI supplies this
+        // from its sorted draw-command order so popup text obeys the same
+        // Z-order as its rectangle and image background.
+        float depth{};
         TextHorizontalAlignment horizontalAlignment{
             TextHorizontalAlignment::Leading};
         TextVerticalAlignment verticalAlignment{
@@ -81,7 +85,8 @@ namespace mrg::graphics
 
         void Initialize(
             ID3D12Device& device,
-            DXGI_FORMAT renderTargetFormat);
+            DXGI_FORMAT renderTargetFormat,
+            DXGI_FORMAT depthStencilFormat = DXGI_FORMAT_UNKNOWN);
         void Shutdown() noexcept;
 
         [[nodiscard]] FontHandle LoadSystemFont(

@@ -20,23 +20,18 @@
 
 // ===== BEGIN Engine\Audio\System\AudioSystem.h =====
 
-// Audio feature: backend-neutral public service and backend contract.
+// Audio feature: backend-neutral system, device, and clip contracts.
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 namespace mrg::audio
 {
-    using AudioSoundHandle = std::uint64_t;
-    using BackendSoundHandle = std::uint64_t;
-    inline constexpr AudioSoundHandle InvalidAudioSoundHandle = 0;
-    inline constexpr BackendSoundHandle InvalidBackendSoundHandle = 0;
-
     enum class AudioOutputBackend
     {
         Automatic,
@@ -59,6 +54,9 @@ namespace mrg::audio
         AudioOutputBackend preferredBackend{AudioOutputBackend::Automatic};
         int driverIndex{-1};
         int maxVirtualChannels{256};
+        // Zero keeps the output driver's preferred mixer rate. Set an explicit
+        // value only when the game needs a fixed software-mixer rate.
+        int sampleRate{};
         std::uint32_t dspBufferLength{256};
         int dspBufferCount{4};
         bool fallBackToWasapi{true};
@@ -66,6 +64,43 @@ namespace mrg::audio
         void* nativeWindowHandle{};
     };
 
+    // A backend-specific clip owns one native sound object. The Client owns
+    // the public AudioClip wrapper, while FMOD and other implementation types
+    // remain outside the generated SDK header.
+    class IAudioClipBackend
+    {
+    public:
+        virtual ~IAudioClipBackend() = default;
+        [[nodiscard]] virtual bool Play(std::string& errorMessage) = 0;
+    };
+
+    class AudioClip final
+    {
+    public:
+        ~AudioClip();
+
+        AudioClip(const AudioClip&) = delete;
+        AudioClip& operator=(const AudioClip&) = delete;
+        AudioClip(AudioClip&&) = delete;
+        AudioClip& operator=(AudioClip&&) = delete;
+
+        [[nodiscard]] bool IsValid() const noexcept;
+        [[nodiscard]] bool Play(std::string& errorMessage);
+
+    private:
+        friend class AudioSystem;
+
+        AudioClip(
+            std::unique_ptr<IAudioClipBackend> implementation,
+            std::shared_ptr<std::atomic_size_t> liveClipCount);
+
+        std::unique_ptr<IAudioClipBackend> implementation_;
+        std::shared_ptr<std::atomic_size_t> liveClipCount_;
+    };
+
+    // The backend controls exactly one native audio system and its current
+    // output. Driver enumeration is scoped to that current output and occurs
+    // only after initialization or a successful output-API change.
     class IAudioBackend
     {
     public:
@@ -78,37 +113,51 @@ namespace mrg::audio
         virtual void Shutdown() noexcept = 0;
 
         [[nodiscard]] virtual std::string_view Name() const noexcept = 0;
+        [[nodiscard]] virtual AudioOutputBackend RequestedOutput() const noexcept = 0;
         [[nodiscard]] virtual AudioOutputBackend ActiveOutput() const noexcept = 0;
-        [[nodiscard]] virtual int SampleRate() const noexcept = 0;
-        [[nodiscard]] virtual std::uint64_t DspClock() const noexcept = 0;
+        [[nodiscard]] virtual bool SetOutputBackend(
+            AudioOutputBackend backend,
+            std::string& errorMessage) = 0;
+
+        [[nodiscard]] virtual int DriverCount() const noexcept = 0;
         [[nodiscard]] virtual const std::vector<AudioDeviceInfo>&
-            OutputDevices() const noexcept = 0;
-        // Rebuilds the backend's output-device snapshot. Backends without
-        // dynamic enumeration may keep their current list and return true.
-        [[nodiscard]] virtual bool RefreshOutputDevices(
-            std::string& errorMessage)
-        {
-            errorMessage.clear();
-            return true;
-        }
+            OutputDrivers() const noexcept = 0;
         [[nodiscard]] virtual int ActiveDriverIndex() const noexcept = 0;
-        [[nodiscard]] virtual BackendSoundHandle LoadSound(
-            const std::filesystem::path& path,
+        [[nodiscard]] virtual bool SetOutputDriver(
+            int driverIndex,
             std::string& errorMessage) = 0;
-        [[nodiscard]] virtual bool PlaySound(
-            BackendSoundHandle sound,
+
+        [[nodiscard]] virtual int RequestedSampleRate() const noexcept = 0;
+        [[nodiscard]] virtual int SampleRate() const noexcept = 0;
+        [[nodiscard]] virtual std::uint32_t DspBufferLength() const noexcept = 0;
+        [[nodiscard]] virtual int DspBufferCount() const noexcept = 0;
+        [[nodiscard]] virtual double EstimatedDspLatencyMilliseconds() const noexcept = 0;
+        [[nodiscard]] virtual bool SetSampleRate(
+            int sampleRate,
             std::string& errorMessage) = 0;
-        virtual void UnloadSound(BackendSoundHandle sound) noexcept = 0;
+        [[nodiscard]] virtual bool SetDspBufferSize(
+            std::uint32_t bufferLength,
+            int bufferCount,
+            std::string& errorMessage) = 0;
+
+        [[nodiscard]] virtual std::uint64_t DspClock() const noexcept = 0;
     };
 
     using AudioBackendFactory = std::unique_ptr<IAudioBackend> (*)();
+    using AudioClipBackendFactory = std::unique_ptr<IAudioClipBackend> (*)(
+        IAudioBackend& backend,
+        const std::filesystem::path& path,
+        std::string& errorMessage);
 
     [[nodiscard]] std::unique_ptr<IAudioBackend> CreateFmodAudioBackend();
+    [[nodiscard]] std::unique_ptr<IAudioClipBackend>
+        CreateFmodAudioClipBackend(
+            IAudioBackend& backend,
+            const std::filesystem::path& path,
+            std::string& errorMessage);
 
-    // Public backend-neutral audio service exposed to the rest of the engine.
-    // Run creates it before Client initialization and calls Update at the
-    // independently configured audio cadence.  Client code only sees this
-    // contract, so the FMOD backend can later be replaced without API changes.
+    // Public backend-neutral service exposed to the rest of the engine. It
+    // owns the system backend, but not Client AudioClip objects.
     class AudioSystem final
     {
     public:
@@ -120,51 +169,57 @@ namespace mrg::audio
 
         [[nodiscard]] bool Initialize(
             const AudioConfig& config,
-            AudioBackendFactory factory,
+            AudioBackendFactory backendFactory,
+            AudioClipBackendFactory clipFactory,
             std::string& errorMessage);
         void Update();
         void Shutdown() noexcept;
 
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] std::string_view BackendName() const noexcept;
+        [[nodiscard]] AudioOutputBackend RequestedOutput() const noexcept;
         [[nodiscard]] AudioOutputBackend ActiveOutput() const noexcept;
-        [[nodiscard]] int SampleRate() const noexcept;
-        [[nodiscard]] std::uint64_t DspClock() const noexcept;
-        [[nodiscard]] const std::vector<AudioDeviceInfo>&
-            OutputDevices() const noexcept;
-        // Refresh before presenting a device picker so drivers installed or
-        // connected after engine startup can become visible.
-        [[nodiscard]] bool RefreshOutputDevices(std::string& errorMessage);
-        [[nodiscard]] int ActiveDriverIndex() const noexcept;
-
-        // Initializes a replacement backend first and commits the device
-        // change only after every registered sound has been recreated. A
-        // failed switch therefore leaves the currently active output intact.
-        [[nodiscard]] bool SelectOutputDevice(
-            const AudioDeviceInfo& device,
+        [[nodiscard]] bool SetOutputBackend(
+            AudioOutputBackend backend,
             std::string& errorMessage);
-        [[nodiscard]] AudioSoundHandle LoadSound(
+
+        [[nodiscard]] int DriverCount() const noexcept;
+        [[nodiscard]] const std::vector<AudioDeviceInfo>&
+            OutputDrivers() const noexcept;
+        [[nodiscard]] int ActiveDriverIndex() const noexcept;
+        [[nodiscard]] bool SetOutputDriver(
+            int driverIndex,
+            std::string& errorMessage);
+
+        [[nodiscard]] int RequestedSampleRate() const noexcept;
+        [[nodiscard]] int SampleRate() const noexcept;
+        [[nodiscard]] std::uint32_t DspBufferLength() const noexcept;
+        [[nodiscard]] int DspBufferCount() const noexcept;
+        [[nodiscard]] double EstimatedDspLatencyMilliseconds() const noexcept;
+        [[nodiscard]] bool SetSampleRate(
+            int sampleRate,
+            std::string& errorMessage);
+        [[nodiscard]] bool SetDspBufferSize(
+            std::uint32_t bufferLength,
+            int bufferCount,
+            std::string& errorMessage);
+
+        [[nodiscard]] std::uint64_t DspClock() const noexcept;
+        [[nodiscard]] std::unique_ptr<AudioClip> LoadSound(
             const std::filesystem::path& path,
             std::string& errorMessage);
-        [[nodiscard]] bool PlaySound(
-            AudioSoundHandle sound,
-            std::string& errorMessage);
-        void UnloadSound(AudioSoundHandle sound) noexcept;
 
     private:
-        struct RegisteredSound
-        {
-            std::filesystem::path path;
-            BackendSoundHandle backendHandle{InvalidBackendSoundHandle};
-        };
-
-        [[nodiscard]] std::unique_ptr<IAudioBackend> CreateBackend() const;
+        [[nodiscard]] bool InitializeExactBackend(
+            const AudioConfig& config,
+            AudioBackendFactory factory,
+            std::string& errorMessage);
+        [[nodiscard]] bool CanRestartMixer(std::string& errorMessage) const;
 
         std::unique_ptr<IAudioBackend> backend_;
-        std::unordered_map<AudioSoundHandle, RegisteredSound> sounds_;
+        AudioClipBackendFactory clipFactory_{};
         AudioConfig config_{};
-        AudioBackendFactory factory_{};
-        AudioSoundHandle nextSoundHandle_{1};
+        std::shared_ptr<std::atomic_size_t> liveClipCount_;
         bool initialized_{};
     };
 }
@@ -815,6 +870,18 @@ namespace mrg::ui
 {
     using UiElementId = std::uint64_t;
 
+    // Opaque image identifier allocated by the active presentation renderer.
+    // UI widgets remain backend-neutral and never store D3D12 resources.
+    struct UiImageHandle
+    {
+        std::uint64_t value{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return value != 0;
+        }
+    };
+
     struct UiPoint
     {
         float x{};
@@ -851,11 +918,16 @@ namespace mrg::ui
         UiColor hovered{0.28F, 0.32F, 0.40F, 1.0F};
         UiColor pressed{0.12F, 0.16F, 0.24F, 1.0F};
         UiColor disabled{0.14F, 0.14F, 0.16F, 0.65F};
+        UiImageHandle normalImage{};
+        UiImageHandle hoveredImage{};
+        UiImageHandle pressedImage{};
+        UiImageHandle disabledImage{};
     };
 
     enum class UiDrawCommandType : std::uint8_t
     {
         Rectangle,
+        Image,
         Text,
     };
 
@@ -874,6 +946,7 @@ namespace mrg::ui
         std::wstring text;
         float fontSize{18.0F};
         UiTextAlignment horizontalAlignment{UiTextAlignment::Leading};
+        UiImageHandle image{};
     };
 
     enum class UiPointerEventType : std::uint8_t
@@ -881,6 +954,7 @@ namespace mrg::ui
         Enter,
         Leave,
         Move,
+        Wheel,
         Press,
         Release,
         Click,
@@ -901,6 +975,7 @@ namespace mrg::ui
         UiPoint canvasPosition{};
         UiPoint localPosition{};
         std::int64_t timestampTicks{};
+        float wheelDelta{};
     };
 
     enum class UiActionType : std::uint8_t
@@ -937,6 +1012,10 @@ namespace mrg::ui
         [[nodiscard]] const UiRect& Bounds() const noexcept;
         void SetBounds(const UiRect& bounds);
         [[nodiscard]] UiRect BoundsInCanvas() const noexcept;
+        // A parent's children form one stacking context. Larger values are
+        // drawn later and hit-tested first; equal values keep insertion order.
+        [[nodiscard]] std::int32_t ZIndex() const noexcept;
+        void SetZIndex(std::int32_t zIndex) noexcept;
 
         [[nodiscard]] bool IsVisible() const noexcept;
         void SetVisible(bool visible) noexcept;
@@ -972,12 +1051,15 @@ namespace mrg::ui
 
     protected:
         [[nodiscard]] UiColor CurrentBackgroundColor() const noexcept;
+        [[nodiscard]] UiImageHandle CurrentBackgroundImage() const noexcept;
         virtual void AppendDrawCommands(
             std::vector<UiDrawCommand>& commands,
             const UiRect& absoluteBounds) const;
         virtual void OnPointerEvent(
             const UiPointerEvent& event,
             std::vector<UiAction>& actions);
+        [[nodiscard]] virtual bool ContainsLocalPoint(
+            UiPoint localPosition) const noexcept;
 
     private:
         friend class UiCanvas;
@@ -1000,6 +1082,7 @@ namespace mrg::ui
 
         UiElementId id_{};
         UiRect bounds_{};
+        std::int32_t zIndex_{};
         UiVisualStyle style_{};
         UiElement* parent_{};
         std::vector<std::unique_ptr<UiElement>> children_;
@@ -1058,6 +1141,7 @@ namespace mrg::ui
         bool leftButtonDown{};
         bool leftButtonPressed{};
         bool leftButtonReleased{};
+        float wheelDelta{};
         std::int64_t timestampTicks{};
     };
 
@@ -1212,6 +1296,7 @@ namespace mrg::ui
 // ===== BEGIN Engine\UI\Widget\UiWidgets.h =====
 
 
+#include <optional>
 #include <string_view>
 
 namespace mrg::ui
@@ -1246,6 +1331,28 @@ namespace mrg::ui
         float fontSize_{18.0F};
         UiColor textColor_{1.0F, 1.0F, 1.0F, 1.0F};
         UiTextAlignment alignment_{UiTextAlignment::Leading};
+    };
+
+    // Displays one renderer-owned raster image. UiImageHandle is opaque so
+    // the retained UI tree stays independent from D3D12 texture resources.
+    class UiImage final : public UiElement
+    {
+    public:
+        UiImage() = default;
+
+        [[nodiscard]] UiImageHandle Image() const noexcept;
+        void SetImage(UiImageHandle image) noexcept;
+        [[nodiscard]] UiColor Tint() const noexcept;
+        void SetTint(UiColor tint) noexcept;
+
+    protected:
+        void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const override;
+
+    private:
+        UiImageHandle image_{};
+        UiColor tint_{1.0F, 1.0F, 1.0F, 1.0F};
     };
 
     class UiButton : public UiElement
@@ -1316,10 +1423,12 @@ namespace mrg::ui
         float value_{};
     };
 
-    class UiComboBox final : public UiButton
+    // Preserves the original click-to-advance selection behavior for compact
+    // settings such as AUTO/WASAPI/ASIO where a popup would add no value.
+    class UiCycleSelector final : public UiButton
     {
     public:
-        UiComboBox() = default;
+        UiCycleSelector() = default;
 
         void SetItems(std::vector<std::wstring> items);
         [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
@@ -1336,6 +1445,55 @@ namespace mrg::ui
 
         std::vector<std::wstring> items_;
         std::size_t selectedIndex_{};
+    };
+
+    class UiComboBox final : public UiButton
+    {
+    public:
+        UiComboBox() = default;
+
+        void SetItems(std::vector<std::wstring> items);
+        [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
+        [[nodiscard]] std::size_t SelectedIndex() const noexcept;
+        void SetSelectedIndex(std::size_t index);
+        void SetMaxVisibleItems(std::size_t maxVisibleItems);
+        [[nodiscard]] std::size_t MaxVisibleItems() const noexcept;
+        void SetItemHeight(float itemHeight);
+        [[nodiscard]] float ItemHeight() const noexcept;
+        [[nodiscard]] bool IsExpanded() const noexcept;
+        void Collapse() noexcept;
+
+    protected:
+        void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const override;
+        void OnPointerEvent(
+            const UiPointerEvent& event,
+            std::vector<UiAction>& actions) override;
+        [[nodiscard]] bool ContainsLocalPoint(
+            UiPoint localPosition) const noexcept override;
+
+    private:
+        void RefreshText();
+        [[nodiscard]] UiRect PopupBounds() const noexcept;
+        [[nodiscard]] std::size_t VisibleItemCount() const noexcept;
+        [[nodiscard]] std::optional<std::size_t> ItemIndexAt(
+            UiPoint localPosition) const noexcept;
+        void EnsureSelectedItemVisible() noexcept;
+        void ScrollBy(int itemDelta) noexcept;
+        void UpdateHoveredItem(UiPoint localPosition) noexcept;
+
+        std::vector<std::wstring> items_;
+        std::size_t selectedIndex_{};
+        std::size_t firstVisibleIndex_{};
+        std::size_t maxVisibleItems_{4};
+        std::size_t hoveredItemIndex_{static_cast<std::size_t>(-1)};
+        float itemHeight_{36.0F};
+        float dragStartY_{};
+        std::size_t dragStartFirstVisibleIndex_{};
+        bool expanded_{};
+        bool trackingDrag_{};
+        bool dragMoved_{};
     };
 }
 // ===== END Engine\UI\Widget\UiWidgets.h =====
@@ -1400,6 +1558,10 @@ namespace mrg::graphics
     {
         DirectX::XMFLOAT2 positionPixels{};
         DirectX::XMFLOAT2 layoutSizePixels{512.0F, 128.0F};
+        // Smaller values are closer to the viewer. Screen UI supplies this
+        // from its sorted draw-command order so popup text obeys the same
+        // Z-order as its rectangle and image background.
+        float depth{};
         TextHorizontalAlignment horizontalAlignment{
             TextHorizontalAlignment::Leading};
         TextVerticalAlignment verticalAlignment{
@@ -1423,7 +1585,8 @@ namespace mrg::graphics
 
         void Initialize(
             ID3D12Device& device,
-            DXGI_FORMAT renderTargetFormat);
+            DXGI_FORMAT renderTargetFormat,
+            DXGI_FORMAT depthStencilFormat = DXGI_FORMAT_UNKNOWN);
         void Shutdown() noexcept;
 
         [[nodiscard]] FontHandle LoadSystemFont(
@@ -2022,6 +2185,8 @@ namespace mrg::graphics
 
 #include <DirectXMath.h>
 
+#include <cstdint>
+#include <filesystem>
 #include <memory>
 
 namespace mrg::graphics
@@ -2040,12 +2205,19 @@ namespace mrg::graphics
             TextRenderSystem& textRendering);
         void Shutdown() noexcept;
 
-        // Renders at pixel size with a top-left screen origin. Text is
-        // supported by the existing DirectWrite-backed screen renderer.
+        // Loads a PNG/WIC-supported image once and returns an opaque handle
+        // that can be assigned to UiImage or UiVisualStyle image slots.
+        [[nodiscard]] ui::UiImageHandle LoadImage(
+            const std::filesystem::path& path);
+
+        // Renders at pixel size with a top-left screen origin. A larger Canvas
+        // Z-order places the Canvas and its complete element tree in front of
+        // a smaller one. Values above 31 are clamped to the front-most band.
         void SubmitScreen(
             const ui::UiCanvas& canvas,
             const RenderContext& context,
-            ui::UiPoint screenOrigin = {});
+            ui::UiPoint screenOrigin = {},
+            std::uint32_t canvasZOrder = 0);
 
         // Renders rectangles directly onto a finite local XY plane. Use
         // RenderToTexture plus a textured mesh when text or curvature is
@@ -2131,6 +2303,7 @@ namespace mrg
 
         audio::AudioConfig audio{};
         audio::AudioBackendFactory audioBackendFactory{};
+        audio::AudioClipBackendFactory audioClipBackendFactory{};
         double audioUpdateRateHz{500.0};
         double renderRateOverrideHz{};
         double maximumUpdateDeltaSeconds{0.1};

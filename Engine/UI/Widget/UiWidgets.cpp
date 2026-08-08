@@ -24,6 +24,8 @@ namespace mrg::ui
             command.horizontalAlignment = alignment;
             return command;
         }
+
+        constexpr std::size_t NoItemIndex = static_cast<std::size_t>(-1);
     }
 
     UiLabel::UiLabel(std::wstring text)
@@ -92,6 +94,44 @@ namespace mrg::ui
                 fontSize_,
                 alignment_));
         }
+    }
+
+    UiImageHandle UiImage::Image() const noexcept
+    {
+        return image_;
+    }
+
+    void UiImage::SetImage(const UiImageHandle image) noexcept
+    {
+        image_ = image;
+    }
+
+    UiColor UiImage::Tint() const noexcept
+    {
+        return tint_;
+    }
+
+    void UiImage::SetTint(const UiColor tint) noexcept
+    {
+        tint_ = tint;
+    }
+
+    void UiImage::AppendDrawCommands(
+        std::vector<UiDrawCommand>& commands,
+        const UiRect& absoluteBounds) const
+    {
+        if (!image_ || absoluteBounds.width <= 0.0F ||
+            absoluteBounds.height <= 0.0F)
+        {
+            return;
+        }
+
+        UiDrawCommand command{};
+        command.type = UiDrawCommandType::Image;
+        command.bounds = absoluteBounds;
+        command.color = tint_;
+        command.image = image_;
+        commands.push_back(std::move(command));
     }
 
     UiButton::UiButton(std::wstring text)
@@ -278,12 +318,71 @@ namespace mrg::ui
             event.timestampTicks});
     }
 
+    void UiCycleSelector::SetItems(std::vector<std::wstring> items)
+    {
+        items_ = std::move(items);
+        if (selectedIndex_ >= items_.size())
+        {
+            selectedIndex_ = 0;
+        }
+        RefreshText();
+    }
+
+    const std::vector<std::wstring>& UiCycleSelector::Items() const noexcept
+    {
+        return items_;
+    }
+
+    std::size_t UiCycleSelector::SelectedIndex() const noexcept
+    {
+        return selectedIndex_;
+    }
+
+    void UiCycleSelector::SetSelectedIndex(const std::size_t index)
+    {
+        if (index >= items_.size())
+        {
+            throw std::out_of_range("UI cycle-selector selection is out of range.");
+        }
+        selectedIndex_ = index;
+        RefreshText();
+    }
+
+    void UiCycleSelector::OnPointerEvent(
+        const UiPointerEvent& event,
+        std::vector<UiAction>& actions)
+    {
+        if (event.type != UiPointerEventType::Click || items_.empty())
+        {
+            return;
+        }
+        selectedIndex_ = (selectedIndex_ + 1) % items_.size();
+        RefreshText();
+        actions.push_back(UiAction{
+            UiActionType::SelectionChanged,
+            Id(),
+            static_cast<float>(selectedIndex_),
+            selectedIndex_,
+            event.timestampTicks});
+    }
+
+    void UiCycleSelector::RefreshText()
+    {
+        SetText(items_.empty() ? std::wstring{} : items_[selectedIndex_]);
+    }
+
     void UiComboBox::SetItems(std::vector<std::wstring> items)
     {
         items_ = std::move(items);
         if (selectedIndex_ >= items_.size())
         {
             selectedIndex_ = 0;
+        }
+        firstVisibleIndex_ = 0;
+        hoveredItemIndex_ = NoItemIndex;
+        if (items_.empty())
+        {
+            Collapse();
         }
         RefreshText();
     }
@@ -305,29 +404,372 @@ namespace mrg::ui
             throw std::out_of_range("UI combo-box selection is out of range.");
         }
         selectedIndex_ = index;
+        EnsureSelectedItemVisible();
         RefreshText();
+    }
+
+    void UiComboBox::SetMaxVisibleItems(const std::size_t maxVisibleItems)
+    {
+        if (maxVisibleItems == 0)
+        {
+            throw std::invalid_argument(
+                "A UI combo box must show at least one item.");
+        }
+        maxVisibleItems_ = maxVisibleItems;
+        EnsureSelectedItemVisible();
+    }
+
+    std::size_t UiComboBox::MaxVisibleItems() const noexcept
+    {
+        return maxVisibleItems_;
+    }
+
+    void UiComboBox::SetItemHeight(const float itemHeight)
+    {
+        if (!std::isfinite(itemHeight) || itemHeight <= 0.0F)
+        {
+            throw std::invalid_argument(
+                "A UI combo-box item height must be positive.");
+        }
+        itemHeight_ = itemHeight;
+    }
+
+    float UiComboBox::ItemHeight() const noexcept
+    {
+        return itemHeight_;
+    }
+
+    bool UiComboBox::IsExpanded() const noexcept
+    {
+        return expanded_;
+    }
+
+    void UiComboBox::Collapse() noexcept
+    {
+        expanded_ = false;
+        trackingDrag_ = false;
+        dragMoved_ = false;
+        hoveredItemIndex_ = NoItemIndex;
+    }
+
+    void UiComboBox::AppendDrawCommands(
+        std::vector<UiDrawCommand>& commands,
+        const UiRect& absoluteBounds) const
+    {
+        // Keep the displayed field and its hit rectangle identical. Text uses
+        // a padded content region so long device names never run underneath
+        // the arrow affordance on the right.
+        UiElement::AppendDrawCommands(commands, absoluteBounds);
+        const float arrowWidth = std::min(34.0F, absoluteBounds.width);
+        if (!Text().empty())
+        {
+            commands.push_back(MakeTextCommand(
+                {absoluteBounds.x + 12.0F,
+                    absoluteBounds.y,
+                    std::max(
+                        absoluteBounds.width - arrowWidth - 18.0F,
+                        0.0F),
+                    absoluteBounds.height},
+                {1.0F, 1.0F, 1.0F, IsEnabled() ? 1.0F : 0.55F},
+                Text(),
+                FontSize(),
+                UiTextAlignment::Leading));
+        }
+        commands.push_back(UiDrawCommand{
+            UiDrawCommandType::Rectangle,
+            {absoluteBounds.x + absoluteBounds.width - arrowWidth,
+                absoluteBounds.y,
+                arrowWidth,
+                absoluteBounds.height},
+            {0.025F, 0.055F, 0.125F, IsEnabled() ? 0.92F : 0.50F}});
+        commands.push_back(MakeTextCommand(
+            {absoluteBounds.x + absoluteBounds.width - arrowWidth,
+                absoluteBounds.y,
+                arrowWidth,
+                absoluteBounds.height},
+            {0.72F, 0.84F, 1.0F, IsEnabled() ? 1.0F : 0.55F},
+            expanded_ ? L"▲" : L"▼",
+            std::min(FontSize(), 14.0F),
+            UiTextAlignment::Center));
+
+        if (!expanded_ || items_.empty())
+        {
+            return;
+        }
+
+        const UiRect localPopup = PopupBounds();
+        const UiRect popup{
+            absoluteBounds.x + localPopup.x,
+            absoluteBounds.y + localPopup.y,
+            localPopup.width,
+            localPopup.height};
+        UiDrawCommand background{};
+        background.type = UiDrawCommandType::Rectangle;
+        background.bounds = popup;
+        background.color = {0.055F, 0.070F, 0.105F, 0.98F};
+        commands.push_back(std::move(background));
+
+        const std::size_t visibleCount = VisibleItemCount();
+        for (std::size_t row = 0; row < visibleCount; ++row)
+        {
+            const std::size_t itemIndex = firstVisibleIndex_ + row;
+            const UiRect itemBounds{
+                popup.x,
+                popup.y + static_cast<float>(row) * itemHeight_,
+                popup.width,
+                itemHeight_};
+            const UiColor itemColor = itemIndex == hoveredItemIndex_
+                ? Style().hovered
+                : itemIndex == selectedIndex_
+                    ? Style().pressed
+                    : Style().normal;
+            UiDrawCommand itemBackground{};
+            itemBackground.type = UiDrawCommandType::Rectangle;
+            itemBackground.bounds = itemBounds;
+            itemBackground.color = itemColor;
+            commands.push_back(std::move(itemBackground));
+            commands.push_back(MakeTextCommand(
+                {itemBounds.x + 10.0F,
+                    itemBounds.y,
+                    std::max(itemBounds.width - 20.0F, 0.0F),
+                    itemBounds.height},
+                {1.0F, 1.0F, 1.0F, 1.0F},
+                items_[itemIndex],
+                FontSize(),
+                UiTextAlignment::Leading));
+        }
+
+        if (items_.size() > visibleCount && popup.height > 0.0F)
+        {
+            const float trackWidth = 6.0F;
+            const float thumbHeight = std::max(
+                12.0F,
+                popup.height * static_cast<float>(visibleCount) /
+                    static_cast<float>(items_.size()));
+            const std::size_t maxFirstIndex = items_.size() - visibleCount;
+            const float progress = maxFirstIndex == 0
+                ? 0.0F
+                : static_cast<float>(firstVisibleIndex_) /
+                    static_cast<float>(maxFirstIndex);
+            UiDrawCommand scrollTrack{};
+            scrollTrack.type = UiDrawCommandType::Rectangle;
+            scrollTrack.bounds = {
+                popup.x + popup.width - trackWidth,
+                popup.y,
+                trackWidth,
+                popup.height};
+            scrollTrack.color = {0.02F, 0.025F, 0.04F, 0.90F};
+            commands.push_back(std::move(scrollTrack));
+            UiDrawCommand scrollThumb{};
+            scrollThumb.type = UiDrawCommandType::Rectangle;
+            scrollThumb.bounds = {
+                popup.x + popup.width - trackWidth,
+                popup.y + (popup.height - thumbHeight) * progress,
+                trackWidth,
+                thumbHeight};
+            scrollThumb.color = {0.35F, 0.70F, 1.0F, 1.0F};
+            commands.push_back(std::move(scrollThumb));
+        }
     }
 
     void UiComboBox::OnPointerEvent(
         const UiPointerEvent& event,
         std::vector<UiAction>& actions)
     {
-        if (event.type != UiPointerEventType::Click || items_.empty())
+        if (items_.empty())
         {
             return;
         }
-        selectedIndex_ = (selectedIndex_ + 1) % items_.size();
-        RefreshText();
-        actions.push_back(UiAction{
-            UiActionType::SelectionChanged,
-            Id(),
-            static_cast<float>(selectedIndex_),
-            selectedIndex_,
-            event.timestampTicks});
+
+        if (event.type == UiPointerEventType::Enter ||
+            event.type == UiPointerEventType::Move)
+        {
+            if (expanded_)
+            {
+                UpdateHoveredItem(event.localPosition);
+            }
+            if (event.type == UiPointerEventType::Move && trackingDrag_ &&
+                IsPressed())
+            {
+                const float displacement = dragStartY_ - event.localPosition.y;
+                if (std::abs(displacement) > 3.0F)
+                {
+                    const int itemDelta = static_cast<int>(
+                        std::trunc(displacement / itemHeight_));
+                    ScrollBy(static_cast<int>(dragStartFirstVisibleIndex_) +
+                        itemDelta - static_cast<int>(firstVisibleIndex_));
+                    dragMoved_ = true;
+                }
+            }
+            return;
+        }
+
+        if (event.type == UiPointerEventType::Leave)
+        {
+            hoveredItemIndex_ = NoItemIndex;
+            // Pointer focus is only a visual state. Keep the popup open so a
+            // player can move away temporarily and return without losing the
+            // device list; selection and an explicit field click still close it.
+            return;
+        }
+
+        if (event.type == UiPointerEventType::Wheel && expanded_ &&
+            PopupBounds().Contains(event.localPosition))
+        {
+            const int direction = event.wheelDelta > 0.0F ? -1 : 1;
+            const int stepCount = std::max(
+                1,
+                static_cast<int>(std::round(std::abs(event.wheelDelta))));
+            ScrollBy(direction * stepCount);
+            UpdateHoveredItem(event.localPosition);
+            return;
+        }
+
+        if (event.type == UiPointerEventType::Press && expanded_ &&
+            PopupBounds().Contains(event.localPosition))
+        {
+            trackingDrag_ = true;
+            dragMoved_ = false;
+            dragStartY_ = event.localPosition.y;
+            dragStartFirstVisibleIndex_ = firstVisibleIndex_;
+            return;
+        }
+
+        if (event.type == UiPointerEventType::Release)
+        {
+            trackingDrag_ = false;
+            return;
+        }
+
+        if (event.type != UiPointerEventType::Click)
+        {
+            return;
+        }
+
+        if (!expanded_)
+        {
+            expanded_ = true;
+            EnsureSelectedItemVisible();
+            UpdateHoveredItem(event.localPosition);
+            return;
+        }
+
+        if (dragMoved_)
+        {
+            dragMoved_ = false;
+            return;
+        }
+
+        if (const std::optional<std::size_t> selected =
+                ItemIndexAt(event.localPosition);
+            selected.has_value())
+        {
+            selectedIndex_ = *selected;
+            RefreshText();
+            Collapse();
+            actions.push_back(UiAction{
+                UiActionType::SelectionChanged,
+                Id(),
+                static_cast<float>(selectedIndex_),
+                selectedIndex_,
+                event.timestampTicks});
+            return;
+        }
+
+        if (UiRect{0.0F, 0.0F, Bounds().width, Bounds().height}.Contains(
+                event.localPosition))
+        {
+            Collapse();
+        }
     }
 
     void UiComboBox::RefreshText()
     {
         SetText(items_.empty() ? std::wstring{} : items_[selectedIndex_]);
     }
+
+    UiRect UiComboBox::PopupBounds() const noexcept
+    {
+        return {
+            0.0F,
+            Bounds().height,
+            Bounds().width,
+            itemHeight_ * static_cast<float>(VisibleItemCount())};
+    }
+
+    std::size_t UiComboBox::VisibleItemCount() const noexcept
+    {
+        return std::min(items_.size(), maxVisibleItems_);
+    }
+
+    std::optional<std::size_t> UiComboBox::ItemIndexAt(
+        const UiPoint localPosition) const noexcept
+    {
+        const UiRect popup = PopupBounds();
+        if (!popup.Contains(localPosition) || itemHeight_ <= 0.0F)
+        {
+            return std::nullopt;
+        }
+
+        const std::size_t row = static_cast<std::size_t>(
+            (localPosition.y - popup.y) / itemHeight_);
+        const std::size_t index = firstVisibleIndex_ + row;
+        return row < VisibleItemCount() && index < items_.size()
+            ? std::optional<std::size_t>{index}
+            : std::nullopt;
+    }
+
+    void UiComboBox::EnsureSelectedItemVisible() noexcept
+    {
+        const std::size_t visibleCount = VisibleItemCount();
+        if (visibleCount == 0)
+        {
+            firstVisibleIndex_ = 0;
+            return;
+        }
+
+        if (selectedIndex_ < firstVisibleIndex_)
+        {
+            firstVisibleIndex_ = selectedIndex_;
+        }
+        else if (selectedIndex_ >= firstVisibleIndex_ + visibleCount)
+        {
+            firstVisibleIndex_ = selectedIndex_ - visibleCount + 1;
+        }
+
+        const std::size_t maxFirstIndex = items_.size() - visibleCount;
+        firstVisibleIndex_ = std::min(firstVisibleIndex_, maxFirstIndex);
+    }
+
+    void UiComboBox::ScrollBy(const int itemDelta) noexcept
+    {
+        const std::size_t visibleCount = VisibleItemCount();
+        if (visibleCount == 0 || items_.size() <= visibleCount)
+        {
+            return;
+        }
+
+        const int maxFirstIndex = static_cast<int>(items_.size() - visibleCount);
+        const int requested = static_cast<int>(firstVisibleIndex_) + itemDelta;
+        firstVisibleIndex_ = static_cast<std::size_t>(std::clamp(
+            requested,
+            0,
+            maxFirstIndex));
+    }
+
+    void UiComboBox::UpdateHoveredItem(
+        const UiPoint localPosition) noexcept
+    {
+        const std::optional<std::size_t> item = ItemIndexAt(localPosition);
+        hoveredItemIndex_ = item.value_or(NoItemIndex);
+    }
+
+    bool UiComboBox::ContainsLocalPoint(
+        const UiPoint localPosition) const noexcept
+    {
+        const UiRect mainBounds{0.0F, 0.0F, Bounds().width, Bounds().height};
+        return mainBounds.Contains(localPosition) ||
+            (expanded_ && PopupBounds().Contains(localPosition));
+    }
+
 }

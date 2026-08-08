@@ -2,6 +2,7 @@
 
 #include <DirectXMath.h>
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string_view>
@@ -253,9 +254,13 @@ namespace
         button.SetBounds({20.0F, 20.0F, 120.0F, 40.0F});
 
         mrg::ui::UiInputRouter router;
-        router.Process(canvas, {{40.0F, 35.0F}, true, true, true, false, 10});
+        router.Process(
+            canvas,
+            {{40.0F, 35.0F}, true, true, true, false, 0.0F, 10});
         Check(button.IsPressed(), "UI button captures a pointer press");
-        router.Process(canvas, {{40.0F, 35.0F}, true, false, false, true, 20});
+        router.Process(
+            canvas,
+            {{40.0F, 35.0F}, true, false, false, true, 0.0F, 20});
         const std::vector<mrg::ui::UiAction> actions = canvas.TakeActions();
         Check(!button.IsPressed(), "UI button releases pointer capture");
         Check(
@@ -266,12 +271,144 @@ namespace
 
         auto& slider = canvas.Root().EmplaceChild<mrg::ui::UiSlider>(0.0F);
         slider.SetBounds({20.0F, 80.0F, 200.0F, 40.0F});
-        router.Process(canvas, {{30.0F, 100.0F}, true, true, true, false, 30});
-        router.Process(canvas, {{300.0F, 100.0F}, true, true, false, false, 40});
+        router.Process(
+            canvas,
+            {{30.0F, 100.0F}, true, true, true, false, 0.0F, 30});
+        router.Process(
+            canvas,
+            {{300.0F, 100.0F}, true, true, false, false, 0.0F, 40});
         Check(
             NearlyEqual(slider.Value(), 1.0F),
             "captured slider keeps receiving movement outside its bounds");
-        router.Process(canvas, {{300.0F, 100.0F}, true, false, false, true, 50});
+        router.Process(
+            canvas,
+            {{300.0F, 100.0F}, true, false, false, true, 0.0F, 50});
+
+        auto& image = canvas.Root().EmplaceChild<mrg::ui::UiImage>();
+        image.SetImage(mrg::ui::UiImageHandle{123});
+        image.SetBounds({240.0F, 20.0F, 40.0F, 40.0F});
+        const std::vector<mrg::ui::UiDrawCommand> imageCommands =
+            canvas.BuildDrawList();
+        const bool imageCommandFound = std::any_of(
+            imageCommands.begin(),
+            imageCommands.end(),
+            [](const mrg::ui::UiDrawCommand& command)
+            {
+                return command.type == mrg::ui::UiDrawCommandType::Image &&
+                    command.image.value == 123;
+            });
+        Check(
+            imageCommandFound,
+            "UI image widgets emit reusable image draw commands");
+
+        auto& combo = canvas.Root().EmplaceChild<mrg::ui::UiComboBox>();
+        combo.SetBounds({20.0F, 130.0F, 180.0F, 30.0F});
+        combo.SetItemHeight(20.0F);
+        combo.SetMaxVisibleItems(3);
+        combo.SetItems({L"Driver 0", L"Driver 1", L"Driver 2", L"Driver 3", L"Driver 4"});
+
+        // A click on the field opens its popup. The popup extends outside the
+        // canvas, so this also checks that it is not clipped by the root bounds.
+        router.Process(
+            canvas,
+            {{50.0F, 145.0F}, true, true, true, false, 0.0F, 60});
+        router.Process(
+            canvas,
+            {{50.0F, 145.0F}, true, false, false, true, 0.0F, 70});
+        Check(combo.IsExpanded(), "combo box opens a popup from the field click");
+
+        // Moving the pointer to an unrelated Canvas area must not dismiss the
+        // device list. The player may return to the popup and continue input.
+        router.Process(
+            canvas,
+            {{300.0F, 20.0F}, true, false, false, false, 0.0F, 75});
+        Check(
+            combo.IsExpanded(),
+            "combo box remains open after losing pointer focus");
+
+        // One normalized wheel tick advances the first visible row by one.
+        router.Process(
+            canvas,
+            {{50.0F, 180.0F}, true, false, false, false, -1.0F, 80});
+        router.Process(
+            canvas,
+            {{50.0F, 180.0F}, true, true, true, false, 0.0F, 90});
+        router.Process(
+            canvas,
+            {{50.0F, 180.0F}, true, false, false, true, 0.0F, 100});
+        const std::vector<mrg::ui::UiAction> comboActions = canvas.TakeActions();
+        Check(
+            combo.SelectedIndex() == 2 &&
+                !comboActions.empty() &&
+                comboActions.back().type == mrg::ui::UiActionType::SelectionChanged,
+            "combo box wheel scrolling selects the shifted visible item");
+
+        // Reopen and drag upward by one row before selecting the second row.
+        router.Process(
+            canvas,
+            {{50.0F, 145.0F}, true, true, true, false, 0.0F, 110});
+        router.Process(
+            canvas,
+            {{50.0F, 145.0F}, true, false, false, true, 0.0F, 120});
+        router.Process(
+            canvas,
+            {{50.0F, 200.0F}, true, true, true, false, 0.0F, 130});
+        router.Process(
+            canvas,
+            {{50.0F, 180.0F}, true, true, false, false, 0.0F, 140});
+        router.Process(
+            canvas,
+            {{50.0F, 180.0F}, true, false, false, true, 0.0F, 150});
+        router.Process(
+            canvas,
+            {{50.0F, 190.0F}, true, true, true, false, 0.0F, 160});
+        router.Process(
+            canvas,
+            {{50.0F, 190.0F}, true, false, false, true, 0.0F, 170});
+        Check(
+            combo.SelectedIndex() == 3,
+            "combo box drag scrolling selects the shifted visible item");
+    }
+
+    void TestUiTreeZOrder()
+    {
+        mrg::ui::UiCanvas canvas({240.0F, 140.0F});
+        auto& front = canvas.Root().EmplaceChild<mrg::ui::UiButton>(L"Front");
+        front.SetBounds({40.0F, 40.0F, 100.0F, 48.0F});
+        front.SetZIndex(10);
+        auto& back = canvas.Root().EmplaceChild<mrg::ui::UiButton>(L"Back");
+        back.SetBounds({20.0F, 20.0F, 180.0F, 100.0F});
+
+        const std::vector<mrg::ui::UiDrawCommand> commands =
+            canvas.BuildDrawList();
+        Check(
+            !commands.empty() && commands.back().text == L"Front",
+            "larger sibling Z-index paints its complete subtree last");
+
+        mrg::ui::UiInputRouter router;
+        router.Process(
+            canvas,
+            {{60.0F, 60.0F}, true, true, true, false, 0.0F, 10});
+        router.Process(
+            canvas,
+            {{60.0F, 60.0F}, true, false, false, true, 0.0F, 20});
+        std::vector<mrg::ui::UiAction> actions = canvas.TakeActions();
+        Check(
+            actions.size() == 1 && actions.front().source == front.Id(),
+            "hit testing uses the reverse of sibling paint order");
+
+        // Outside the visible front rectangle, the same point must no longer
+        // target it even though the lower sibling remains underneath.
+        router.Process(
+            canvas,
+            {{30.0F, 30.0F}, true, true, true, false, 0.0F, 30});
+        router.Process(
+            canvas,
+            {{30.0F, 30.0F}, true, false, false, true, 0.0F, 40});
+        actions = canvas.TakeActions();
+        Check(
+            actions.size() == 1 && actions.front().source == back.Id(),
+            "a widget hit box matches its rendered bounds");
     }
 }
 
@@ -282,6 +419,7 @@ int main()
     TestThreeDimensionalVolumes();
     TestTriangleAndUvSurfaces();
     TestUiRouting();
+    TestUiTreeZOrder();
 
     if (failureCount != 0)
     {

@@ -111,6 +111,7 @@ R"MRG_TEXT(struct GlyphInstance
     float2 SizePixels;
     float4 UvRectangle;
     float4 Color;
+    float Depth;
 };
 
 Texture2D<float> GlyphAtlas : register(t0);
@@ -151,7 +152,7 @@ PixelInput VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
         1.0F - pixelPosition.y / ViewportSizePixels.y * 2.0F);
 
     PixelInput output;
-    output.Position = float4(normalizedDeviceCoordinates, 0.0F, 1.0F);
+    output.Position = float4(normalizedDeviceCoordinates, glyph.Depth, 1.0F);
     output.Uv = lerp(
         glyph.UvRectangle.xy,
         glyph.UvRectangle.zw,

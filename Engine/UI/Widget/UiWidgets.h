@@ -2,6 +2,7 @@
 
 #include "Core/UiElement.h"
 
+#include <optional>
 #include <string_view>
 
 namespace mrg::ui
@@ -36,6 +37,28 @@ namespace mrg::ui
         float fontSize_{18.0F};
         UiColor textColor_{1.0F, 1.0F, 1.0F, 1.0F};
         UiTextAlignment alignment_{UiTextAlignment::Leading};
+    };
+
+    // Displays one renderer-owned raster image. UiImageHandle is opaque so
+    // the retained UI tree stays independent from D3D12 texture resources.
+    class UiImage final : public UiElement
+    {
+    public:
+        UiImage() = default;
+
+        [[nodiscard]] UiImageHandle Image() const noexcept;
+        void SetImage(UiImageHandle image) noexcept;
+        [[nodiscard]] UiColor Tint() const noexcept;
+        void SetTint(UiColor tint) noexcept;
+
+    protected:
+        void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const override;
+
+    private:
+        UiImageHandle image_{};
+        UiColor tint_{1.0F, 1.0F, 1.0F, 1.0F};
     };
 
     class UiButton : public UiElement
@@ -106,10 +129,12 @@ namespace mrg::ui
         float value_{};
     };
 
-    class UiComboBox final : public UiButton
+    // Preserves the original click-to-advance selection behavior for compact
+    // settings such as AUTO/WASAPI/ASIO where a popup would add no value.
+    class UiCycleSelector final : public UiButton
     {
     public:
-        UiComboBox() = default;
+        UiCycleSelector() = default;
 
         void SetItems(std::vector<std::wstring> items);
         [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
@@ -126,5 +151,54 @@ namespace mrg::ui
 
         std::vector<std::wstring> items_;
         std::size_t selectedIndex_{};
+    };
+
+    class UiComboBox final : public UiButton
+    {
+    public:
+        UiComboBox() = default;
+
+        void SetItems(std::vector<std::wstring> items);
+        [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
+        [[nodiscard]] std::size_t SelectedIndex() const noexcept;
+        void SetSelectedIndex(std::size_t index);
+        void SetMaxVisibleItems(std::size_t maxVisibleItems);
+        [[nodiscard]] std::size_t MaxVisibleItems() const noexcept;
+        void SetItemHeight(float itemHeight);
+        [[nodiscard]] float ItemHeight() const noexcept;
+        [[nodiscard]] bool IsExpanded() const noexcept;
+        void Collapse() noexcept;
+
+    protected:
+        void AppendDrawCommands(
+            std::vector<UiDrawCommand>& commands,
+            const UiRect& absoluteBounds) const override;
+        void OnPointerEvent(
+            const UiPointerEvent& event,
+            std::vector<UiAction>& actions) override;
+        [[nodiscard]] bool ContainsLocalPoint(
+            UiPoint localPosition) const noexcept override;
+
+    private:
+        void RefreshText();
+        [[nodiscard]] UiRect PopupBounds() const noexcept;
+        [[nodiscard]] std::size_t VisibleItemCount() const noexcept;
+        [[nodiscard]] std::optional<std::size_t> ItemIndexAt(
+            UiPoint localPosition) const noexcept;
+        void EnsureSelectedItemVisible() noexcept;
+        void ScrollBy(int itemDelta) noexcept;
+        void UpdateHoveredItem(UiPoint localPosition) noexcept;
+
+        std::vector<std::wstring> items_;
+        std::size_t selectedIndex_{};
+        std::size_t firstVisibleIndex_{};
+        std::size_t maxVisibleItems_{4};
+        std::size_t hoveredItemIndex_{static_cast<std::size_t>(-1)};
+        float itemHeight_{36.0F};
+        float dragStartY_{};
+        std::size_t dragStartFirstVisibleIndex_{};
+        bool expanded_{};
+        bool trackingDrag_{};
+        bool dragMoved_{};
     };
 }

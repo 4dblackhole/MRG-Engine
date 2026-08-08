@@ -135,7 +135,8 @@ namespace mrg::graphics
         textRenderSystem_ = std::make_unique<TextRenderSystem>();
         textRenderSystem_->Initialize(
             *device_.Get(),
-            renderTargetFormat_);
+            renderTargetFormat_,
+            depthStencilFormat_);
     }
 
     void D3D12Renderer::Resize(

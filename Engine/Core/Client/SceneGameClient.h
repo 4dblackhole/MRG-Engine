@@ -28,6 +28,14 @@ namespace mrg::scene
         [[nodiscard]] SceneManager& Scenes() noexcept;
         [[nodiscard]] const SceneManager& Scenes() const noexcept;
 
+        // These hooks preserve SceneGameClient's ownership of SceneManager
+        // while allowing a root Client to add game-wide behavior such as a
+        // performance overlay after Scene rendering.
+        virtual void OnClientInitialized(const EngineServices& services);
+        virtual void OnClientUpdated(const UpdateContext& context);
+        virtual void OnClientRendered(const graphics::RenderContext& context);
+        virtual void OnClientShuttingDown() noexcept;
+
     private:
         SceneManager scenes_;
         bool initialized_{};

@@ -22,10 +22,14 @@ namespace mrg::scene
                 throw std::runtime_error(
                     "The initial game scene is not registered.");
             }
+            OnClientInitialized(services);
             initialized_ = true;
         }
         catch (...)
         {
+            // A derived Client may have created root-level resources in its
+            // initialization hook before a later step throws.
+            OnClientShuttingDown();
             scenes_.Shutdown();
             throw;
         }
@@ -33,7 +37,14 @@ namespace mrg::scene
 
     bool SceneGameClient::Update(const UpdateContext& context)
     {
-        return initialized_ && scenes_.Update(context);
+        if (!initialized_)
+        {
+            return false;
+        }
+
+        const bool keepRunning = scenes_.Update(context);
+        OnClientUpdated(context);
+        return keepRunning;
     }
 
     void SceneGameClient::Render(
@@ -42,6 +53,7 @@ namespace mrg::scene
         if (initialized_)
         {
             scenes_.Render(context);
+            OnClientRendered(context);
         }
     }
 
@@ -57,6 +69,7 @@ namespace mrg::scene
 
     void SceneGameClient::Shutdown() noexcept
     {
+        OnClientShuttingDown();
         scenes_.Shutdown();
         initialized_ = false;
     }
@@ -69,5 +82,21 @@ namespace mrg::scene
     const SceneManager& SceneGameClient::Scenes() const noexcept
     {
         return scenes_;
+    }
+
+    void SceneGameClient::OnClientInitialized(const EngineServices&)
+    {
+    }
+
+    void SceneGameClient::OnClientUpdated(const UpdateContext&)
+    {
+    }
+
+    void SceneGameClient::OnClientRendered(const graphics::RenderContext&)
+    {
+    }
+
+    void SceneGameClient::OnClientShuttingDown() noexcept
+    {
     }
 }

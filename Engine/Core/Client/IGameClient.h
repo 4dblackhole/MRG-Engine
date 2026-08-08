@@ -7,38 +7,19 @@
 #include "Text/TextRendering.h"
 
 #include <cstdint>
-#include <filesystem>
 #include <string>
 
 namespace mrg
 {
-    struct PerformanceOverlayConfig
+    // Engine-owned measurement data. The Client decides whether, where, and
+    // how to present these values; an unavailable sample has `hasMeasurement`
+    // set to false during the first reporting interval.
+    struct PerformanceStatistics final
     {
-        // Relative paths are resolved from the executable directory. Empty
-        // paths use the corresponding installed system-font family.
-        std::filesystem::path framesPerSecondFontFile;
-        std::filesystem::path updatesPerSecondFontFile;
-        std::wstring framesPerSecondSystemFont{L"Consolas"};
-        std::wstring updatesPerSecondSystemFont{L"Segoe UI"};
-        float framesPerSecondFontSizePixels{18.0F};
-        float updatesPerSecondFontSizePixels{22.0F};
-        DirectX::XMFLOAT4 framesPerSecondColor{
-            0.10F,
-            0.40F,
-            0.95F,
-            1.0F};
-        DirectX::XMFLOAT4 updatesPerSecondColor{
-            0.95F,
-            0.25F,
-            0.12F,
-            1.0F};
-        float layoutWidthPixels{360.0F};
-        float rightMarginPixels{20.0F};
-        float bottomMarginPixels{18.0F};
-        float lineGapPixels{4.0F};
-        // Intended for automated hidden rendering checks. Interactive games
-        // normally leave this false and use F1 to toggle the overlay.
-        bool initiallyVisible{};
+        std::uint64_t framesPerSecond{};
+        std::uint64_t updatesPerSecond{};
+        std::uint64_t measurementIndex{};
+        bool hasMeasurement{};
     };
 
     // Returned before any runtime subsystem exists. It lets the Client
@@ -60,7 +41,6 @@ namespace mrg
         double audioUpdateRateHz{500.0};
         double renderRateOverrideHz{};
         double maximumUpdateDeltaSeconds{0.1};
-        PerformanceOverlayConfig performanceOverlay{};
 
         bool showWindow{true};
         std::uint64_t autoExitAfterRenderedFrames{};
@@ -89,6 +69,7 @@ namespace mrg
         std::uint64_t updateIndex{};
         const platform::InputState& input;
         audio::AudioSystem& audio;
+        PerformanceStatistics performance;
     };
 
     // Contract implemented by a game-specific Client project.

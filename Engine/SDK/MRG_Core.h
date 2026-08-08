@@ -1273,7 +1273,8 @@ namespace mrg::visual2d
         FixedHeight,
     };
 
-    // Owns one Visual2D tree and nine non-rendering anchor nodes. FixedHeight
+    // Owns one Visual2D tree and nine non-rendering anchor nodes. A Canvas may
+    // cover the whole viewport or only a panel-sized logical region. FixedHeight
     // keeps the logical height constant and expands only the logical width.
     class Visual2DCanvas final
     {
@@ -1324,6 +1325,9 @@ namespace mrg::visual2d
         std::vector<Action> actions_;
     };
 
+    // Converts an absolute screen pixel to Canvas-local coordinates. The
+    // viewport clips only the physical screen; points outside the Canvas are
+    // intentionally preserved so pointer capture can continue while dragging.
     [[nodiscard]] std::optional<Point> MapScreenPointer(
         Point screenPosition,
         Size viewportSize,
@@ -1617,7 +1621,6 @@ namespace mrg::visual2d
         void ChangeHovered(
             Visual2DCanvas& canvas,
             Visual2DNode* next,
-            Point nextLocalPosition,
             const PointerInput& input);
 
         NodeId hovered_{};
@@ -1635,6 +1638,7 @@ namespace mrg::visual2d
 
 #include <DirectXMath.h>
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -1683,9 +1687,9 @@ namespace mrg::visual2d
         bool twoSided_{};
     };
 
-    // Copies CPU positions/UVs from a Shape. This O(triangle-count) baseline
-    // is intended for modest interactive surfaces; a later BVH can replace
-    // the query internally without changing IVisual2DSurface or client code.
+    // Copies CPU positions/UVs from a Shape and builds an immutable local-space
+    // BVH. Ray queries skip unrelated triangle groups without changing the
+    // surface or Canvas API, including for rotated and curved meshes.
     class MeshUvVisual2DSurface final : public IVisual2DSurface
     {
     public:
@@ -1708,8 +1712,32 @@ namespace mrg::visual2d
             DirectX::XMFLOAT2 uv{};
         };
 
+        struct Bounds
+        {
+            DirectX::XMFLOAT3 minimum{};
+            DirectX::XMFLOAT3 maximum{};
+        };
+
+        // Nodes are stored in preorder. escapeIndex points immediately after
+        // the subtree, allowing Raycast to traverse without a stack or a
+        // per-query allocation.
+        struct BvhNode
+        {
+            Bounds bounds{};
+            std::size_t firstTriangle{};
+            std::size_t triangleCount{};
+            std::size_t escapeIndex{};
+        };
+
+        void BuildBvh();
+        [[nodiscard]] std::size_t BuildBvhNode(
+            std::size_t firstTriangle,
+            std::size_t triangleCount);
+
         std::vector<SurfaceVertex> vertices_;
         std::vector<std::uint32_t> indices_;
+        std::vector<std::size_t> triangleOrder_;
+        std::vector<BvhNode> bvhNodes_;
         DirectX::XMFLOAT4X4 worldTransform_{};
         bool twoSided_{};
     };
@@ -1952,9 +1980,13 @@ namespace mrg::graphics
         DirectX::XMFLOAT2 offset{0.0F, 0.0F};
     };
 
-    class TextureSet final
+    // Read-only texture-set contract exposed to materials and Client code.
+    // The concrete D3D12 allocation remains private to TextureManager.cpp.
+    class TextureSet
     {
     public:
+        virtual ~TextureSet();
+
         TextureSet(const TextureSet&) = delete;
         TextureSet& operator=(const TextureSet&) = delete;
 
@@ -1968,45 +2000,34 @@ namespace mrg::graphics
             std::size_t index,
             float targetAspectRatio = 1.0F) const;
 
-    private:
-        friend class TextureManager;
-
+    protected:
         TextureSet() = default;
+        void AppendInfo(TextureInfo info);
 
+    private:
         std::vector<TextureInfo> textureInfo_;
-        std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> resources_;
-        D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptorStart_{};
-        D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptorStart_{};
     };
 
     using TextureSetHandle = std::shared_ptr<const TextureSet>;
 
     // One GPU texture that can alternate between a render target and a
-    // shader resource. TextureManager owns its SRV allocation while the
-    // target keeps the RTV and resource state required by a render pass.
-    class RenderTargetTexture final
+    // shader resource. Its opaque implementation owns the texture, RTV and
+    // resource state; TextureManager owns the shared SRV descriptor heap.
+    class RenderTargetTexture
     {
     public:
+        virtual ~RenderTargetTexture();
+
         RenderTargetTexture(const RenderTargetTexture&) = delete;
         RenderTargetTexture& operator=(const RenderTargetTexture&) = delete;
 
-        [[nodiscard]] const TextureSetHandle& Textures() const noexcept;
-        [[nodiscard]] std::uint32_t Width() const noexcept;
-        [[nodiscard]] std::uint32_t Height() const noexcept;
+        [[nodiscard]] virtual const TextureSetHandle& Textures()
+            const noexcept = 0;
+        [[nodiscard]] virtual std::uint32_t Width() const noexcept = 0;
+        [[nodiscard]] virtual std::uint32_t Height() const noexcept = 0;
 
-    private:
-        friend class TextureManager;
-
+    protected:
         RenderTargetTexture() = default;
-
-        TextureSetHandle textures_;
-        Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
-        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
-        D3D12_CPU_DESCRIPTOR_HANDLE rtv_{};
-        D3D12_RESOURCE_STATES state_{
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE};
-        std::uint32_t width_{};
-        std::uint32_t height_{};
     };
 
     using RenderTargetTextureHandle =
@@ -2048,8 +2069,8 @@ namespace mrg::graphics
             const TextureSetHandle& textureSet) const;
 
         // TextureManager owns render-target resource state and descriptor
-        // details. Render features request a pass instead of reaching into a
-        // RenderTargetTexture through friendship.
+        // details. Render features request a pass without reaching into the
+        // concrete RenderTargetTexture implementation.
         void BeginRenderTargetPass(
             ID3D12GraphicsCommandList& commandList,
             const RenderTargetTextureHandle& target,

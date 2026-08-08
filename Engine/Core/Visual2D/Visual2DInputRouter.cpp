@@ -35,7 +35,7 @@ namespace mrg::visual2d
         {
             hit = canvas.HitTest(input.position);
         }
-        ChangeHovered(canvas, hit.node, hit.localPosition, input);
+        ChangeHovered(canvas, hit.node, input);
 
         if (input.wheelDelta != 0.0F && hit.node != nullptr)
         {
@@ -151,7 +151,6 @@ namespace mrg::visual2d
     void Visual2DInputRouter::ChangeHovered(
         Visual2DCanvas& canvas,
         Visual2DNode* next,
-        const Point,
         const PointerInput& input)
     {
         if (next != nullptr && next->Id() == hovered_)

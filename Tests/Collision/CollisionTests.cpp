@@ -247,6 +247,18 @@ namespace
                     NearlyEqual(curvedHit->uv.y, 0.5F),
                 "curved surface center maps to center Canvas UV");
         }
+        const auto curvedRightHit = curvedMesh.Raycast(
+            Ray3D{{1.0F, 0.0F, -2.0F}, {0.0F, 0.0F, 1.0F}});
+        Check(
+            curvedRightHit.has_value() &&
+                curvedRightHit->uv.x > 0.75F &&
+                curvedRightHit->uv.x < 0.9F,
+            "curved-surface BVH reaches a noncentral triangle group");
+        const auto curvedMiss = curvedMesh.Raycast(
+            Ray3D{{0.0F, 2.0F, -2.0F}, {0.0F, 0.0F, 1.0F}});
+        Check(
+            !curvedMiss.has_value(),
+            "curved-surface BVH rejects a ray outside its root bounds");
     }
 
     void TestVisual2DRouting()
@@ -501,6 +513,29 @@ namespace
 
     void TestVisual2DAnchorsAndComponents()
     {
+        const mrg::visual2d::Visual2DCanvas panelCanvas(
+            {320.0F, 210.0F},
+            mrg::visual2d::CanvasScaleMode::Fixed);
+        const auto panelPoint = mrg::visual2d::MapScreenPointer(
+            {40.0F, 50.0F},
+            {1280.0F, 720.0F},
+            panelCanvas,
+            {20.0F, 30.0F});
+        Check(
+            panelPoint.has_value() &&
+                NearlyEqual(panelPoint->x, 20.0F) &&
+                NearlyEqual(panelPoint->y, 20.0F),
+            "a panel-sized Canvas maps from its independent screen origin");
+        const auto capturedOutsidePanel = mrg::visual2d::MapScreenPointer(
+            {500.0F, 400.0F},
+            {1280.0F, 720.0F},
+            panelCanvas,
+            {20.0F, 30.0F});
+        Check(
+            capturedOutsidePanel.has_value() &&
+                capturedOutsidePanel->x > panelCanvas.LogicalSize().width,
+            "Canvas mapping preserves screen-valid drag positions outside a panel");
+
         mrg::visual2d::Visual2DCanvas canvas;
         canvas.SetViewportSize({2560.0F, 1080.0F});
         Check(

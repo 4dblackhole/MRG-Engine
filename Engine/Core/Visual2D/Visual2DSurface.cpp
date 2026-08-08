@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 
 namespace mrg::visual2d
@@ -68,6 +69,75 @@ namespace mrg::visual2d
         {
             return first.x * second.x + first.y * second.y +
                 first.z * second.z;
+        }
+
+        [[nodiscard]] float AxisValue(
+            const XMFLOAT3& value,
+            const std::size_t axis) noexcept
+        {
+            if (axis == 0)
+            {
+                return value.x;
+            }
+            if (axis == 1)
+            {
+                return value.y;
+            }
+            return value.z;
+        }
+
+        void ExpandBounds(
+            XMFLOAT3& minimum,
+            XMFLOAT3& maximum,
+            const XMFLOAT3& point) noexcept
+        {
+            minimum.x = std::min(minimum.x, point.x);
+            minimum.y = std::min(minimum.y, point.y);
+            minimum.z = std::min(minimum.z, point.z);
+            maximum.x = std::max(maximum.x, point.x);
+            maximum.y = std::max(maximum.y, point.y);
+            maximum.z = std::max(maximum.z, point.z);
+        }
+
+        [[nodiscard]] bool IntersectsBounds(
+            const XMFLOAT3& minimum,
+            const XMFLOAT3& maximum,
+            const collision::Ray3D& ray,
+            const float maximumParameter) noexcept
+        {
+            float nearParameter = 0.0F;
+            float farParameter = maximumParameter;
+            constexpr float ParallelEpsilon = 1.0e-8F;
+
+            for (std::size_t axis = 0; axis < 3; ++axis)
+            {
+                const float origin = AxisValue(ray.origin, axis);
+                const float direction = AxisValue(ray.direction, axis);
+                const float slabMinimum = AxisValue(minimum, axis);
+                const float slabMaximum = AxisValue(maximum, axis);
+                if (std::abs(direction) <= ParallelEpsilon)
+                {
+                    if (origin < slabMinimum || origin > slabMaximum)
+                    {
+                        return false;
+                    }
+                    continue;
+                }
+
+                float first = (slabMinimum - origin) / direction;
+                float second = (slabMaximum - origin) / direction;
+                if (first > second)
+                {
+                    std::swap(first, second);
+                }
+                nearParameter = std::max(nearParameter, first);
+                farParameter = std::min(farParameter, second);
+                if (farParameter < nearParameter)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
@@ -170,6 +240,116 @@ namespace mrg::visual2d
             throw std::invalid_argument(
                 "A mesh UI surface contains an invalid vertex index.");
         }
+        BuildBvh();
+    }
+
+    void MeshUvVisual2DSurface::BuildBvh()
+    {
+        const std::size_t triangleCount = indices_.size() / 3;
+        triangleOrder_.resize(triangleCount);
+        std::iota(triangleOrder_.begin(), triangleOrder_.end(), 0);
+        bvhNodes_.clear();
+        bvhNodes_.reserve(triangleCount * 2);
+        static_cast<void>(BuildBvhNode(0, triangleCount));
+    }
+
+    std::size_t MeshUvVisual2DSurface::BuildBvhNode(
+        const std::size_t firstTriangle,
+        const std::size_t triangleCount)
+    {
+        constexpr std::size_t LeafTriangleCount = 6;
+        const float infinity = std::numeric_limits<float>::infinity();
+        Bounds bounds{{infinity, infinity, infinity},
+            {-infinity, -infinity, -infinity}};
+        DirectX::XMFLOAT3 centroidMinimum{infinity, infinity, infinity};
+        DirectX::XMFLOAT3 centroidMaximum{-infinity, -infinity, -infinity};
+
+        for (std::size_t offset = 0; offset < triangleCount; ++offset)
+        {
+            const std::size_t triangle =
+                triangleOrder_[firstTriangle + offset];
+            const std::size_t index = triangle * 3;
+            const DirectX::XMFLOAT3& first =
+                vertices_[indices_[index]].position;
+            const DirectX::XMFLOAT3& second =
+                vertices_[indices_[index + 1]].position;
+            const DirectX::XMFLOAT3& third =
+                vertices_[indices_[index + 2]].position;
+            ExpandBounds(bounds.minimum, bounds.maximum, first);
+            ExpandBounds(bounds.minimum, bounds.maximum, second);
+            ExpandBounds(bounds.minimum, bounds.maximum, third);
+            const DirectX::XMFLOAT3 centroid{
+                (first.x + second.x + third.x) / 3.0F,
+                (first.y + second.y + third.y) / 3.0F,
+                (first.z + second.z + third.z) / 3.0F};
+            ExpandBounds(centroidMinimum, centroidMaximum, centroid);
+        }
+
+        const std::size_t nodeIndex = bvhNodes_.size();
+        bvhNodes_.push_back(BvhNode{bounds});
+        const DirectX::XMFLOAT3 centroidExtent{
+            centroidMaximum.x - centroidMinimum.x,
+            centroidMaximum.y - centroidMinimum.y,
+            centroidMaximum.z - centroidMinimum.z};
+        std::size_t splitAxis = 0;
+        if (centroidExtent.y > centroidExtent.x)
+        {
+            splitAxis = 1;
+        }
+        if (AxisValue(centroidExtent, 2) >
+            AxisValue(centroidExtent, splitAxis))
+        {
+            splitAxis = 2;
+        }
+
+        if (triangleCount <= LeafTriangleCount ||
+            AxisValue(centroidExtent, splitAxis) <=
+                std::numeric_limits<float>::epsilon())
+        {
+            bvhNodes_[nodeIndex].firstTriangle = firstTriangle;
+            bvhNodes_[nodeIndex].triangleCount = triangleCount;
+            bvhNodes_[nodeIndex].escapeIndex = nodeIndex + 1;
+            return nodeIndex;
+        }
+
+        const std::size_t leftCount = triangleCount / 2;
+        const auto firstIterator =
+            triangleOrder_.begin() + firstTriangle;
+        const auto middleIterator = firstIterator + leftCount;
+        const auto lastIterator = firstIterator + triangleCount;
+        std::nth_element(
+            firstIterator,
+            middleIterator,
+            lastIterator,
+            [this, splitAxis](
+                const std::size_t firstTriangleIndex,
+                const std::size_t secondTriangleIndex)
+            {
+                const auto centroidAxis = [this, splitAxis](
+                    const std::size_t triangle)
+                {
+                    const std::size_t index = triangle * 3;
+                    return (
+                        AxisValue(
+                            vertices_[indices_[index]].position,
+                            splitAxis) +
+                        AxisValue(
+                            vertices_[indices_[index + 1]].position,
+                            splitAxis) +
+                        AxisValue(
+                            vertices_[indices_[index + 2]].position,
+                            splitAxis)) / 3.0F;
+                };
+                return centroidAxis(firstTriangleIndex) <
+                    centroidAxis(secondTriangleIndex);
+            });
+
+        static_cast<void>(BuildBvhNode(firstTriangle, leftCount));
+        static_cast<void>(BuildBvhNode(
+            firstTriangle + leftCount,
+            triangleCount - leftCount));
+        bvhNodes_[nodeIndex].escapeIndex = bvhNodes_.size();
+        return nodeIndex;
     }
 
     void MeshUvVisual2DSurface::SetWorldTransform(
@@ -195,25 +375,59 @@ namespace mrg::visual2d
 
         std::optional<collision::TriangleHit3D> closest;
         const SurfaceVertex* closestVertices[3]{};
-        for (std::size_t index = 0; index < indices_.size(); index += 3)
+        float closestParameter = std::numeric_limits<float>::infinity();
+        std::size_t nodeIndex = 0;
+        while (nodeIndex < bvhNodes_.size())
         {
-            const SurfaceVertex& first = vertices_[indices_[index]];
-            const SurfaceVertex& second = vertices_[indices_[index + 1]];
-            const SurfaceVertex& third = vertices_[indices_[index + 2]];
-            const collision::Triangle3D triangle{
-                first.position, second.position, third.position};
-            const std::optional<collision::TriangleHit3D> hit =
-                collision::Intersect(triangle, local->ray);
-            if (!hit.has_value() ||
-                (!twoSided_ && Dot(hit->normal, local->ray.direction) >= 0.0F) ||
-                (closest.has_value() && hit->parameter >= closest->parameter))
+            const BvhNode& node = bvhNodes_[nodeIndex];
+            if (!IntersectsBounds(
+                node.bounds.minimum,
+                node.bounds.maximum,
+                local->ray,
+                closestParameter))
             {
+                nodeIndex = node.escapeIndex;
                 continue;
             }
-            closest = hit;
-            closestVertices[0] = &first;
-            closestVertices[1] = &second;
-            closestVertices[2] = &third;
+
+            // Internal nodes are immediately followed by their left child in
+            // preorder. Leaves jump to escapeIndex after testing their range.
+            if (node.triangleCount == 0)
+            {
+                ++nodeIndex;
+                continue;
+            }
+
+            for (std::size_t offset = 0;
+                 offset < node.triangleCount;
+                 ++offset)
+            {
+                const std::size_t triangleIndex =
+                    triangleOrder_[node.firstTriangle + offset];
+                const std::size_t index = triangleIndex * 3;
+                const SurfaceVertex& first = vertices_[indices_[index]];
+                const SurfaceVertex& second =
+                    vertices_[indices_[index + 1]];
+                const SurfaceVertex& third =
+                    vertices_[indices_[index + 2]];
+                const collision::Triangle3D triangle{
+                    first.position, second.position, third.position};
+                const std::optional<collision::TriangleHit3D> hit =
+                    collision::Intersect(triangle, local->ray);
+                if (!hit.has_value() ||
+                    (!twoSided_ &&
+                        Dot(hit->normal, local->ray.direction) >= 0.0F) ||
+                    hit->parameter >= closestParameter)
+                {
+                    continue;
+                }
+                closest = hit;
+                closestParameter = hit->parameter;
+                closestVertices[0] = &first;
+                closestVertices[1] = &second;
+                closestVertices[2] = &third;
+            }
+            nodeIndex = node.escapeIndex;
         }
         if (!closest.has_value())
         {

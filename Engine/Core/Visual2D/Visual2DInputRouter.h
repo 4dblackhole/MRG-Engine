@@ -38,7 +38,6 @@ namespace mrg::visual2d
         void ChangeHovered(
             Visual2DCanvas& canvas,
             Visual2DNode* next,
-            Point nextLocalPosition,
             const PointerInput& input);
 
         NodeId hovered_{};

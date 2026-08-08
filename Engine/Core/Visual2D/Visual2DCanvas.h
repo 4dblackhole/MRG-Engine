@@ -14,7 +14,8 @@ namespace mrg::visual2d
         FixedHeight,
     };
 
-    // Owns one Visual2D tree and nine non-rendering anchor nodes. FixedHeight
+    // Owns one Visual2D tree and nine non-rendering anchor nodes. A Canvas may
+    // cover the whole viewport or only a panel-sized logical region. FixedHeight
     // keeps the logical height constant and expands only the logical width.
     class Visual2DCanvas final
     {
@@ -65,6 +66,9 @@ namespace mrg::visual2d
         std::vector<Action> actions_;
     };
 
+    // Converts an absolute screen pixel to Canvas-local coordinates. The
+    // viewport clips only the physical screen; points outside the Canvas are
+    // intentionally preserved so pointer capture can continue while dragging.
     [[nodiscard]] std::optional<Point> MapScreenPointer(
         Point screenPosition,
         Size viewportSize,

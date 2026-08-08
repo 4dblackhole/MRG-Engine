@@ -31,9 +31,13 @@ namespace mrg::graphics
         DirectX::XMFLOAT2 offset{0.0F, 0.0F};
     };
 
-    class TextureSet final
+    // Read-only texture-set contract exposed to materials and Client code.
+    // The concrete D3D12 allocation remains private to TextureManager.cpp.
+    class TextureSet
     {
     public:
+        virtual ~TextureSet();
+
         TextureSet(const TextureSet&) = delete;
         TextureSet& operator=(const TextureSet&) = delete;
 
@@ -47,45 +51,34 @@ namespace mrg::graphics
             std::size_t index,
             float targetAspectRatio = 1.0F) const;
 
-    private:
-        friend class TextureManager;
-
+    protected:
         TextureSet() = default;
+        void AppendInfo(TextureInfo info);
 
+    private:
         std::vector<TextureInfo> textureInfo_;
-        std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> resources_;
-        D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptorStart_{};
-        D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptorStart_{};
     };
 
     using TextureSetHandle = std::shared_ptr<const TextureSet>;
 
     // One GPU texture that can alternate between a render target and a
-    // shader resource. TextureManager owns its SRV allocation while the
-    // target keeps the RTV and resource state required by a render pass.
-    class RenderTargetTexture final
+    // shader resource. Its opaque implementation owns the texture, RTV and
+    // resource state; TextureManager owns the shared SRV descriptor heap.
+    class RenderTargetTexture
     {
     public:
+        virtual ~RenderTargetTexture();
+
         RenderTargetTexture(const RenderTargetTexture&) = delete;
         RenderTargetTexture& operator=(const RenderTargetTexture&) = delete;
 
-        [[nodiscard]] const TextureSetHandle& Textures() const noexcept;
-        [[nodiscard]] std::uint32_t Width() const noexcept;
-        [[nodiscard]] std::uint32_t Height() const noexcept;
+        [[nodiscard]] virtual const TextureSetHandle& Textures()
+            const noexcept = 0;
+        [[nodiscard]] virtual std::uint32_t Width() const noexcept = 0;
+        [[nodiscard]] virtual std::uint32_t Height() const noexcept = 0;
 
-    private:
-        friend class TextureManager;
-
+    protected:
         RenderTargetTexture() = default;
-
-        TextureSetHandle textures_;
-        Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
-        Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
-        D3D12_CPU_DESCRIPTOR_HANDLE rtv_{};
-        D3D12_RESOURCE_STATES state_{
-            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE};
-        std::uint32_t width_{};
-        std::uint32_t height_{};
     };
 
     using RenderTargetTextureHandle =
@@ -127,8 +120,8 @@ namespace mrg::graphics
             const TextureSetHandle& textureSet) const;
 
         // TextureManager owns render-target resource state and descriptor
-        // details. Render features request a pass instead of reaching into a
-        // RenderTargetTexture through friendship.
+        // details. Render features request a pass without reaching into the
+        // concrete RenderTargetTexture implementation.
         void BeginRenderTargetPass(
             ID3D12GraphicsCommandList& commandList,
             const RenderTargetTextureHandle& target,

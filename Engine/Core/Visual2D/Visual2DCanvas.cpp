@@ -247,15 +247,15 @@ namespace mrg::visual2d
         {
             return std::nullopt;
         }
-        const Point localPixels{
-            screenPosition.x - canvasOrigin.x,
-            screenPosition.y - canvasOrigin.y};
-        if (localPixels.x < 0.0F || localPixels.y < 0.0F ||
-            localPixels.x > viewportSize.width ||
-            localPixels.y > viewportSize.height)
+        if (screenPosition.x < 0.0F || screenPosition.y < 0.0F ||
+            screenPosition.x > viewportSize.width ||
+            screenPosition.y > viewportSize.height)
         {
             return std::nullopt;
         }
+        const Point localPixels{
+            screenPosition.x - canvasOrigin.x,
+            screenPosition.y - canvasOrigin.y};
         return Point{
             localPixels.x / canvas.PixelScale(),
             localPixels.y / canvas.PixelScale()};

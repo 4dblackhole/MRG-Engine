@@ -25,9 +25,9 @@ $shaders = @(
         Delimiter = 'MRG_TEXT'
     },
     @{
-        Name = 'UiRectangle'
-        File = 'UiRectangle.hlsl'
-        Delimiter = 'MRG_UI_RECT'
+        Name = 'Visual2DRectangle'
+        File = 'Visual2DRectangle.hlsl'
+        Delimiter = 'MRG_VISUAL2D'
     }
 )
 

@@ -1,0 +1,477 @@
+#include "Visual2D/Visual2DNode.h"
+
+#include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <limits>
+#include <ranges>
+
+using namespace DirectX;
+
+namespace mrg::visual2d
+{
+    namespace
+    {
+        std::atomic<NodeId> nextNodeId{1};
+
+        [[nodiscard]] bool IsFinite(const Point point) noexcept
+        {
+            return std::isfinite(point.x) && std::isfinite(point.y);
+        }
+
+        [[nodiscard]] bool IsValidSize(const Size size) noexcept
+        {
+            return std::isfinite(size.width) && std::isfinite(size.height) &&
+                size.width >= 0.0F && size.height >= 0.0F;
+        }
+    }
+
+    bool Rect::Contains(const Point point) const noexcept
+    {
+        return point.x >= x && point.y >= y &&
+            point.x <= x + width && point.y <= y + height;
+    }
+
+    Visual2DComponent::~Visual2DComponent() = default;
+
+    Visual2DNode& Visual2DComponent::Owner() noexcept
+    {
+        return *owner_;
+    }
+
+    const Visual2DNode& Visual2DComponent::Owner() const noexcept
+    {
+        return *owner_;
+    }
+
+    void Visual2DComponent::Update(const double)
+    {
+    }
+
+    void Visual2DComponent::AppendDrawPackets(
+        std::vector<DrawPacket>&) const
+    {
+    }
+
+    bool Visual2DComponent::HitTest(const Point) const noexcept
+    {
+        return false;
+    }
+
+    void Visual2DComponent::OnPointerEvent(
+        const PointerEvent&,
+        std::vector<Action>&)
+    {
+    }
+
+    Visual2DNode::Visual2DNode(std::string name)
+        : id_(nextNodeId.fetch_add(1, std::memory_order_relaxed)),
+          name_(std::move(name))
+    {
+    }
+
+    Visual2DNode::~Visual2DNode() = default;
+
+    NodeId Visual2DNode::Id() const noexcept
+    {
+        return id_;
+    }
+
+    const std::string& Visual2DNode::Name() const noexcept
+    {
+        return name_;
+    }
+
+    void Visual2DNode::SetName(std::string name)
+    {
+        name_ = std::move(name);
+    }
+
+    scene::TransformNode& Visual2DNode::Transform() noexcept
+    {
+        return transform_;
+    }
+
+    const scene::TransformNode& Visual2DNode::Transform() const noexcept
+    {
+        return transform_;
+    }
+
+    Point Visual2DNode::Position() const noexcept
+    {
+        return position_;
+    }
+
+    void Visual2DNode::SetPosition(const Point position)
+    {
+        if (!IsFinite(position))
+        {
+            throw std::invalid_argument("Visual2D position must be finite.");
+        }
+        position_ = position;
+        UpdateTransformLayout();
+    }
+
+    Size Visual2DNode::NodeSize() const noexcept
+    {
+        return size_;
+    }
+
+    void Visual2DNode::SetSize(const Size size)
+    {
+        if (!IsValidSize(size))
+        {
+            throw std::invalid_argument(
+                "Visual2D node size must be finite and non-negative.");
+        }
+        size_ = size;
+        UpdateTransformLayout();
+    }
+
+    Point Visual2DNode::Pivot() const noexcept
+    {
+        return pivot_;
+    }
+
+    void Visual2DNode::SetPivot(const Point normalizedPivot)
+    {
+        if (!IsFinite(normalizedPivot))
+        {
+            throw std::invalid_argument("Visual2D pivot must be finite.");
+        }
+        pivot_ = normalizedPivot;
+        UpdateTransformLayout();
+    }
+
+    Rect Visual2DNode::Bounds() const noexcept
+    {
+        return {position_.x, position_.y, size_.width, size_.height};
+    }
+
+    void Visual2DNode::SetBounds(const Rect bounds)
+    {
+        if (!IsFinite({bounds.x, bounds.y}) ||
+            !IsValidSize({bounds.width, bounds.height}))
+        {
+            throw std::invalid_argument(
+                "Visual2D bounds must be finite and non-negative.");
+        }
+        position_ = {bounds.x, bounds.y};
+        SetSize({bounds.width, bounds.height});
+    }
+
+    Rect Visual2DNode::BoundsInCanvas() const
+    {
+        const XMMATRIX world = XMLoadFloat4x4(&transform_.WorldMatrix());
+        const XMVECTOR corners[] = {
+            XMVectorSet(0.0F, 0.0F, 0.0F, 1.0F),
+            XMVectorSet(size_.width, 0.0F, 0.0F, 1.0F),
+            XMVectorSet(0.0F, size_.height, 0.0F, 1.0F),
+            XMVectorSet(size_.width, size_.height, 0.0F, 1.0F)};
+        float minimumX = std::numeric_limits<float>::max();
+        float minimumY = std::numeric_limits<float>::max();
+        float maximumX = std::numeric_limits<float>::lowest();
+        float maximumY = std::numeric_limits<float>::lowest();
+        for (const XMVECTOR corner : corners)
+        {
+            const XMVECTOR transformed = XMVector3TransformCoord(corner, world);
+            minimumX = std::min(minimumX, XMVectorGetX(transformed));
+            minimumY = std::min(minimumY, XMVectorGetY(transformed));
+            maximumX = std::max(maximumX, XMVectorGetX(transformed));
+            maximumY = std::max(maximumY, XMVectorGetY(transformed));
+        }
+        return {minimumX, minimumY, maximumX - minimumX, maximumY - minimumY};
+    }
+
+    std::int32_t Visual2DNode::ZIndex() const noexcept
+    {
+        return zIndex_;
+    }
+
+    void Visual2DNode::SetZIndex(const std::int32_t zIndex) noexcept
+    {
+        zIndex_ = zIndex;
+    }
+
+    bool Visual2DNode::IsVisible() const noexcept
+    {
+        return visible_;
+    }
+
+    void Visual2DNode::SetVisible(const bool visible) noexcept
+    {
+        visible_ = visible;
+        if (!visible_)
+        {
+            hovered_ = false;
+            pressed_ = false;
+        }
+    }
+
+    bool Visual2DNode::IsEnabled() const noexcept
+    {
+        return enabled_;
+    }
+
+    void Visual2DNode::SetEnabled(const bool enabled) noexcept
+    {
+        enabled_ = enabled;
+        if (!enabled_)
+        {
+            hovered_ = false;
+            pressed_ = false;
+        }
+    }
+
+    bool Visual2DNode::IsHovered() const noexcept
+    {
+        return hovered_;
+    }
+
+    bool Visual2DNode::IsPressed() const noexcept
+    {
+        return pressed_;
+    }
+
+    Visual2DNode* Visual2DNode::Parent() noexcept
+    {
+        return parent_;
+    }
+
+    const Visual2DNode* Visual2DNode::Parent() const noexcept
+    {
+        return parent_;
+    }
+
+    const std::vector<std::unique_ptr<Visual2DNode>>&
+    Visual2DNode::Children() const noexcept
+    {
+        return children_;
+    }
+
+    Visual2DNode& Visual2DNode::AddChild(
+        std::unique_ptr<Visual2DNode> child)
+    {
+        if (child == nullptr || child->parent_ != nullptr)
+        {
+            throw std::invalid_argument(
+                "A Visual2D child must be non-null and unattached.");
+        }
+        child->parent_ = this;
+        child->transform_.SetParent(&transform_);
+        Visual2DNode& result = *child;
+        children_.push_back(std::move(child));
+        return result;
+    }
+
+    Visual2DNode& Visual2DNode::CreateChild(std::string name)
+    {
+        return AddChild(std::make_unique<Visual2DNode>(std::move(name)));
+    }
+
+    bool Visual2DNode::RemoveChild(const NodeId id) noexcept
+    {
+        const auto iterator = std::ranges::find_if(
+            children_,
+            [id](const std::unique_ptr<Visual2DNode>& child)
+            {
+                return child->Id() == id;
+            });
+        if (iterator == children_.end())
+        {
+            return false;
+        }
+        (*iterator)->transform_.SetParent(nullptr);
+        (*iterator)->parent_ = nullptr;
+        children_.erase(iterator);
+        return true;
+    }
+
+    Visual2DNode::HitResult Visual2DNode::HitTest(
+        const Point canvasPosition) noexcept
+    {
+        if (!visible_ || !enabled_)
+        {
+            return {};
+        }
+
+        std::vector<Visual2DNode*> paintOrder;
+        paintOrder.reserve(children_.size());
+        for (const std::unique_ptr<Visual2DNode>& child : children_)
+        {
+            paintOrder.push_back(child.get());
+        }
+        std::stable_sort(
+            paintOrder.begin(),
+            paintOrder.end(),
+            [](const Visual2DNode* left, const Visual2DNode* right)
+            {
+                return left->zIndex_ < right->zIndex_;
+            });
+        for (auto iterator = paintOrder.rbegin();
+            iterator != paintOrder.rend(); ++iterator)
+        {
+            HitResult childHit = (*iterator)->HitTest(canvasPosition);
+            if (childHit.node != nullptr)
+            {
+                return childHit;
+            }
+        }
+
+        Point local{};
+        if (!MapCanvasPointToLocal(canvasPosition, local))
+        {
+            return {};
+        }
+        for (const std::unique_ptr<Visual2DComponent>& component : components_)
+        {
+            if (component->HitTest(local))
+            {
+                return {this, local};
+            }
+        }
+        return {};
+    }
+
+    bool Visual2DNode::MapCanvasPointToLocal(
+        const Point canvasPosition,
+        Point& localPosition) noexcept
+    {
+        XMVECTOR determinant{};
+        const XMMATRIX inverse = XMMatrixInverse(
+            &determinant,
+            XMLoadFloat4x4(&transform_.WorldMatrix()));
+        if (std::abs(XMVectorGetX(determinant)) <=
+            std::numeric_limits<float>::epsilon())
+        {
+            return false;
+        }
+
+        const XMVECTOR origin = XMVector3TransformCoord(
+            XMVectorSet(canvasPosition.x, canvasPosition.y, -10000.0F, 1.0F),
+            inverse);
+        const XMVECTOR direction = XMVector3TransformNormal(
+            XMVectorSet(0.0F, 0.0F, 1.0F, 0.0F),
+            inverse);
+        const float directionZ = XMVectorGetZ(direction);
+        if (std::abs(directionZ) <= std::numeric_limits<float>::epsilon())
+        {
+            return false;
+        }
+        const float parameter = -XMVectorGetZ(origin) / directionZ;
+        if (parameter < 0.0F)
+        {
+            return false;
+        }
+        const XMVECTOR hit = XMVectorMultiplyAdd(
+            XMVectorReplicate(parameter), direction, origin);
+        localPosition = {XMVectorGetX(hit), XMVectorGetY(hit)};
+        return std::isfinite(localPosition.x) && std::isfinite(localPosition.y);
+    }
+
+    Visual2DNode* Visual2DNode::Find(const NodeId id) noexcept
+    {
+        if (id_ == id)
+        {
+            return this;
+        }
+        for (const std::unique_ptr<Visual2DNode>& child : children_)
+        {
+            if (Visual2DNode* found = child->Find(id); found != nullptr)
+            {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
+    const Visual2DNode* Visual2DNode::Find(const NodeId id) const noexcept
+    {
+        return const_cast<Visual2DNode*>(this)->Find(id);
+    }
+
+    void Visual2DNode::UpdateRecursive(const double elapsedSeconds)
+    {
+        if (!visible_)
+        {
+            return;
+        }
+        for (const std::unique_ptr<Visual2DComponent>& component : components_)
+        {
+            component->Update(elapsedSeconds);
+        }
+        for (const std::unique_ptr<Visual2DNode>& child : children_)
+        {
+            child->UpdateRecursive(elapsedSeconds);
+        }
+    }
+
+    void Visual2DNode::CollectDrawPackets(
+        std::vector<DrawPacket>& packets) const
+    {
+        if (!visible_)
+        {
+            return;
+        }
+        const std::size_t firstPacket = packets.size();
+        for (const std::unique_ptr<Visual2DComponent>& component : components_)
+        {
+            component->AppendDrawPackets(packets);
+        }
+        const XMFLOAT4X4 world = transform_.WorldMatrix();
+        for (std::size_t index = firstPacket; index < packets.size(); ++index)
+        {
+            packets[index].nodeTransform = world;
+        }
+
+        std::vector<const Visual2DNode*> paintOrder;
+        paintOrder.reserve(children_.size());
+        for (const std::unique_ptr<Visual2DNode>& child : children_)
+        {
+            paintOrder.push_back(child.get());
+        }
+        std::stable_sort(
+            paintOrder.begin(),
+            paintOrder.end(),
+            [](const Visual2DNode* left, const Visual2DNode* right)
+            {
+                return left->zIndex_ < right->zIndex_;
+            });
+        for (const Visual2DNode* child : paintOrder)
+        {
+            child->CollectDrawPackets(packets);
+        }
+    }
+
+    void Visual2DNode::DispatchPointerEvent(
+        const PointerEvent& event,
+        std::vector<Action>& actions)
+    {
+        for (const std::unique_ptr<Visual2DComponent>& component : components_)
+        {
+            component->OnPointerEvent(event, actions);
+        }
+    }
+
+    void Visual2DNode::SetHovered(const bool hovered) noexcept
+    {
+        hovered_ = hovered;
+    }
+
+    void Visual2DNode::SetPressed(const bool pressed) noexcept
+    {
+        pressed_ = pressed;
+    }
+
+    void Visual2DNode::UpdateTransformLayout() noexcept
+    {
+        transform_.SetPivot(
+            size_.width * pivot_.x,
+            size_.height * pivot_.y,
+            0.0F);
+        transform_.SetPosition(
+            position_.x - size_.width * pivot_.x,
+            position_.y - size_.height * pivot_.y,
+            transform_.Position().z);
+    }
+}

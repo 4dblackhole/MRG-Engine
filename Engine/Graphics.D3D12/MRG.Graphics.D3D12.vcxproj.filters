@@ -19,7 +19,7 @@
     <Filter Include="Shader\Generated">
       <UniqueIdentifier>{20222222-2222-4222-8222-222222222225}</UniqueIdentifier>
     </Filter>
-    <Filter Include="UI">
+    <Filter Include="Visual2D">
       <UniqueIdentifier>{20222222-2222-4222-8222-222222222226}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -42,7 +42,7 @@
     <ClInclude Include="Shader\Generated\BuiltInShaders.inl">
       <Filter>Shader\Generated</Filter>
     </ClInclude>
-    <ClInclude Include="UI\UiRendering.h"><Filter>UI</Filter></ClInclude>
+    <ClInclude Include="Visual2D\Visual2DRendering.h"><Filter>Visual2D</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Renderer\D3D12Renderer.cpp">
@@ -60,13 +60,13 @@
     <ClCompile Include="Shader\ShaderCompiler.cpp">
       <Filter>Shader</Filter>
     </ClCompile>
-    <ClCompile Include="UI\UiRendering.cpp"><Filter>UI</Filter></ClCompile>
+    <ClCompile Include="Visual2D\Visual2DRendering.cpp"><Filter>Visual2D</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shader\GenerateEmbeddedShaders.ps1">
       <Filter>Shader</Filter>
     </None>
-    <None Include="Shader\UiRectangle.hlsl">
+    <None Include="Shader\Visual2DRectangle.hlsl">
       <Filter>Shader</Filter>
     </None>
     <None Include="Shader\UnlitVertexColorInstanced.hlsl">

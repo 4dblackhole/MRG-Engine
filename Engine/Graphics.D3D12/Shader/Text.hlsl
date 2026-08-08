@@ -1,5 +1,6 @@
 struct GlyphInstance
 {
+    row_major float4x4 Transform;
     float2 PositionPixels;
     float2 SizePixels;
     float4 UvRectangle;
@@ -40,12 +41,18 @@ PixelInput VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
     float2 corner = Corners[vertexId];
     float2 pixelPosition =
         glyph.PositionPixels + corner * glyph.SizePixels;
+    float4 transformedPosition = mul(
+        float4(pixelPosition, 0.0F, 1.0F),
+        glyph.Transform);
     float2 normalizedDeviceCoordinates = float2(
-        pixelPosition.x / ViewportSizePixels.x * 2.0F - 1.0F,
-        1.0F - pixelPosition.y / ViewportSizePixels.y * 2.0F);
+        transformedPosition.x / ViewportSizePixels.x * 2.0F - 1.0F,
+        1.0F - transformedPosition.y / ViewportSizePixels.y * 2.0F);
 
     PixelInput output;
-    output.Position = float4(normalizedDeviceCoordinates, glyph.Depth, 1.0F);
+    output.Position = float4(
+        normalizedDeviceCoordinates,
+        glyph.Depth + transformedPosition.z,
+        1.0F);
     output.Uv = lerp(
         glyph.UvRectangle.xy,
         glyph.UvRectangle.zw,

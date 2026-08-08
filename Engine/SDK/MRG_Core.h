@@ -854,25 +854,94 @@ namespace mrg::geometry
 }
 // ===== END Engine\Geometry\Primitive\SphereShape.h =====
 
-// ===== BEGIN Engine\UI\Core\UiElement.h =====
+// ===== BEGIN Engine\Core\System\TransformNode.h =====
 
-// Backend-neutral retained-mode UI primitives. Coordinates use a canvas-local
-// top-left origin and increase to the right and downward.
+// System feature: reusable hierarchical local and world transforms.
+
+#include <DirectXMath.h>
+
+#include <vector>
+
+namespace mrg::scene
+{
+    // Public hierarchical local/world transform used by Client scene objects.
+    class TransformNode final
+    {
+    public:
+        TransformNode();
+        ~TransformNode();
+
+        TransformNode(const TransformNode&) = delete;
+        TransformNode& operator=(const TransformNode&) = delete;
+
+        void SetPosition(float x, float y, float z) noexcept;
+        void SetScale(float x, float y, float z) noexcept;
+        // Pivot is expressed in the node's local units. Position continues to
+        // identify the unrotated local origin, so existing 3D users keep the
+        // same behavior while 2D nodes can rotate around any point.
+        void SetPivot(float x, float y, float z) noexcept;
+        void SetRotationRollPitchYaw(
+            float pitch,
+            float yaw,
+            float roll) noexcept;
+        void SetRotationQuaternion(
+            float x,
+            float y,
+            float z,
+            float w) noexcept;
+
+        [[nodiscard]] const DirectX::XMFLOAT3& Position() const noexcept;
+        [[nodiscard]] const DirectX::XMFLOAT3& Scale() const noexcept;
+        [[nodiscard]] const DirectX::XMFLOAT3& Pivot() const noexcept;
+        [[nodiscard]] const DirectX::XMFLOAT4& Rotation() const noexcept;
+
+        // Transform links never own either endpoint. The object/scene tree is
+        // the single lifetime owner and must outlive its TransformNode links.
+        void SetParent(TransformNode* parent);
+        [[nodiscard]] TransformNode* Parent() const noexcept;
+        [[nodiscard]] const std::vector<TransformNode*>&
+            Children() const noexcept;
+
+        [[nodiscard]] const DirectX::XMFLOAT4X4& WorldMatrix() const;
+        void UpdateWorldRecursive();
+
+    private:
+        void MarkWorldDirty() noexcept;
+        void UpdateWorld() const;
+
+        DirectX::XMFLOAT3 position_{0.0F, 0.0F, 0.0F};
+        DirectX::XMFLOAT3 scale_{1.0F, 1.0F, 1.0F};
+        DirectX::XMFLOAT3 pivot_{};
+        DirectX::XMFLOAT4 rotation_{0.0F, 0.0F, 0.0F, 1.0F};
+        mutable DirectX::XMFLOAT4X4 world_{};
+        TransformNode* parent_{};
+        std::vector<TransformNode*> children_;
+        mutable bool worldDirty_{true};
+    };
+}
+// ===== END Engine\Core\System\TransformNode.h =====
+
+// ===== BEGIN Engine\Core\Visual2D\Visual2DNode.h =====
+
+// Backend-neutral 2D visual tree. A Visual2DNode is a concrete component host;
+// sprites and widgets are component combinations rather than subclasses.
+
+
+#include <DirectXMath.h>
 
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-namespace mrg::ui
+namespace mrg::visual2d
 {
-    using UiElementId = std::uint64_t;
+    using NodeId = std::uint64_t;
 
-    // Opaque image identifier allocated by the active presentation renderer.
-    // UI widgets remain backend-neutral and never store D3D12 resources.
-    struct UiImageHandle
+    struct ImageHandle
     {
         std::uint64_t value{};
 
@@ -882,29 +951,29 @@ namespace mrg::ui
         }
     };
 
-    struct UiPoint
+    struct Point
     {
         float x{};
         float y{};
     };
 
-    struct UiSize
+    struct Size
     {
         float width{};
         float height{};
     };
 
-    struct UiRect
+    struct Rect
     {
         float x{};
         float y{};
         float width{};
         float height{};
 
-        [[nodiscard]] bool Contains(UiPoint point) const noexcept;
+        [[nodiscard]] bool Contains(Point point) const noexcept;
     };
 
-    struct UiColor
+    struct Color
     {
         float red{};
         float green{};
@@ -912,44 +981,62 @@ namespace mrg::ui
         float alpha{1.0F};
     };
 
-    struct UiVisualStyle
+    struct VisualStyle
     {
-        UiColor normal{0.20F, 0.22F, 0.27F, 1.0F};
-        UiColor hovered{0.28F, 0.32F, 0.40F, 1.0F};
-        UiColor pressed{0.12F, 0.16F, 0.24F, 1.0F};
-        UiColor disabled{0.14F, 0.14F, 0.16F, 0.65F};
-        UiImageHandle normalImage{};
-        UiImageHandle hoveredImage{};
-        UiImageHandle pressedImage{};
-        UiImageHandle disabledImage{};
+        Color normal{0.20F, 0.22F, 0.27F, 1.0F};
+        Color hovered{0.28F, 0.32F, 0.40F, 1.0F};
+        Color pressed{0.12F, 0.16F, 0.24F, 1.0F};
+        Color disabled{0.14F, 0.14F, 0.16F, 0.65F};
+        ImageHandle normalImage{};
+        ImageHandle hoveredImage{};
+        ImageHandle pressedImage{};
+        ImageHandle disabledImage{};
     };
 
-    enum class UiDrawCommandType : std::uint8_t
+    enum class Anchor : std::uint8_t
+    {
+        TopLeft,
+        TopCenter,
+        TopRight,
+        MiddleLeft,
+        Center,
+        MiddleRight,
+        BottomLeft,
+        BottomCenter,
+        BottomRight,
+    };
+
+    enum class DrawPacketType : std::uint8_t
     {
         Rectangle,
         Image,
         Text,
     };
 
-    enum class UiTextAlignment : std::uint8_t
+    enum class TextAlignment : std::uint8_t
     {
         Leading,
         Center,
         Trailing,
     };
 
-    struct UiDrawCommand
+    // Bounds are local to the node. nodeTransform maps those local coordinates
+    // into the Canvas; render backends never traverse or own the node tree.
+    struct DrawPacket
     {
-        UiDrawCommandType type{UiDrawCommandType::Rectangle};
-        UiRect bounds{};
-        UiColor color{};
+        DrawPacketType type{DrawPacketType::Rectangle};
+        Rect bounds{};
+        DirectX::XMFLOAT4X4 nodeTransform{};
+        Color color{};
         std::wstring text;
         float fontSize{18.0F};
-        UiTextAlignment horizontalAlignment{UiTextAlignment::Leading};
-        UiImageHandle image{};
+        TextAlignment horizontalAlignment{TextAlignment::Leading};
+        ImageHandle image{};
+        DirectX::XMFLOAT2 uvScale{1.0F, 1.0F};
+        DirectX::XMFLOAT2 uvOffset{};
     };
 
-    enum class UiPointerEventType : std::uint8_t
+    enum class PointerEventType : std::uint8_t
     {
         Enter,
         Leave,
@@ -960,7 +1047,7 @@ namespace mrg::ui
         Click,
     };
 
-    enum class UiPointerButton : std::uint8_t
+    enum class PointerButton : std::uint8_t
     {
         None,
         Left,
@@ -968,175 +1055,533 @@ namespace mrg::ui
         Middle,
     };
 
-    struct UiPointerEvent
+    struct PointerEvent
     {
-        UiPointerEventType type{};
-        UiPointerButton button{UiPointerButton::None};
-        UiPoint canvasPosition{};
-        UiPoint localPosition{};
+        PointerEventType type{};
+        PointerButton button{PointerButton::None};
+        Point canvasPosition{};
+        Point localPosition{};
         std::int64_t timestampTicks{};
         float wheelDelta{};
     };
 
-    enum class UiActionType : std::uint8_t
+    enum class ActionType : std::uint8_t
     {
         Clicked,
         ValueChanged,
         SelectionChanged,
     };
 
-    struct UiAction
+    struct Action
     {
-        UiActionType type{};
-        UiElementId source{};
+        ActionType type{};
+        NodeId source{};
         float value{};
         std::size_t selectedIndex{};
         std::int64_t timestampTicks{};
     };
 
-    class UiCanvas;
-    class UiInputRouter;
+    class Visual2DNode;
+    class Visual2DCanvas;
+    class Visual2DInputRouter;
 
-    class UiElement
+    class Visual2DComponent
     {
     public:
-        UiElement();
-        virtual ~UiElement();
+        virtual ~Visual2DComponent();
 
-        UiElement(const UiElement&) = delete;
-        UiElement& operator=(const UiElement&) = delete;
-        UiElement(UiElement&&) = delete;
-        UiElement& operator=(UiElement&&) = delete;
+        Visual2DComponent(const Visual2DComponent&) = delete;
+        Visual2DComponent& operator=(const Visual2DComponent&) = delete;
 
-        [[nodiscard]] UiElementId Id() const noexcept;
-        [[nodiscard]] const UiRect& Bounds() const noexcept;
-        void SetBounds(const UiRect& bounds);
-        [[nodiscard]] UiRect BoundsInCanvas() const noexcept;
-        // A parent's children form one stacking context. Larger values are
-        // drawn later and hit-tested first; equal values keep insertion order.
+        [[nodiscard]] Visual2DNode& Owner() noexcept;
+        [[nodiscard]] const Visual2DNode& Owner() const noexcept;
+
+        virtual void Update(double elapsedSeconds);
+        virtual void AppendDrawPackets(std::vector<DrawPacket>& packets) const;
+        [[nodiscard]] virtual bool HitTest(Point localPosition) const noexcept;
+        virtual void OnPointerEvent(
+            const PointerEvent& event,
+            std::vector<Action>& actions);
+
+    protected:
+        Visual2DComponent() = default;
+
+    private:
+        friend class Visual2DNode;
+        Visual2DNode* owner_{};
+    };
+
+    class Visual2DNode final
+    {
+    public:
+        explicit Visual2DNode(std::string name = {});
+        ~Visual2DNode();
+
+        Visual2DNode(const Visual2DNode&) = delete;
+        Visual2DNode& operator=(const Visual2DNode&) = delete;
+
+        [[nodiscard]] NodeId Id() const noexcept;
+        [[nodiscard]] const std::string& Name() const noexcept;
+        void SetName(std::string name);
+
+        [[nodiscard]] scene::TransformNode& Transform() noexcept;
+        [[nodiscard]] const scene::TransformNode& Transform() const noexcept;
+        // Position is measured from the selected parent/anchor to this node's
+        // normalized Pivot. It is converted to the Transform's top-left
+        // position whenever position, size or Pivot changes.
+        [[nodiscard]] Point Position() const noexcept;
+        void SetPosition(Point position);
+        [[nodiscard]] Size NodeSize() const noexcept;
+        void SetSize(Size size);
+        [[nodiscard]] Point Pivot() const noexcept;
+        void SetPivot(Point normalizedPivot);
+        [[nodiscard]] Rect Bounds() const noexcept;
+        void SetBounds(Rect bounds);
+        [[nodiscard]] Rect BoundsInCanvas() const;
+
         [[nodiscard]] std::int32_t ZIndex() const noexcept;
         void SetZIndex(std::int32_t zIndex) noexcept;
-
         [[nodiscard]] bool IsVisible() const noexcept;
         void SetVisible(bool visible) noexcept;
         [[nodiscard]] bool IsEnabled() const noexcept;
         void SetEnabled(bool enabled) noexcept;
-        [[nodiscard]] bool IsHitTestVisible() const noexcept;
-        void SetHitTestVisible(bool visible) noexcept;
         [[nodiscard]] bool IsHovered() const noexcept;
         [[nodiscard]] bool IsPressed() const noexcept;
 
-        [[nodiscard]] const UiVisualStyle& Style() const noexcept;
-        void SetStyle(const UiVisualStyle& style) noexcept;
+        [[nodiscard]] Visual2DNode* Parent() noexcept;
+        [[nodiscard]] const Visual2DNode* Parent() const noexcept;
+        [[nodiscard]] const std::vector<std::unique_ptr<Visual2DNode>>&
+            Children() const noexcept;
+        Visual2DNode& AddChild(std::unique_ptr<Visual2DNode> child);
+        [[nodiscard]] Visual2DNode& CreateChild(std::string name = {});
+        [[nodiscard]] bool RemoveChild(NodeId id) noexcept;
 
-        [[nodiscard]] UiElement* Parent() noexcept;
-        [[nodiscard]] const UiElement* Parent() const noexcept;
-        [[nodiscard]] const std::vector<std::unique_ptr<UiElement>>& Children()
-            const noexcept;
-
-        UiElement& AddChild(std::unique_ptr<UiElement> child);
-
-        template <typename ElementType, typename... ArgumentTypes>
-            requires std::is_base_of_v<UiElement, ElementType>
-        ElementType& EmplaceChild(ArgumentTypes&&... arguments)
+        template <typename ComponentType, typename... ArgumentTypes>
+            requires std::is_base_of_v<Visual2DComponent, ComponentType>
+        ComponentType& AddComponent(ArgumentTypes&&... arguments)
         {
-            auto child = std::make_unique<ElementType>(
+            if (GetComponent<ComponentType>() != nullptr)
+            {
+                throw std::logic_error(
+                    "A Visual2D node cannot contain the same component type twice.");
+            }
+            auto component = std::make_unique<ComponentType>(
                 std::forward<ArgumentTypes>(arguments)...);
-            ElementType& result = *child;
-            AddChild(std::move(child));
+            component->owner_ = this;
+            ComponentType& result = *component;
+            components_.push_back(std::move(component));
             return result;
         }
 
-        [[nodiscard]] bool RemoveChild(UiElementId id) noexcept;
+        template <typename ComponentType>
+            requires std::is_base_of_v<Visual2DComponent, ComponentType>
+        [[nodiscard]] ComponentType* GetComponent() noexcept
+        {
+            for (const std::unique_ptr<Visual2DComponent>& component :
+                components_)
+            {
+                if (auto* result = dynamic_cast<ComponentType*>(component.get()))
+                {
+                    return result;
+                }
+            }
+            return nullptr;
+        }
 
-    protected:
-        [[nodiscard]] UiColor CurrentBackgroundColor() const noexcept;
-        [[nodiscard]] UiImageHandle CurrentBackgroundImage() const noexcept;
-        virtual void AppendDrawCommands(
-            std::vector<UiDrawCommand>& commands,
-            const UiRect& absoluteBounds) const;
-        virtual void OnPointerEvent(
-            const UiPointerEvent& event,
-            std::vector<UiAction>& actions);
-        [[nodiscard]] virtual bool ContainsLocalPoint(
-            UiPoint localPosition) const noexcept;
+        template <typename ComponentType>
+            requires std::is_base_of_v<Visual2DComponent, ComponentType>
+        [[nodiscard]] const ComponentType* GetComponent() const noexcept
+        {
+            return const_cast<Visual2DNode*>(this)->GetComponent<ComponentType>();
+        }
+
+        template <typename ComponentType>
+            requires std::is_base_of_v<Visual2DComponent, ComponentType>
+        [[nodiscard]] bool RemoveComponent() noexcept
+        {
+            for (auto iterator = components_.begin();
+                iterator != components_.end(); ++iterator)
+            {
+                if (dynamic_cast<ComponentType*>(iterator->get()) != nullptr)
+                {
+                    components_.erase(iterator);
+                    return true;
+                }
+            }
+            return false;
+        }
 
     private:
-        friend class UiCanvas;
-        friend class UiInputRouter;
+        friend class Visual2DCanvas;
+        friend class Visual2DInputRouter;
 
         struct HitResult
         {
-            UiElement* element{};
-            UiPoint localPosition{};
+            Visual2DNode* node{};
+            Point localPosition{};
         };
 
-        [[nodiscard]] HitResult HitTest(UiPoint parentPosition) noexcept;
-        [[nodiscard]] UiElement* Find(UiElementId id) noexcept;
-        [[nodiscard]] const UiElement* Find(UiElementId id) const noexcept;
-        void CollectDrawCommands(
-            std::vector<UiDrawCommand>& commands,
-            UiPoint parentOrigin) const;
+        [[nodiscard]] HitResult HitTest(Point canvasPosition) noexcept;
+        [[nodiscard]] bool MapCanvasPointToLocal(
+            Point canvasPosition,
+            Point& localPosition) noexcept;
+        [[nodiscard]] Visual2DNode* Find(NodeId id) noexcept;
+        [[nodiscard]] const Visual2DNode* Find(NodeId id) const noexcept;
+        void UpdateRecursive(double elapsedSeconds);
+        void CollectDrawPackets(std::vector<DrawPacket>& packets) const;
+        void DispatchPointerEvent(
+            const PointerEvent& event,
+            std::vector<Action>& actions);
         void SetHovered(bool hovered) noexcept;
         void SetPressed(bool pressed) noexcept;
+        void UpdateTransformLayout() noexcept;
 
-        UiElementId id_{};
-        UiRect bounds_{};
+        NodeId id_{};
+        std::string name_;
+        scene::TransformNode transform_;
+        Point position_{};
+        Size size_{};
+        Point pivot_{};
         std::int32_t zIndex_{};
-        UiVisualStyle style_{};
-        UiElement* parent_{};
-        std::vector<std::unique_ptr<UiElement>> children_;
+        Visual2DNode* parent_{};
+        std::vector<std::unique_ptr<Visual2DNode>> children_;
+        std::vector<std::unique_ptr<Visual2DComponent>> components_;
         bool visible_{true};
         bool enabled_{true};
-        bool hitTestVisible_{true};
         bool hovered_{};
         bool pressed_{};
     };
 }
-// ===== END Engine\UI\Core\UiElement.h =====
+// ===== END Engine\Core\Visual2D\Visual2DNode.h =====
 
-// ===== BEGIN Engine\UI\Core\UiCanvas.h =====
+// ===== BEGIN Engine\Core\Visual2D\Visual2DCanvas.h =====
 
 
-#include <span>
+#include <array>
+#include <optional>
+#include <vector>
 
-namespace mrg::ui
+namespace mrg::visual2d
 {
-    class UiCanvas final
+    enum class CanvasScaleMode : std::uint8_t
+    {
+        Fixed,
+        FixedHeight,
+    };
+
+    // Owns one Visual2D tree and nine non-rendering anchor nodes. FixedHeight
+    // keeps the logical height constant and expands only the logical width.
+    class Visual2DCanvas final
     {
     public:
-        explicit UiCanvas(UiSize logicalSize);
+        explicit Visual2DCanvas(
+            Size referenceSize = {1280.0F, 720.0F},
+            CanvasScaleMode scaleMode = CanvasScaleMode::FixedHeight);
 
-        [[nodiscard]] UiSize LogicalSize() const noexcept;
-        void SetLogicalSize(UiSize logicalSize);
-        [[nodiscard]] UiElement& Root() noexcept;
-        [[nodiscard]] const UiElement& Root() const noexcept;
-        [[nodiscard]] UiElement* FindElement(UiElementId id) noexcept;
-        [[nodiscard]] const UiElement* FindElement(UiElementId id) const noexcept;
+        [[nodiscard]] Size ReferenceSize() const noexcept;
+        [[nodiscard]] Size LogicalSize() const noexcept;
+        [[nodiscard]] Size ViewportSize() const noexcept;
+        [[nodiscard]] float PixelScale() const noexcept;
+        [[nodiscard]] CanvasScaleMode ScaleMode() const noexcept;
+        void SetViewportSize(Size viewportSize);
+        void SetFixedLogicalSize(Size logicalSize);
 
-        [[nodiscard]] std::vector<UiDrawCommand> BuildDrawList() const;
-        [[nodiscard]] std::vector<UiAction> TakeActions();
+        [[nodiscard]] Visual2DNode& Root() noexcept;
+        [[nodiscard]] const Visual2DNode& Root() const noexcept;
+        [[nodiscard]] Visual2DNode& AnchorNode(Anchor anchor) noexcept;
+        [[nodiscard]] const Visual2DNode& AnchorNode(Anchor anchor) const noexcept;
+        [[nodiscard]] Visual2DNode& CreateNode(
+            Anchor anchor = Anchor::TopLeft,
+            std::string name = {});
+        [[nodiscard]] Visual2DNode* FindNode(NodeId id) noexcept;
+        [[nodiscard]] const Visual2DNode* FindNode(NodeId id) const noexcept;
+        [[nodiscard]] bool RemoveNode(NodeId id) noexcept;
+
+        void Update(double elapsedSeconds);
+        [[nodiscard]] std::vector<DrawPacket> BuildDrawList() const;
+        [[nodiscard]] std::vector<Action> TakeActions();
 
     private:
-        friend class UiInputRouter;
+        friend class Visual2DInputRouter;
 
-        [[nodiscard]] UiElement::HitResult HitTest(UiPoint position) noexcept;
+        [[nodiscard]] Visual2DNode::HitResult HitTest(Point position) noexcept;
+        void CreateAnchors();
+        void UpdateAnchorTransforms();
+        [[nodiscard]] static std::size_t AnchorIndex(Anchor anchor) noexcept;
+        [[nodiscard]] static Point AnchorPivot(Anchor anchor) noexcept;
 
-        UiSize logicalSize_{};
-        UiElement root_;
-        std::vector<UiAction> actions_;
+        Size referenceSize_{};
+        Size logicalSize_{};
+        Size viewportSize_{};
+        float pixelScale_{1.0F};
+        CanvasScaleMode scaleMode_{CanvasScaleMode::FixedHeight};
+        Visual2DNode root_{"Visual2DCanvas.Root"};
+        std::array<NodeId, 9> anchorIds_{};
+        std::vector<Action> actions_;
+    };
+
+    [[nodiscard]] std::optional<Point> MapScreenPointer(
+        Point screenPosition,
+        Size viewportSize,
+        const Visual2DCanvas& canvas,
+        Point canvasOrigin = {}) noexcept;
+}
+// ===== END Engine\Core\Visual2D\Visual2DCanvas.h =====
+
+// ===== BEGIN Engine\Core\Visual2D\Visual2DComponents.h =====
+
+
+#include <functional>
+#include <optional>
+#include <string_view>
+
+namespace mrg::visual2d
+{
+    class SpriteVisualComponent final : public Visual2DComponent
+    {
+    public:
+        [[nodiscard]] const VisualStyle& Style() const noexcept;
+        void SetStyle(const VisualStyle& style) noexcept;
+        void SetImage(ImageHandle image) noexcept;
+        void SetTint(Color tint) noexcept;
+        [[nodiscard]] DirectX::XMFLOAT2 UvScale() const noexcept;
+        [[nodiscard]] DirectX::XMFLOAT2 UvOffset() const noexcept;
+        void SetUvTransform(
+            DirectX::XMFLOAT2 scale,
+            DirectX::XMFLOAT2 offset) noexcept;
+
+        void AppendDrawPackets(
+            std::vector<DrawPacket>& packets) const override;
+
+    private:
+        [[nodiscard]] Color CurrentColor() const noexcept;
+        [[nodiscard]] ImageHandle CurrentImage() const noexcept;
+
+        VisualStyle style_{};
+        DirectX::XMFLOAT2 uvScale_{1.0F, 1.0F};
+        DirectX::XMFLOAT2 uvOffset_{};
+    };
+
+    class TextVisualComponent final : public Visual2DComponent
+    {
+    public:
+        explicit TextVisualComponent(std::wstring text = {});
+
+        [[nodiscard]] std::wstring_view Text() const noexcept;
+        void SetText(std::wstring text);
+        [[nodiscard]] float FontSize() const noexcept;
+        void SetFontSize(float fontSize);
+        [[nodiscard]] Color TextColor() const noexcept;
+        void SetTextColor(Color color) noexcept;
+        [[nodiscard]] TextAlignment HorizontalAlignment() const noexcept;
+        void SetHorizontalAlignment(TextAlignment alignment) noexcept;
+        [[nodiscard]] Rect ContentBounds() const noexcept;
+        void SetContentBounds(Rect bounds);
+
+        void AppendDrawPackets(
+            std::vector<DrawPacket>& packets) const override;
+
+    private:
+        std::wstring text_;
+        float fontSize_{18.0F};
+        Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
+        TextAlignment alignment_{TextAlignment::Leading};
+        std::optional<Rect> contentBounds_;
+    };
+
+    class RectangleCollider2DComponent final : public Visual2DComponent
+    {
+    public:
+        RectangleCollider2DComponent() = default;
+        explicit RectangleCollider2DComponent(Rect localBounds);
+
+        void SetLocalBounds(Rect localBounds);
+        void UseNodeBounds() noexcept;
+        [[nodiscard]] bool HitTest(Point localPosition) const noexcept override;
+
+    private:
+        std::optional<Rect> localBounds_;
+    };
+
+    class CircleCollider2DComponent final : public Visual2DComponent
+    {
+    public:
+        CircleCollider2DComponent(Point center, float radius);
+        [[nodiscard]] Point Center() const noexcept;
+        [[nodiscard]] float Radius() const noexcept;
+        void SetCircle(Point center, float radius);
+        [[nodiscard]] bool HitTest(Point localPosition) const noexcept override;
+
+    private:
+        Point center_{};
+        float radius_{};
+    };
+
+    using HitTestHandler = std::function<bool(
+        const Visual2DNode&,
+        Point)>;
+
+    // Strategy component for triangles, masks or game-specific collision.
+    class CustomCollider2DComponent final : public Visual2DComponent
+    {
+    public:
+        explicit CustomCollider2DComponent(HitTestHandler handler);
+        void SetHandler(HitTestHandler handler);
+        [[nodiscard]] bool HitTest(Point localPosition) const noexcept override;
+
+    private:
+        HitTestHandler handler_;
+    };
+
+    using PointerHandler = std::function<void(
+        Visual2DNode&,
+        const PointerEvent&,
+        std::vector<Action>&)>;
+
+    class PointerReceiverComponent final : public Visual2DComponent
+    {
+    public:
+        explicit PointerReceiverComponent(PointerHandler handler = {});
+        void SetHandler(PointerHandler handler);
+        void OnPointerEvent(
+            const PointerEvent& event,
+            std::vector<Action>& actions) override;
+
+    private:
+        PointerHandler handler_;
+    };
+
+    using AnimationHandler = std::function<void(Visual2DNode&, double)>;
+
+    class AnimatorComponent final : public Visual2DComponent
+    {
+    public:
+        explicit AnimatorComponent(AnimationHandler handler = {});
+        void SetHandler(AnimationHandler handler);
+        void Update(double elapsedSeconds) override;
+
+    private:
+        AnimationHandler handler_;
+    };
+
+    class ButtonBehaviorComponent final : public Visual2DComponent
+    {
+    public:
+        void OnPointerEvent(
+            const PointerEvent& event,
+            std::vector<Action>& actions) override;
+    };
+
+    class ToggleBehaviorComponent final : public Visual2DComponent
+    {
+    public:
+        explicit ToggleBehaviorComponent(bool checked = false);
+        [[nodiscard]] bool IsChecked() const noexcept;
+        void SetChecked(bool checked) noexcept;
+
+        void AppendDrawPackets(
+            std::vector<DrawPacket>& packets) const override;
+        void OnPointerEvent(
+            const PointerEvent& event,
+            std::vector<Action>& actions) override;
+
+    private:
+        bool checked_{};
+    };
+
+    class SliderBehaviorComponent final : public Visual2DComponent
+    {
+    public:
+        explicit SliderBehaviorComponent(float value = 0.0F);
+        [[nodiscard]] float Value() const noexcept;
+        void SetValue(float value) noexcept;
+
+        void AppendDrawPackets(
+            std::vector<DrawPacket>& packets) const override;
+        void OnPointerEvent(
+            const PointerEvent& event,
+            std::vector<Action>& actions) override;
+
+    private:
+        void UpdateFromPointer(
+            const PointerEvent& event,
+            std::vector<Action>& actions);
+        float value_{};
+    };
+
+    class CycleSelectorBehaviorComponent final : public Visual2DComponent
+    {
+    public:
+        void SetItems(std::vector<std::wstring> items);
+        [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
+        [[nodiscard]] std::size_t SelectedIndex() const noexcept;
+        void SetSelectedIndex(std::size_t index);
+        void OnPointerEvent(
+            const PointerEvent& event,
+            std::vector<Action>& actions) override;
+
+    private:
+        void RefreshText();
+        std::vector<std::wstring> items_;
+        std::size_t selectedIndex_{};
+    };
+
+    class ComboBoxBehaviorComponent final : public Visual2DComponent
+    {
+    public:
+        void SetItems(std::vector<std::wstring> items);
+        [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
+        [[nodiscard]] std::size_t SelectedIndex() const noexcept;
+        void SetSelectedIndex(std::size_t index);
+        void SetMaxVisibleItems(std::size_t maxVisibleItems);
+        [[nodiscard]] std::size_t MaxVisibleItems() const noexcept;
+        void SetItemHeight(float itemHeight);
+        [[nodiscard]] float ItemHeight() const noexcept;
+        void SetFontSize(float fontSize);
+        [[nodiscard]] bool IsExpanded() const noexcept;
+        void Collapse() noexcept;
+
+        void AppendDrawPackets(
+            std::vector<DrawPacket>& packets) const override;
+        [[nodiscard]] bool HitTest(Point localPosition) const noexcept override;
+        void OnPointerEvent(
+            const PointerEvent& event,
+            std::vector<Action>& actions) override;
+
+    private:
+        [[nodiscard]] Rect PopupBounds() const noexcept;
+        [[nodiscard]] std::size_t VisibleItemCount() const noexcept;
+        [[nodiscard]] std::optional<std::size_t> ItemIndexAt(
+            Point localPosition) const noexcept;
+        void EnsureSelectedItemVisible() noexcept;
+        void ScrollBy(int itemDelta) noexcept;
+        void UpdateHoveredItem(Point localPosition) noexcept;
+        [[nodiscard]] const VisualStyle& OwnerStyle() const noexcept;
+
+        std::vector<std::wstring> items_;
+        std::size_t selectedIndex_{};
+        std::size_t firstVisibleIndex_{};
+        std::size_t maxVisibleItems_{4};
+        std::size_t hoveredItemIndex_{static_cast<std::size_t>(-1)};
+        float itemHeight_{36.0F};
+        float fontSize_{17.0F};
+        float dragStartY_{};
+        std::size_t dragStartFirstVisibleIndex_{};
+        bool expanded_{};
+        bool trackingDrag_{};
+        bool dragMoved_{};
     };
 }
-// ===== END Engine\UI\Core\UiCanvas.h =====
+// ===== END Engine\Core\Visual2D\Visual2DComponents.h =====
 
-// ===== BEGIN Engine\UI\Input\UiInputRouter.h =====
+// ===== BEGIN Engine\Core\Visual2D\Visual2DInputRouter.h =====
 
 
-namespace mrg::ui
+namespace mrg::visual2d
 {
-    struct UiPointerInput
+    struct PointerInput
     {
-        UiPoint position{};
+        Point position{};
         bool available{true};
         bool leftButtonDown{};
         bool leftButtonPressed{};
@@ -1145,36 +1590,36 @@ namespace mrg::ui
         std::int64_t timestampTicks{};
     };
 
-    // Converts pointer snapshots into enter/leave/capture/click semantics.
-    // Capture keeps a pressed control as the event target until release.
-    class UiInputRouter final
+    // Converts pointer snapshots into hover, capture, release and click events.
+    class Visual2DInputRouter final
     {
     public:
-        void Process(UiCanvas& canvas, const UiPointerInput& input);
-        void Reset(UiCanvas& canvas) noexcept;
+        void Process(Visual2DCanvas& canvas, const PointerInput& input);
+        void Reset(Visual2DCanvas& canvas) noexcept;
 
-        [[nodiscard]] UiElementId HoveredElement() const noexcept;
-        [[nodiscard]] UiElementId CapturedElement() const noexcept;
+        [[nodiscard]] NodeId HoveredNode() const noexcept;
+        [[nodiscard]] NodeId CapturedNode() const noexcept;
 
     private:
         void Dispatch(
-            UiCanvas& canvas,
-            UiElement& element,
-            UiPointerEventType type,
-            const UiPointerInput& input,
-            UiPointerButton button = UiPointerButton::None);
+            Visual2DCanvas& canvas,
+            Visual2DNode& node,
+            PointerEventType type,
+            const PointerInput& input,
+            PointerButton button = PointerButton::None);
         void ChangeHovered(
-            UiCanvas& canvas,
-            UiElement* next,
-            const UiPointerInput& input);
+            Visual2DCanvas& canvas,
+            Visual2DNode* next,
+            Point nextLocalPosition,
+            const PointerInput& input);
 
-        UiElementId hovered_{};
-        UiElementId captured_{};
+        NodeId hovered_{};
+        NodeId captured_{};
     };
 }
-// ===== END Engine\UI\Input\UiInputRouter.h =====
+// ===== END Engine\Core\Visual2D\Visual2DInputRouter.h =====
 
-// ===== BEGIN Engine\UI\Surface\UiSurface.h =====
+// ===== BEGIN Engine\Core\Visual2D\Visual2DSurface.h =====
 
 
 #include <DirectXMath.h>
@@ -1183,9 +1628,9 @@ namespace mrg::ui
 #include <optional>
 #include <vector>
 
-namespace mrg::ui
+namespace mrg::visual2d
 {
-    struct UiSurfaceHit
+    struct SurfaceHit
     {
         float rayParameter{};
         DirectX::XMFLOAT3 worldPosition{};
@@ -1193,20 +1638,20 @@ namespace mrg::ui
         DirectX::XMFLOAT2 uv{};
     };
 
-    class IUiSurface
+    class IVisual2DSurface
     {
     public:
-        virtual ~IUiSurface();
-        [[nodiscard]] virtual std::optional<UiSurfaceHit> Raycast(
+        virtual ~IVisual2DSurface();
+        [[nodiscard]] virtual std::optional<SurfaceHit> Raycast(
             const collision::Ray3D& worldRay) const noexcept = 0;
     };
 
     // Finite XY plane. Local UV (0,0) is the upper-left corner, matching the
     // RectangleShape and canvas coordinate convention.
-    class PlaneUiSurface final : public IUiSurface
+    class PlaneVisual2DSurface final : public IVisual2DSurface
     {
     public:
-        PlaneUiSurface(
+        PlaneVisual2DSurface(
             float width,
             float height,
             const DirectX::XMFLOAT4X4& worldTransform,
@@ -1216,8 +1661,8 @@ namespace mrg::ui
             const DirectX::XMFLOAT4X4& worldTransform) noexcept;
         [[nodiscard]] const DirectX::XMFLOAT4X4& WorldTransform()
             const noexcept;
-        [[nodiscard]] UiSize WorldSize() const noexcept;
-        [[nodiscard]] std::optional<UiSurfaceHit> Raycast(
+        [[nodiscard]] Size WorldSize() const noexcept;
+        [[nodiscard]] std::optional<SurfaceHit> Raycast(
             const collision::Ray3D& worldRay) const noexcept override;
 
     private:
@@ -1229,11 +1674,11 @@ namespace mrg::ui
 
     // Copies CPU positions/UVs from a Shape. This O(triangle-count) baseline
     // is intended for modest interactive surfaces; a later BVH can replace
-    // the query internally without changing IUiSurface or client code.
-    class MeshUvUiSurface final : public IUiSurface
+    // the query internally without changing IVisual2DSurface or client code.
+    class MeshUvVisual2DSurface final : public IVisual2DSurface
     {
     public:
-        MeshUvUiSurface(
+        MeshUvVisual2DSurface(
             const geometry::Shape& shape,
             const DirectX::XMFLOAT4X4& worldTransform,
             bool twoSided = false);
@@ -1242,7 +1687,7 @@ namespace mrg::ui
             const DirectX::XMFLOAT4X4& worldTransform) noexcept;
         [[nodiscard]] const DirectX::XMFLOAT4X4& WorldTransform()
             const noexcept;
-        [[nodiscard]] std::optional<UiSurfaceHit> Raycast(
+        [[nodiscard]] std::optional<SurfaceHit> Raycast(
             const collision::Ray3D& worldRay) const noexcept override;
 
     private:
@@ -1259,244 +1704,84 @@ namespace mrg::ui
     };
 
     // Owns a logical Canvas and composes it with a replaceable world surface.
-    // It does not inherit UiCanvas because presentation is not UI ownership.
-    class WorldSpaceCanvas final
+    // It does not inherit Visual2DCanvas because presentation is not content
+    // ownership.
+    class WorldSpaceVisual2DCanvas final
     {
     public:
-        WorldSpaceCanvas(
-            UiSize logicalSize,
-            std::unique_ptr<IUiSurface> surface);
+        WorldSpaceVisual2DCanvas(
+            Size logicalSize,
+            std::unique_ptr<IVisual2DSurface> surface);
 
-        [[nodiscard]] UiCanvas& Canvas() noexcept;
-        [[nodiscard]] const UiCanvas& Canvas() const noexcept;
-        [[nodiscard]] IUiSurface& Surface() noexcept;
-        [[nodiscard]] const IUiSurface& Surface() const noexcept;
-        void SetSurface(std::unique_ptr<IUiSurface> surface);
-        [[nodiscard]] std::optional<UiPoint> MapPointer(
+        [[nodiscard]] Visual2DCanvas& Canvas() noexcept;
+        [[nodiscard]] const Visual2DCanvas& Canvas() const noexcept;
+        [[nodiscard]] IVisual2DSurface& Surface() noexcept;
+        [[nodiscard]] const IVisual2DSurface& Surface() const noexcept;
+        void SetSurface(std::unique_ptr<IVisual2DSurface> surface);
+        [[nodiscard]] std::optional<Point> MapPointer(
             const collision::Ray3D& worldRay) const noexcept;
 
     private:
-        UiCanvas canvas_;
-        std::unique_ptr<IUiSurface> surface_;
+        Visual2DCanvas canvas_;
+        std::unique_ptr<IVisual2DSurface> surface_;
     };
-
-    [[nodiscard]] std::optional<UiPoint> MapScreenPointer(
-        UiPoint screenPosition,
-        UiSize viewportSize,
-        UiSize canvasSize,
-        UiPoint canvasOrigin = {}) noexcept;
 
     [[nodiscard]] std::optional<collision::Ray3D> CreateWorldPointerRay(
-        UiPoint screenPosition,
-        UiSize viewportSize,
+        Point screenPosition,
+        Size viewportSize,
         const DirectX::XMFLOAT4X4& viewProjection) noexcept;
 }
-// ===== END Engine\UI\Surface\UiSurface.h =====
+// ===== END Engine\Core\Visual2D\Visual2DSurface.h =====
 
-// ===== BEGIN Engine\UI\Widget\UiWidgets.h =====
+// ===== BEGIN Engine\Core\Visual2D\Visual2DWidgets.h =====
 
 
-#include <optional>
-#include <string_view>
-
-namespace mrg::ui
+namespace mrg::visual2d
 {
-    class UiPanel : public UiElement
-    {
-    public:
-        UiPanel() = default;
-        ~UiPanel() override = default;
-    };
-
-    class UiLabel final : public UiElement
-    {
-    public:
-        explicit UiLabel(std::wstring text = {});
-
-        [[nodiscard]] std::wstring_view Text() const noexcept;
-        void SetText(std::wstring text);
-        [[nodiscard]] float FontSize() const noexcept;
-        void SetFontSize(float fontSize);
-        [[nodiscard]] UiColor TextColor() const noexcept;
-        void SetTextColor(UiColor color) noexcept;
-        void SetHorizontalAlignment(UiTextAlignment alignment) noexcept;
-
-    protected:
-        void AppendDrawCommands(
-            std::vector<UiDrawCommand>& commands,
-            const UiRect& absoluteBounds) const override;
-
-    private:
-        std::wstring text_;
-        float fontSize_{18.0F};
-        UiColor textColor_{1.0F, 1.0F, 1.0F, 1.0F};
-        UiTextAlignment alignment_{UiTextAlignment::Leading};
-    };
-
-    // Displays one renderer-owned raster image. UiImageHandle is opaque so
-    // the retained UI tree stays independent from D3D12 texture resources.
-    class UiImage final : public UiElement
-    {
-    public:
-        UiImage() = default;
-
-        [[nodiscard]] UiImageHandle Image() const noexcept;
-        void SetImage(UiImageHandle image) noexcept;
-        [[nodiscard]] UiColor Tint() const noexcept;
-        void SetTint(UiColor tint) noexcept;
-
-    protected:
-        void AppendDrawCommands(
-            std::vector<UiDrawCommand>& commands,
-            const UiRect& absoluteBounds) const override;
-
-    private:
-        UiImageHandle image_{};
-        UiColor tint_{1.0F, 1.0F, 1.0F, 1.0F};
-    };
-
-    class UiButton : public UiElement
-    {
-    public:
-        explicit UiButton(std::wstring text = {});
-
-        [[nodiscard]] std::wstring_view Text() const noexcept;
-        void SetText(std::wstring text);
-        void SetFontSize(float fontSize);
-
-    protected:
-        void AppendDrawCommands(
-            std::vector<UiDrawCommand>& commands,
-            const UiRect& absoluteBounds) const override;
-        void OnPointerEvent(
-            const UiPointerEvent& event,
-            std::vector<UiAction>& actions) override;
-
-        [[nodiscard]] float FontSize() const noexcept;
-
-    private:
-        std::wstring text_;
-        float fontSize_{17.0F};
-    };
-
-    class UiToggle final : public UiButton
-    {
-    public:
-        explicit UiToggle(std::wstring text = {}, bool checked = false);
-
-        [[nodiscard]] bool IsChecked() const noexcept;
-        void SetChecked(bool checked) noexcept;
-
-    protected:
-        void AppendDrawCommands(
-            std::vector<UiDrawCommand>& commands,
-            const UiRect& absoluteBounds) const override;
-        void OnPointerEvent(
-            const UiPointerEvent& event,
-            std::vector<UiAction>& actions) override;
-
-    private:
-        bool checked_{};
-    };
-
-    class UiSlider final : public UiElement
-    {
-    public:
-        explicit UiSlider(float value = 0.0F);
-
-        [[nodiscard]] float Value() const noexcept;
-        void SetValue(float value) noexcept;
-
-    protected:
-        void AppendDrawCommands(
-            std::vector<UiDrawCommand>& commands,
-            const UiRect& absoluteBounds) const override;
-        void OnPointerEvent(
-            const UiPointerEvent& event,
-            std::vector<UiAction>& actions) override;
-
-    private:
-        void UpdateFromPointer(
-            const UiPointerEvent& event,
-            std::vector<UiAction>& actions);
-
-        float value_{};
-    };
-
-    // Preserves the original click-to-advance selection behavior for compact
-    // settings such as AUTO/WASAPI/ASIO where a popup would add no value.
-    class UiCycleSelector final : public UiButton
-    {
-    public:
-        UiCycleSelector() = default;
-
-        void SetItems(std::vector<std::wstring> items);
-        [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
-        [[nodiscard]] std::size_t SelectedIndex() const noexcept;
-        void SetSelectedIndex(std::size_t index);
-
-    protected:
-        void OnPointerEvent(
-            const UiPointerEvent& event,
-            std::vector<UiAction>& actions) override;
-
-    private:
-        void RefreshText();
-
-        std::vector<std::wstring> items_;
-        std::size_t selectedIndex_{};
-    };
-
-    class UiComboBox final : public UiButton
-    {
-    public:
-        UiComboBox() = default;
-
-        void SetItems(std::vector<std::wstring> items);
-        [[nodiscard]] const std::vector<std::wstring>& Items() const noexcept;
-        [[nodiscard]] std::size_t SelectedIndex() const noexcept;
-        void SetSelectedIndex(std::size_t index);
-        void SetMaxVisibleItems(std::size_t maxVisibleItems);
-        [[nodiscard]] std::size_t MaxVisibleItems() const noexcept;
-        void SetItemHeight(float itemHeight);
-        [[nodiscard]] float ItemHeight() const noexcept;
-        [[nodiscard]] bool IsExpanded() const noexcept;
-        void Collapse() noexcept;
-
-    protected:
-        void AppendDrawCommands(
-            std::vector<UiDrawCommand>& commands,
-            const UiRect& absoluteBounds) const override;
-        void OnPointerEvent(
-            const UiPointerEvent& event,
-            std::vector<UiAction>& actions) override;
-        [[nodiscard]] bool ContainsLocalPoint(
-            UiPoint localPosition) const noexcept override;
-
-    private:
-        void RefreshText();
-        [[nodiscard]] UiRect PopupBounds() const noexcept;
-        [[nodiscard]] std::size_t VisibleItemCount() const noexcept;
-        [[nodiscard]] std::optional<std::size_t> ItemIndexAt(
-            UiPoint localPosition) const noexcept;
-        void EnsureSelectedItemVisible() noexcept;
-        void ScrollBy(int itemDelta) noexcept;
-        void UpdateHoveredItem(UiPoint localPosition) noexcept;
-
-        std::vector<std::wstring> items_;
-        std::size_t selectedIndex_{};
-        std::size_t firstVisibleIndex_{};
-        std::size_t maxVisibleItems_{4};
-        std::size_t hoveredItemIndex_{static_cast<std::size_t>(-1)};
-        float itemHeight_{36.0F};
-        float dragStartY_{};
-        std::size_t dragStartFirstVisibleIndex_{};
-        bool expanded_{};
-        bool trackingDrag_{};
-        bool dragMoved_{};
-    };
+    // Widget factories assemble reusable component combinations. The returned
+    // object is still a regular Visual2DNode and can gain or lose components.
+    [[nodiscard]] Visual2DNode& CreateSprite(
+        Visual2DNode& parent,
+        Rect bounds,
+        ImageHandle image = {},
+        std::string name = "Sprite");
+    [[nodiscard]] Visual2DNode& CreatePanel(
+        Visual2DNode& parent,
+        Rect bounds,
+        std::string name = "Panel");
+    [[nodiscard]] Visual2DNode& CreateLabel(
+        Visual2DNode& parent,
+        Rect bounds,
+        std::wstring text,
+        std::string name = "Label");
+    [[nodiscard]] Visual2DNode& CreateButton(
+        Visual2DNode& parent,
+        Rect bounds,
+        std::wstring text,
+        std::string name = "Button");
+    [[nodiscard]] Visual2DNode& CreateToggle(
+        Visual2DNode& parent,
+        Rect bounds,
+        std::wstring text,
+        bool checked = false,
+        std::string name = "Toggle");
+    [[nodiscard]] Visual2DNode& CreateSlider(
+        Visual2DNode& parent,
+        Rect bounds,
+        float value = 0.0F,
+        std::string name = "Slider");
+    [[nodiscard]] Visual2DNode& CreateCycleSelector(
+        Visual2DNode& parent,
+        Rect bounds,
+        std::vector<std::wstring> items,
+        std::string name = "CycleSelector");
+    [[nodiscard]] Visual2DNode& CreateComboBox(
+        Visual2DNode& parent,
+        Rect bounds,
+        std::vector<std::wstring> items,
+        std::string name = "ComboBox");
 }
-// ===== END Engine\UI\Widget\UiWidgets.h =====
+// ===== END Engine\Core\Visual2D\Visual2DWidgets.h =====
 
 // ===== BEGIN Engine\Graphics.D3D12\Text\TextRendering.h =====
 
@@ -1562,6 +1847,14 @@ namespace mrg::graphics
         // from its sorted draw-command order so popup text obeys the same
         // Z-order as its rectangle and image background.
         float depth{};
+        // Maps glyph pixel coordinates to final viewport pixel coordinates.
+        // Visual2D supplies its hierarchical XYZ transform; ordinary text
+        // submissions use the identity default.
+        DirectX::XMFLOAT4X4 transform{
+            1.0F, 0.0F, 0.0F, 0.0F,
+            0.0F, 1.0F, 0.0F, 0.0F,
+            0.0F, 0.0F, 1.0F, 0.0F,
+            0.0F, 0.0F, 0.0F, 1.0F};
         TextHorizontalAlignment horizontalAlignment{
             TextHorizontalAlignment::Leading};
         TextVerticalAlignment verticalAlignment{
@@ -1626,7 +1919,7 @@ namespace mrg::graphics
 
 namespace mrg::graphics
 {
-    class D3D12UiRenderer;
+    class D3D12Visual2DRenderer;
     // One descriptor table reserves this many entries.  Each entry can point
     // at an independently sized Texture2D resource; this is not a
     // D3D12 Texture2DArray and therefore does not require equal dimensions.
@@ -1661,6 +1954,7 @@ namespace mrg::graphics
             float targetAspectRatio = 1.0F) const;
 
     private:
+        friend class D3D12Visual2DRenderer;
         friend class MeshRenderSystem;
         friend class TextureManager;
 
@@ -1687,7 +1981,7 @@ namespace mrg::graphics
         [[nodiscard]] std::uint32_t Height() const noexcept;
 
     private:
-        friend class D3D12UiRenderer;
+        friend class D3D12Visual2DRenderer;
         friend class TextureManager;
 
         RenderTargetTexture() = default;
@@ -2178,9 +2472,9 @@ namespace mrg::graphics
 }
 // ===== END Engine\Graphics.D3D12\Renderer\D3D12Renderer.h =====
 
-// ===== BEGIN Engine\Graphics.D3D12\UI\UiRendering.h =====
+// ===== BEGIN Engine\Graphics.D3D12\Visual2D\Visual2DRendering.h =====
 
-// D3D12 presentation adapter for backend-neutral UiCanvas draw commands.
+// D3D12 presentation adapter for backend-neutral Visual2DCanvas draw commands.
 
 
 #include <DirectXMath.h>
@@ -2191,14 +2485,14 @@ namespace mrg::graphics
 
 namespace mrg::graphics
 {
-    class D3D12UiRenderer final
+    class D3D12Visual2DRenderer final
     {
     public:
-        D3D12UiRenderer();
-        ~D3D12UiRenderer();
+        D3D12Visual2DRenderer();
+        ~D3D12Visual2DRenderer();
 
-        D3D12UiRenderer(const D3D12UiRenderer&) = delete;
-        D3D12UiRenderer& operator=(const D3D12UiRenderer&) = delete;
+        D3D12Visual2DRenderer(const D3D12Visual2DRenderer&) = delete;
+        D3D12Visual2DRenderer& operator=(const D3D12Visual2DRenderer&) = delete;
 
         void Initialize(
             MeshRenderSystem& meshRendering,
@@ -2206,38 +2500,38 @@ namespace mrg::graphics
         void Shutdown() noexcept;
 
         // Loads a PNG/WIC-supported image once and returns an opaque handle
-        // that can be assigned to UiImage or UiVisualStyle image slots.
-        [[nodiscard]] ui::UiImageHandle LoadImage(
+        // that can be assigned to a SpriteVisualComponent or widget style.
+        [[nodiscard]] visual2d::ImageHandle LoadImage(
             const std::filesystem::path& path);
 
         // Renders at pixel size with a top-left screen origin. A larger Canvas
         // Z-order places the Canvas and its complete element tree in front of
         // a smaller one. Values above 31 are clamped to the front-most band.
         void SubmitScreen(
-            const ui::UiCanvas& canvas,
+            const visual2d::Visual2DCanvas& canvas,
             const RenderContext& context,
-            ui::UiPoint screenOrigin = {},
+            visual2d::Point screenOrigin = {},
             std::uint32_t canvasZOrder = 0);
 
         // Renders rectangles directly onto a finite local XY plane. Use
         // RenderToTexture plus a textured mesh when text or curvature is
         // required. Input mapping remains independent of either path.
         void SubmitPlane(
-            const ui::UiCanvas& canvas,
+            const visual2d::Visual2DCanvas& canvas,
             const RenderContext& context,
             const DirectX::XMFLOAT4X4& surfaceWorld,
-            ui::UiSize surfaceWorldSize,
+            visual2d::Size surfaceWorldSize,
             const DirectX::XMFLOAT4X4& viewProjection);
 
         [[nodiscard]] RenderTargetTextureHandle CreateCanvasRenderTarget(
             std::uint32_t width,
             std::uint32_t height);
 
-        // Records an immediate off-screen pass. Rectangles and DirectWrite
-        // glyphs are rendered into target, transitioned to an SRV, and can
-        // then be sampled by a curved mesh submitted later in the frame.
+        // Records an immediate off-screen pass. Rectangles, images, and
+        // DirectWrite glyphs are rendered into target, transitioned to an
+        // SRV, and can then be sampled by a curved mesh later in the frame.
         void RenderToTexture(
-            const ui::UiCanvas& canvas,
+            const visual2d::Visual2DCanvas& canvas,
             const RenderTargetTextureHandle& target,
             const RenderContext& context);
 
@@ -2248,7 +2542,7 @@ namespace mrg::graphics
         std::unique_ptr<Impl> implementation_;
     };
 }
-// ===== END Engine\Graphics.D3D12\UI\UiRendering.h =====
+// ===== END Engine\Graphics.D3D12\Visual2D\Visual2DRendering.h =====
 
 // ===== BEGIN Engine\Core\Client\IGameClient.h =====
 
@@ -2468,66 +2762,6 @@ namespace mrg::scene
     };
 }
 // ===== END Engine\Core\System\Camera.h =====
-
-// ===== BEGIN Engine\Core\System\TransformNode.h =====
-
-// System feature: reusable hierarchical local and world transforms.
-
-#include <DirectXMath.h>
-
-#include <memory>
-#include <vector>
-
-namespace mrg::scene
-{
-    // Public hierarchical local/world transform used by Client scene objects.
-    class TransformNode final
-    {
-    public:
-        TransformNode();
-
-        TransformNode(const TransformNode&) = delete;
-        TransformNode& operator=(const TransformNode&) = delete;
-
-        void SetPosition(float x, float y, float z) noexcept;
-        void SetScale(float x, float y, float z) noexcept;
-        void SetRotationRollPitchYaw(
-            float pitch,
-            float yaw,
-            float roll) noexcept;
-        void SetRotationQuaternion(
-            float x,
-            float y,
-            float z,
-            float w) noexcept;
-
-        [[nodiscard]] const DirectX::XMFLOAT3& Position() const noexcept;
-        [[nodiscard]] const DirectX::XMFLOAT3& Scale() const noexcept;
-        [[nodiscard]] const DirectX::XMFLOAT4& Rotation() const noexcept;
-
-        TransformNode& AddChild(std::unique_ptr<TransformNode> child);
-        [[nodiscard]] TransformNode& CreateChild();
-        [[nodiscard]] TransformNode* Parent() const noexcept;
-        [[nodiscard]] const std::vector<std::unique_ptr<TransformNode>>&
-            Children() const noexcept;
-
-        [[nodiscard]] const DirectX::XMFLOAT4X4& WorldMatrix();
-        void UpdateWorldRecursive();
-
-    private:
-        void MarkWorldDirty() noexcept;
-        void UpdateWorld();
-
-        DirectX::XMFLOAT3 position_{0.0F, 0.0F, 0.0F};
-        DirectX::XMFLOAT3 scale_{1.0F, 1.0F, 1.0F};
-        DirectX::XMFLOAT4 rotation_{0.0F, 0.0F, 0.0F, 1.0F};
-        DirectX::XMFLOAT4X4 world_{};
-        TransformNode* parent_{};
-        std::vector<std::unique_ptr<TransformNode>> children_;
-        bool worldDirty_{true};
-    };
-}
-// ===== END Engine\Core\System\TransformNode.h =====
 
 // ===== BEGIN Engine\Core\App\Engine.h =====
 

@@ -48,7 +48,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Platform.Win32;$(ProjectDir)..\Graphics.D3D12;$(ProjectDir)..\Audio;$(ProjectDir)..\Geometry;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Platform.Win32;$(ProjectDir)..\Graphics.D3D12;$(ProjectDir)..\Audio;$(ProjectDir)..\Collision;$(ProjectDir)..\Geometry;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
@@ -67,6 +67,12 @@
     <ClInclude Include="System\HighResolutionClock.h" />
     <ClInclude Include="System\MeshInstance.h" />
     <ClInclude Include="System\TransformNode.h" />
+    <ClInclude Include="Visual2D\Visual2DNode.h" />
+    <ClInclude Include="Visual2D\Visual2DCanvas.h" />
+    <ClInclude Include="Visual2D\Visual2DComponents.h" />
+    <ClInclude Include="Visual2D\Visual2DInputRouter.h" />
+    <ClInclude Include="Visual2D\Visual2DSurface.h" />
+    <ClInclude Include="Visual2D\Visual2DWidgets.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="App\Engine.cpp" />
@@ -78,6 +84,12 @@
     <ClCompile Include="System\HighResolutionClock.cpp" />
     <ClCompile Include="System\MeshInstance.cpp" />
     <ClCompile Include="System\TransformNode.cpp" />
+    <ClCompile Include="Visual2D\Visual2DNode.cpp" />
+    <ClCompile Include="Visual2D\Visual2DCanvas.cpp" />
+    <ClCompile Include="Visual2D\Visual2DComponents.cpp" />
+    <ClCompile Include="Visual2D\Visual2DInputRouter.cpp" />
+    <ClCompile Include="Visual2D\Visual2DSurface.cpp" />
+    <ClCompile Include="Visual2D\Visual2DWidgets.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Audio\MRG.Audio.vcxproj">
@@ -88,6 +100,9 @@
     </ProjectReference>
     <ProjectReference Include="..\Geometry\MRG.Geometry.vcxproj">
       <Project>{96666666-6666-4666-8666-666666666666}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Collision\MRG.Collision.vcxproj">
+      <Project>{A9999999-9999-4999-8999-999999999999}</Project>
     </ProjectReference>
     <ProjectReference Include="..\Platform.Win32\MRG.Platform.Win32.vcxproj">
       <Project>{A1111111-1111-4111-8111-111111111111}</Project>

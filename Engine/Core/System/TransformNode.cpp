@@ -1,7 +1,7 @@
 #include "System/TransformNode.h"
 
+#include <algorithm>
 #include <stdexcept>
-#include <utility>
 
 using namespace DirectX;
 
@@ -10,6 +10,16 @@ namespace mrg::scene
     TransformNode::TransformNode()
     {
         XMStoreFloat4x4(&world_, XMMatrixIdentity());
+    }
+
+    TransformNode::~TransformNode()
+    {
+        SetParent(nullptr);
+        for (TransformNode* child : children_)
+        {
+            child->parent_ = nullptr;
+            child->MarkWorldDirty();
+        }
     }
 
     void TransformNode::SetPosition(
@@ -27,6 +37,15 @@ namespace mrg::scene
         const float z) noexcept
     {
         scale_ = {x, y, z};
+        MarkWorldDirty();
+    }
+
+    void TransformNode::SetPivot(
+        const float x,
+        const float y,
+        const float z) noexcept
+    {
+        pivot_ = {x, y, z};
         MarkWorldDirty();
     }
 
@@ -63,33 +82,44 @@ namespace mrg::scene
         return scale_;
     }
 
+    const XMFLOAT3& TransformNode::Pivot() const noexcept
+    {
+        return pivot_;
+    }
+
     const XMFLOAT4& TransformNode::Rotation() const noexcept
     {
         return rotation_;
     }
 
-    TransformNode& TransformNode::AddChild(
-        std::unique_ptr<TransformNode> child)
+    void TransformNode::SetParent(TransformNode* parent)
     {
-        if (child == nullptr)
+        if (parent == parent_)
         {
-            throw std::invalid_argument("A transform child cannot be null.");
-        }
-        if (child->parent_ != nullptr)
-        {
-            throw std::invalid_argument(
-                "A transform child already has a parent.");
+            return;
         }
 
-        child->parent_ = this;
-        child->MarkWorldDirty();
-        children_.push_back(std::move(child));
-        return *children_.back();
-    }
+        for (TransformNode* ancestor = parent;
+            ancestor != nullptr;
+            ancestor = ancestor->parent_)
+        {
+            if (ancestor == this)
+            {
+                throw std::invalid_argument(
+                    "A transform hierarchy cannot contain a cycle.");
+            }
+        }
 
-    TransformNode& TransformNode::CreateChild()
-    {
-        return AddChild(std::make_unique<TransformNode>());
+        if (parent_ != nullptr)
+        {
+            std::erase(parent_->children_, this);
+        }
+        parent_ = parent;
+        if (parent_ != nullptr)
+        {
+            parent_->children_.push_back(this);
+        }
+        MarkWorldDirty();
     }
 
     TransformNode* TransformNode::Parent() const noexcept
@@ -97,13 +127,13 @@ namespace mrg::scene
         return parent_;
     }
 
-    const std::vector<std::unique_ptr<TransformNode>>&
+    const std::vector<TransformNode*>&
     TransformNode::Children() const noexcept
     {
         return children_;
     }
 
-    const XMFLOAT4X4& TransformNode::WorldMatrix()
+    const XMFLOAT4X4& TransformNode::WorldMatrix() const
     {
         UpdateWorld();
         return world_;
@@ -112,7 +142,7 @@ namespace mrg::scene
     void TransformNode::UpdateWorldRecursive()
     {
         UpdateWorld();
-        for (const auto& child : children_)
+        for (TransformNode* child : children_)
         {
             child->UpdateWorldRecursive();
         }
@@ -123,13 +153,13 @@ namespace mrg::scene
         // A parent transform affects every descendant world matrix, so defer
         // recomputation until WorldMatrix()/UpdateWorldRecursive is requested.
         worldDirty_ = true;
-        for (const auto& child : children_)
+        for (TransformNode* child : children_)
         {
             child->MarkWorldDirty();
         }
     }
 
-    void TransformNode::UpdateWorld()
+    void TransformNode::UpdateWorld() const
     {
         if (!worldDirty_)
         {
@@ -137,9 +167,13 @@ namespace mrg::scene
         }
 
         const XMMATRIX local =
+            XMMatrixTranslation(-pivot_.x, -pivot_.y, -pivot_.z) *
             XMMatrixScaling(scale_.x, scale_.y, scale_.z) *
             XMMatrixRotationQuaternion(XMLoadFloat4(&rotation_)) *
-            XMMatrixTranslation(position_.x, position_.y, position_.z);
+            XMMatrixTranslation(
+                position_.x + pivot_.x,
+                position_.y + pivot_.y,
+                position_.z + pivot_.z);
 
         if (parent_ != nullptr)
         {

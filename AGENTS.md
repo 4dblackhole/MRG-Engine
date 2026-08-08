@@ -32,9 +32,10 @@ This file applies to the entire repository.
   Scene delete itself.
 - Common shaders belong to `Engine/Graphics.D3D12/Shader` and are embedded at
   build time.
-- Keep `Engine/UI` retained state, input routing, and surface UV mapping
-  backend-neutral. A world presentation owns/composes a `UiCanvas`; it must
-  not subclass the Canvas. D3D12 drawing belongs in `Graphics.D3D12/UI`.
+- Keep `Engine/Core/Visual2D` nodes, components, input routing, nine anchors,
+  and surface UV mapping backend-neutral. A world presentation composes a
+  `Visual2DCanvas`; it must not subclass it. D3D12 drawing belongs in
+  `Engine/Graphics.D3D12/Visual2D`.
 - Treat absolute mouse position as UI placement data. Rhythm judgement must
   continue to use the ordered Raw Input QPC event stream.
 - Keep functions readable as they grow. If a function performs multiple

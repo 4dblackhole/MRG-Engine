@@ -78,6 +78,99 @@ namespace mrg::graphics
             return start;
         }
 
+        // Backend allocations live only in this translation unit. Public
+        // handles expose metadata and lifetime without leaking D3D12 state or
+        // privileged access to private fields.
+        class D3D12TextureSet final : public TextureSet
+        {
+        public:
+            void Append(
+                const TextureInfo info,
+                ComPtr<ID3D12Resource> resource)
+            {
+                AppendInfo(info);
+                resources.push_back(std::move(resource));
+            }
+
+            std::vector<ComPtr<ID3D12Resource>> resources;
+            D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptorStart{};
+            D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptorStart{};
+        };
+
+        class D3D12RenderTargetTexture final : public RenderTargetTexture
+        {
+        public:
+            [[nodiscard]] const TextureSetHandle& Textures()
+                const noexcept override
+            {
+                return textures;
+            }
+
+            [[nodiscard]] std::uint32_t Width() const noexcept override
+            {
+                return width;
+            }
+
+            [[nodiscard]] std::uint32_t Height() const noexcept override
+            {
+                return height;
+            }
+
+            TextureSetHandle textures;
+            ComPtr<ID3D12Resource> resource;
+            ComPtr<ID3D12DescriptorHeap> rtvHeap;
+            D3D12_CPU_DESCRIPTOR_HANDLE rtv{};
+            D3D12_RESOURCE_STATES state{
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE};
+            std::uint32_t width{};
+            std::uint32_t height{};
+        };
+
+        [[nodiscard]] const D3D12TextureSet& RequireTextureSet(
+            const TextureSetHandle& textureSet)
+        {
+            const auto* concrete = dynamic_cast<const D3D12TextureSet*>(
+                textureSet.get());
+            if (concrete == nullptr)
+            {
+                throw std::invalid_argument(
+                    "The texture set was not created by this D3D12 backend.");
+            }
+            return *concrete;
+        }
+
+        [[nodiscard]] D3D12TextureSet& RequireMutableTextureSet(
+            const TextureSetHandle& textureSet)
+        {
+            return const_cast<D3D12TextureSet&>(
+                RequireTextureSet(textureSet));
+        }
+
+        [[nodiscard]] D3D12TextureSet& RequireTextureSet(
+            TextureSet& textureSet)
+        {
+            auto* concrete = dynamic_cast<D3D12TextureSet*>(&textureSet);
+            if (concrete == nullptr)
+            {
+                throw std::invalid_argument(
+                    "The texture set was not created by this D3D12 backend.");
+            }
+            return *concrete;
+        }
+
+        [[nodiscard]] D3D12RenderTargetTexture& RequireRenderTarget(
+            const RenderTargetTextureHandle& target)
+        {
+            auto* concrete = dynamic_cast<D3D12RenderTargetTexture*>(
+                target.get());
+            if (concrete == nullptr)
+            {
+                throw std::invalid_argument(
+                    "The render target was not created by this D3D12 backend.");
+            }
+            return *concrete;
+        }
+
     }
 
     struct TextureManager::DecodedImage final
@@ -86,6 +179,13 @@ namespace mrg::graphics
         std::uint32_t height{};
         std::vector<std::byte> pixels;
     };
+
+    TextureSet::~TextureSet() = default;
+
+    void TextureSet::AppendInfo(const TextureInfo info)
+    {
+        textureInfo_.push_back(info);
+    }
 
     std::size_t TextureSet::Size() const noexcept
     {
@@ -134,20 +234,7 @@ namespace mrg::graphics
         return transform;
     }
 
-    const TextureSetHandle& RenderTargetTexture::Textures() const noexcept
-    {
-        return textures_;
-    }
-
-    std::uint32_t RenderTargetTexture::Width() const noexcept
-    {
-        return width_;
-    }
-
-    std::uint32_t RenderTargetTexture::Height() const noexcept
-    {
-        return height_;
-    }
+    RenderTargetTexture::~RenderTargetTexture() = default;
 
     TextureManager::~TextureManager()
     {
@@ -259,9 +346,8 @@ namespace mrg::graphics
         }
 
         BeginUploadCommands();
-        std::shared_ptr<TextureSet> textureSet{new TextureSet()};
-        textureSet->textureInfo_.reserve(decodedImages.size());
-        textureSet->resources_.reserve(decodedImages.size());
+        auto textureSet = std::make_shared<D3D12TextureSet>();
+        textureSet->resources.reserve(decodedImages.size());
         std::vector<ComPtr<ID3D12Resource>> uploadBuffers;
         uploadBuffers.reserve(decodedImages.size());
         const D3D12_CPU_DESCRIPTOR_HANDLE cpuBlockStart =
@@ -321,8 +407,8 @@ namespace mrg::graphics
         // Decode before opening the upload list so invalid user assets cannot
         // leave the reusable allocator in a recording state.
         const DecodedImage decodedImage = DecodeImage(path);
-        std::shared_ptr<TextureSet> mutableSet =
-            std::const_pointer_cast<TextureSet>(textureSet);
+        D3D12TextureSet& mutableSet =
+            RequireMutableTextureSet(textureSet);
         BeginUploadCommands();
         std::vector<ComPtr<ID3D12Resource>> uploadBuffers;
         uploadBuffers.reserve(1);
@@ -331,9 +417,9 @@ namespace mrg::graphics
         {
             RecordTextureUpload(
                 decodedImage,
-                mutableSet->Size(),
-                mutableSet->cpuDescriptorStart_,
-                *mutableSet,
+                mutableSet.Size(),
+                mutableSet.cpuDescriptorStart,
+                mutableSet,
                 uploadBuffers);
             ThrowIfFailed(
                 uploadCommandList_->Close(),
@@ -367,9 +453,8 @@ namespace mrg::graphics
                 "The texture descriptor heap has no free material block.");
         }
 
-        auto target = std::shared_ptr<RenderTargetTexture>(
-            new RenderTargetTexture());
-        auto textureSet = std::shared_ptr<TextureSet>(new TextureSet());
+        auto target = std::make_shared<D3D12RenderTargetTexture>();
+        auto textureSet = std::make_shared<D3D12TextureSet>();
         const D3D12_CPU_DESCRIPTOR_HANDLE descriptorBlock =
             InitializeDescriptorBlock(*textureSet);
 
@@ -386,7 +471,7 @@ namespace mrg::graphics
                 &description,
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
                 &clearValue,
-                IID_PPV_ARGS(target->resource_.ReleaseAndGetAddressOf())),
+                IID_PPV_ARGS(target->resource.ReleaseAndGetAddressOf())),
             "Create render-target texture");
 
         D3D12_SHADER_RESOURCE_VIEW_DESC shaderView{};
@@ -396,7 +481,7 @@ namespace mrg::graphics
             D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         shaderView.Texture2D.MipLevels = 1;
         device_->CreateShaderResourceView(
-            target->resource_.Get(),
+            target->resource.Get(),
             &shaderView,
             descriptorBlock);
 
@@ -406,20 +491,19 @@ namespace mrg::graphics
         ThrowIfFailed(
             device_->CreateDescriptorHeap(
                 &rtvHeapDescription,
-                IID_PPV_ARGS(target->rtvHeap_.ReleaseAndGetAddressOf())),
+                IID_PPV_ARGS(target->rtvHeap.ReleaseAndGetAddressOf())),
             "Create render-target texture RTV heap");
-        target->rtv_ =
-            target->rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+        target->rtv =
+            target->rtvHeap->GetCPUDescriptorHandleForHeapStart();
         device_->CreateRenderTargetView(
-            target->resource_.Get(),
+            target->resource.Get(),
             nullptr,
-            target->rtv_);
+            target->rtv);
 
-        textureSet->textureInfo_.push_back({width, height});
-        textureSet->resources_.push_back(target->resource_);
-        target->textures_ = textureSet;
-        target->width_ = width;
-        target->height_ = height;
+        textureSet->Append({width, height}, target->resource);
+        target->textures = textureSet;
+        target->width = width;
+        target->height = height;
         nextDescriptorBlock_ += MaxTexturesPerSet;
         return target;
     }
@@ -534,13 +618,14 @@ namespace mrg::graphics
     D3D12_CPU_DESCRIPTOR_HANDLE TextureManager::InitializeDescriptorBlock(
         TextureSet& textureSet)
     {
+        D3D12TextureSet& concreteSet = RequireTextureSet(textureSet);
         const D3D12_CPU_DESCRIPTOR_HANDLE cpuBlockStart =
             OffsetCpuDescriptor(
                 descriptorHeap_->GetCPUDescriptorHandleForHeapStart(),
                 nextDescriptorBlock_,
                 descriptorSize_);
-        textureSet.cpuDescriptorStart_ = cpuBlockStart;
-        textureSet.gpuDescriptorStart_ = OffsetGpuDescriptor(
+        concreteSet.cpuDescriptorStart = cpuBlockStart;
+        concreteSet.gpuDescriptorStart = OffsetGpuDescriptor(
             descriptorHeap_->GetGPUDescriptorHandleForHeapStart(),
             nextDescriptorBlock_,
             descriptorSize_);
@@ -685,9 +770,9 @@ namespace mrg::graphics
                 static_cast<std::uint32_t>(descriptorIndex),
                 descriptorSize_));
 
-        textureSet.textureInfo_.push_back(
-            TextureInfo{image.width, image.height});
-        textureSet.resources_.push_back(std::move(texture));
+        RequireTextureSet(textureSet).Append(
+            TextureInfo{image.width, image.height},
+            std::move(texture));
         uploadBuffers.push_back(std::move(uploadBuffer));
     }
 
@@ -732,7 +817,7 @@ namespace mrg::graphics
             throw std::invalid_argument(
                 "A GPU descriptor table requires an initialized manager and texture set.");
         }
-        return textureSet->gpuDescriptorStart_;
+        return RequireTextureSet(textureSet).gpuDescriptorStart;
     }
 
     void TextureManager::BeginRenderTargetPass(
@@ -745,43 +830,49 @@ namespace mrg::graphics
             throw std::invalid_argument(
                 "Beginning a texture pass requires an initialized manager and target.");
         }
+        D3D12RenderTargetTexture& concreteTarget =
+            RequireRenderTarget(target);
 
-        if (target->state_ != D3D12_RESOURCE_STATE_RENDER_TARGET)
+        if (concreteTarget.state != D3D12_RESOURCE_STATE_RENDER_TARGET)
         {
             D3D12_RESOURCE_BARRIER barrier{};
             barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-            barrier.Transition.pResource = target->resource_.Get();
+            barrier.Transition.pResource = concreteTarget.resource.Get();
             barrier.Transition.Subresource =
                 D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-            barrier.Transition.StateBefore = target->state_;
+            barrier.Transition.StateBefore = concreteTarget.state;
             barrier.Transition.StateAfter =
                 D3D12_RESOURCE_STATE_RENDER_TARGET;
             commandList.ResourceBarrier(1, &barrier);
-            target->state_ = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            concreteTarget.state = D3D12_RESOURCE_STATE_RENDER_TARGET;
         }
 
         const D3D12_VIEWPORT viewport{
             0.0F,
             0.0F,
-            static_cast<float>(target->width_),
-            static_cast<float>(target->height_),
+            static_cast<float>(concreteTarget.width),
+            static_cast<float>(concreteTarget.height),
             0.0F,
             1.0F};
         const D3D12_RECT scissor{
             0,
             0,
-            static_cast<LONG>(target->width_),
-            static_cast<LONG>(target->height_)};
+            static_cast<LONG>(concreteTarget.width),
+            static_cast<LONG>(concreteTarget.height)};
         commandList.RSSetViewports(1, &viewport);
         commandList.RSSetScissorRects(1, &scissor);
-        commandList.OMSetRenderTargets(1, &target->rtv_, FALSE, nullptr);
+        commandList.OMSetRenderTargets(
+            1,
+            &concreteTarget.rtv,
+            FALSE,
+            nullptr);
         const float color[]{
             clearColor.x,
             clearColor.y,
             clearColor.z,
             clearColor.w};
         commandList.ClearRenderTargetView(
-            target->rtv_, color, 0, nullptr);
+            concreteTarget.rtv, color, 0, nullptr);
     }
 
     void TextureManager::EndRenderTargetPass(
@@ -793,20 +884,24 @@ namespace mrg::graphics
             throw std::invalid_argument(
                 "Ending a texture pass requires an initialized manager and target.");
         }
-        if (target->state_ == D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+        D3D12RenderTargetTexture& concreteTarget =
+            RequireRenderTarget(target);
+        if (concreteTarget.state ==
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
         {
             return;
         }
 
         D3D12_RESOURCE_BARRIER barrier{};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier.Transition.pResource = target->resource_.Get();
+        barrier.Transition.pResource = concreteTarget.resource.Get();
         barrier.Transition.Subresource =
             D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        barrier.Transition.StateBefore = target->state_;
+        barrier.Transition.StateBefore = concreteTarget.state;
         barrier.Transition.StateAfter =
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
         commandList.ResourceBarrier(1, &barrier);
-        target->state_ = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        concreteTarget.state =
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     }
 }

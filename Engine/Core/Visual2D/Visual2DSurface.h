@@ -6,6 +6,7 @@
 
 #include <DirectXMath.h>
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -54,9 +55,9 @@ namespace mrg::visual2d
         bool twoSided_{};
     };
 
-    // Copies CPU positions/UVs from a Shape. This O(triangle-count) baseline
-    // is intended for modest interactive surfaces; a later BVH can replace
-    // the query internally without changing IVisual2DSurface or client code.
+    // Copies CPU positions/UVs from a Shape and builds an immutable local-space
+    // BVH. Ray queries skip unrelated triangle groups without changing the
+    // surface or Canvas API, including for rotated and curved meshes.
     class MeshUvVisual2DSurface final : public IVisual2DSurface
     {
     public:
@@ -79,8 +80,32 @@ namespace mrg::visual2d
             DirectX::XMFLOAT2 uv{};
         };
 
+        struct Bounds
+        {
+            DirectX::XMFLOAT3 minimum{};
+            DirectX::XMFLOAT3 maximum{};
+        };
+
+        // Nodes are stored in preorder. escapeIndex points immediately after
+        // the subtree, allowing Raycast to traverse without a stack or a
+        // per-query allocation.
+        struct BvhNode
+        {
+            Bounds bounds{};
+            std::size_t firstTriangle{};
+            std::size_t triangleCount{};
+            std::size_t escapeIndex{};
+        };
+
+        void BuildBvh();
+        [[nodiscard]] std::size_t BuildBvhNode(
+            std::size_t firstTriangle,
+            std::size_t triangleCount);
+
         std::vector<SurfaceVertex> vertices_;
         std::vector<std::uint32_t> indices_;
+        std::vector<std::size_t> triangleOrder_;
+        std::vector<BvhNode> bvhNodes_;
         DirectX::XMFLOAT4X4 worldTransform_{};
         bool twoSided_{};
     };

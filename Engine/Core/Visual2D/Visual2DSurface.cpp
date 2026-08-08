@@ -1,11 +1,11 @@
-#include "Surface/UiSurface.h"
+#include "Visual2D/Visual2DSurface.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 
-namespace mrg::ui
+namespace mrg::visual2d
 {
     namespace
     {
@@ -71,9 +71,9 @@ namespace mrg::ui
         }
     }
 
-    IUiSurface::~IUiSurface() = default;
+    IVisual2DSurface::~IVisual2DSurface() = default;
 
-    PlaneUiSurface::PlaneUiSurface(
+    PlaneVisual2DSurface::PlaneVisual2DSurface(
         const float width,
         const float height,
         const DirectX::XMFLOAT4X4& worldTransform,
@@ -89,23 +89,23 @@ namespace mrg::ui
         }
     }
 
-    void PlaneUiSurface::SetWorldTransform(
+    void PlaneVisual2DSurface::SetWorldTransform(
         const DirectX::XMFLOAT4X4& worldTransform) noexcept
     {
         worldTransform_ = worldTransform;
     }
 
-    const DirectX::XMFLOAT4X4& PlaneUiSurface::WorldTransform() const noexcept
+    const DirectX::XMFLOAT4X4& PlaneVisual2DSurface::WorldTransform() const noexcept
     {
         return worldTransform_;
     }
 
-    UiSize PlaneUiSurface::WorldSize() const noexcept
+    Size PlaneVisual2DSurface::WorldSize() const noexcept
     {
         return {width_, height_};
     }
 
-    std::optional<UiSurfaceHit> PlaneUiSurface::Raycast(
+    std::optional<SurfaceHit> PlaneVisual2DSurface::Raycast(
         const collision::Ray3D& worldRay) const noexcept
     {
         const std::optional<LocalRay> local =
@@ -136,7 +136,7 @@ namespace mrg::ui
             &worldPoint,
             DirectX::XMVector3TransformCoord(
                 DirectX::XMLoadFloat3(&hit->point), local->world));
-        return UiSurfaceHit{
+        return SurfaceHit{
             hit->parameter,
             worldPoint,
             TransformNormal(hit->normal, local->inverseWorld),
@@ -144,7 +144,7 @@ namespace mrg::ui
                 (halfHeight - hit->point.y) / height_}};
     }
 
-    MeshUvUiSurface::MeshUvUiSurface(
+    MeshUvVisual2DSurface::MeshUvVisual2DSurface(
         const geometry::Shape& shape,
         const DirectX::XMFLOAT4X4& worldTransform,
         const bool twoSided)
@@ -172,18 +172,18 @@ namespace mrg::ui
         }
     }
 
-    void MeshUvUiSurface::SetWorldTransform(
+    void MeshUvVisual2DSurface::SetWorldTransform(
         const DirectX::XMFLOAT4X4& worldTransform) noexcept
     {
         worldTransform_ = worldTransform;
     }
 
-    const DirectX::XMFLOAT4X4& MeshUvUiSurface::WorldTransform() const noexcept
+    const DirectX::XMFLOAT4X4& MeshUvVisual2DSurface::WorldTransform() const noexcept
     {
         return worldTransform_;
     }
 
-    std::optional<UiSurfaceHit> MeshUvUiSurface::Raycast(
+    std::optional<SurfaceHit> MeshUvVisual2DSurface::Raycast(
         const collision::Ray3D& worldRay) const noexcept
     {
         const std::optional<LocalRay> local =
@@ -233,17 +233,18 @@ namespace mrg::ui
             &worldPoint,
             DirectX::XMVector3TransformCoord(
                 DirectX::XMLoadFloat3(&closest->point), local->world));
-        return UiSurfaceHit{
+        return SurfaceHit{
             closest->parameter,
             worldPoint,
             TransformNormal(closest->normal, local->inverseWorld),
             uv};
     }
 
-    WorldSpaceCanvas::WorldSpaceCanvas(
-        const UiSize logicalSize,
-        std::unique_ptr<IUiSurface> surface)
-        : canvas_(logicalSize), surface_(std::move(surface))
+    WorldSpaceVisual2DCanvas::WorldSpaceVisual2DCanvas(
+        const Size logicalSize,
+        std::unique_ptr<IVisual2DSurface> surface)
+        : canvas_(logicalSize, CanvasScaleMode::Fixed),
+          surface_(std::move(surface))
     {
         if (surface_ == nullptr)
         {
@@ -252,27 +253,27 @@ namespace mrg::ui
         }
     }
 
-    UiCanvas& WorldSpaceCanvas::Canvas() noexcept
+    Visual2DCanvas& WorldSpaceVisual2DCanvas::Canvas() noexcept
     {
         return canvas_;
     }
 
-    const UiCanvas& WorldSpaceCanvas::Canvas() const noexcept
+    const Visual2DCanvas& WorldSpaceVisual2DCanvas::Canvas() const noexcept
     {
         return canvas_;
     }
 
-    IUiSurface& WorldSpaceCanvas::Surface() noexcept
+    IVisual2DSurface& WorldSpaceVisual2DCanvas::Surface() noexcept
     {
         return *surface_;
     }
 
-    const IUiSurface& WorldSpaceCanvas::Surface() const noexcept
+    const IVisual2DSurface& WorldSpaceVisual2DCanvas::Surface() const noexcept
     {
         return *surface_;
     }
 
-    void WorldSpaceCanvas::SetSurface(std::unique_ptr<IUiSurface> surface)
+    void WorldSpaceVisual2DCanvas::SetSurface(std::unique_ptr<IVisual2DSurface> surface)
     {
         if (surface == nullptr)
         {
@@ -281,50 +282,21 @@ namespace mrg::ui
         surface_ = std::move(surface);
     }
 
-    std::optional<UiPoint> WorldSpaceCanvas::MapPointer(
+    std::optional<Point> WorldSpaceVisual2DCanvas::MapPointer(
         const collision::Ray3D& worldRay) const noexcept
     {
-        const std::optional<UiSurfaceHit> hit = surface_->Raycast(worldRay);
+        const std::optional<SurfaceHit> hit = surface_->Raycast(worldRay);
         if (!hit.has_value())
         {
             return std::nullopt;
         }
-        const UiSize size = canvas_.LogicalSize();
-        return UiPoint{hit->uv.x * size.width, hit->uv.y * size.height};
-    }
-
-    std::optional<UiPoint> MapScreenPointer(
-        const UiPoint screenPosition,
-        const UiSize viewportSize,
-        const UiSize canvasSize,
-        const UiPoint canvasOrigin) noexcept
-    {
-        if (viewportSize.width <= 0.0F || viewportSize.height <= 0.0F ||
-            canvasSize.width <= 0.0F || canvasSize.height <= 0.0F)
-        {
-            return std::nullopt;
-        }
-        if (screenPosition.x < 0.0F || screenPosition.y < 0.0F ||
-            screenPosition.x > viewportSize.width ||
-            screenPosition.y > viewportSize.height)
-        {
-            return std::nullopt;
-        }
-        if (screenPosition.x < canvasOrigin.x ||
-            screenPosition.y < canvasOrigin.y ||
-            screenPosition.x > canvasOrigin.x + canvasSize.width ||
-            screenPosition.y > canvasOrigin.y + canvasSize.height)
-        {
-            return std::nullopt;
-        }
-        return UiPoint{
-            screenPosition.x - canvasOrigin.x,
-            screenPosition.y - canvasOrigin.y};
+        const Size size = canvas_.LogicalSize();
+        return Point{hit->uv.x * size.width, hit->uv.y * size.height};
     }
 
     std::optional<collision::Ray3D> CreateWorldPointerRay(
-        const UiPoint screenPosition,
-        const UiSize viewportSize,
+        const Point screenPosition,
+        const Size viewportSize,
         const DirectX::XMFLOAT4X4& viewProjection) noexcept
     {
         if (viewportSize.width <= 0.0F || viewportSize.height <= 0.0F)

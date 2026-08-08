@@ -203,7 +203,8 @@ namespace
 
         DirectX::XMFLOAT4X4 identity{};
         DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
-        const mrg::ui::PlaneUiSurface plane(2.0F, 2.0F, identity);
+        const mrg::visual2d::PlaneVisual2DSurface plane(
+            2.0F, 2.0F, identity);
         const auto planeHit = plane.Raycast(centerRay);
         Check(planeHit.has_value(), "world-space UI plane is raycastable");
         if (planeHit)
@@ -215,7 +216,7 @@ namespace
         }
 
         const mrg::geometry::RectangleShape rectangle(2.0F, 2.0F);
-        const mrg::ui::MeshUvUiSurface mesh(rectangle, identity);
+        const mrg::visual2d::MeshUvVisual2DSurface mesh(rectangle, identity);
         const auto meshHit = mesh.Raycast(centerRay);
         Check(meshHit.has_value(), "mesh UV UI surface is raycastable");
         if (meshHit)
@@ -235,7 +236,8 @@ namespace
             curvedRectangle.VertexCount() == 66 &&
                 curvedRectangle.IndexCount() == 192,
             "curved rectangle creates a segmented indexed strip");
-        const mrg::ui::MeshUvUiSurface curvedMesh(curvedRectangle, identity);
+        const mrg::visual2d::MeshUvVisual2DSurface curvedMesh(
+            curvedRectangle, identity);
         const auto curvedHit = curvedMesh.Raycast(centerRay);
         Check(curvedHit.has_value(), "curved UI surface is raycastable");
         if (curvedHit)
@@ -247,13 +249,17 @@ namespace
         }
     }
 
-    void TestUiRouting()
+    void TestVisual2DRouting()
     {
-        mrg::ui::UiCanvas canvas({320.0F, 180.0F});
-        auto& button = canvas.Root().EmplaceChild<mrg::ui::UiButton>(L"Apply");
-        button.SetBounds({20.0F, 20.0F, 120.0F, 40.0F});
+        mrg::visual2d::Visual2DCanvas canvas(
+            {320.0F, 180.0F},
+            mrg::visual2d::CanvasScaleMode::Fixed);
+        auto& button = mrg::visual2d::CreateButton(
+            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+            {20.0F, 20.0F, 120.0F, 40.0F},
+            L"Apply");
 
-        mrg::ui::UiInputRouter router;
+        mrg::visual2d::Visual2DInputRouter router;
         router.Process(
             canvas,
             {{40.0F, 35.0F}, true, true, true, false, 0.0F, 10});
@@ -261,16 +267,20 @@ namespace
         router.Process(
             canvas,
             {{40.0F, 35.0F}, true, false, false, true, 0.0F, 20});
-        const std::vector<mrg::ui::UiAction> actions = canvas.TakeActions();
+        const std::vector<mrg::visual2d::Action> actions = canvas.TakeActions();
         Check(!button.IsPressed(), "UI button releases pointer capture");
         Check(
             actions.size() == 1 &&
-                actions[0].type == mrg::ui::UiActionType::Clicked &&
+                actions[0].type == mrg::visual2d::ActionType::Clicked &&
                 actions[0].source == button.Id(),
             "press and release on one button emits a click");
 
-        auto& slider = canvas.Root().EmplaceChild<mrg::ui::UiSlider>(0.0F);
-        slider.SetBounds({20.0F, 80.0F, 200.0F, 40.0F});
+        auto& slider = mrg::visual2d::CreateSlider(
+            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+            {20.0F, 80.0F, 200.0F, 40.0F},
+            0.0F);
+        auto* sliderBehavior = slider.GetComponent<
+            mrg::visual2d::SliderBehaviorComponent>();
         router.Process(
             canvas,
             {{30.0F, 100.0F}, true, true, true, false, 0.0F, 30});
@@ -278,34 +288,39 @@ namespace
             canvas,
             {{300.0F, 100.0F}, true, true, false, false, 0.0F, 40});
         Check(
-            NearlyEqual(slider.Value(), 1.0F),
+            sliderBehavior != nullptr &&
+                NearlyEqual(sliderBehavior->Value(), 1.0F),
             "captured slider keeps receiving movement outside its bounds");
         router.Process(
             canvas,
             {{300.0F, 100.0F}, true, false, false, true, 0.0F, 50});
 
-        auto& image = canvas.Root().EmplaceChild<mrg::ui::UiImage>();
-        image.SetImage(mrg::ui::UiImageHandle{123});
-        image.SetBounds({240.0F, 20.0F, 40.0F, 40.0F});
-        const std::vector<mrg::ui::UiDrawCommand> imageCommands =
+        (void)mrg::visual2d::CreateSprite(
+            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+            {240.0F, 20.0F, 40.0F, 40.0F},
+            mrg::visual2d::ImageHandle{123});
+        const std::vector<mrg::visual2d::DrawPacket> imageCommands =
             canvas.BuildDrawList();
         const bool imageCommandFound = std::any_of(
             imageCommands.begin(),
             imageCommands.end(),
-            [](const mrg::ui::UiDrawCommand& command)
+            [](const mrg::visual2d::DrawPacket& command)
             {
-                return command.type == mrg::ui::UiDrawCommandType::Image &&
+                return command.type == mrg::visual2d::DrawPacketType::Image &&
                     command.image.value == 123;
             });
         Check(
             imageCommandFound,
             "UI image widgets emit reusable image draw commands");
 
-        auto& combo = canvas.Root().EmplaceChild<mrg::ui::UiComboBox>();
-        combo.SetBounds({20.0F, 130.0F, 180.0F, 30.0F});
-        combo.SetItemHeight(20.0F);
-        combo.SetMaxVisibleItems(3);
-        combo.SetItems({L"Driver 0", L"Driver 1", L"Driver 2", L"Driver 3", L"Driver 4"});
+        auto& combo = mrg::visual2d::CreateComboBox(
+            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+            {20.0F, 130.0F, 180.0F, 30.0F},
+            {L"Driver 0", L"Driver 1", L"Driver 2", L"Driver 3", L"Driver 4"});
+        auto* comboBehavior = combo.GetComponent<
+            mrg::visual2d::ComboBoxBehaviorComponent>();
+        comboBehavior->SetItemHeight(20.0F);
+        comboBehavior->SetMaxVisibleItems(3);
 
         // A click on the field opens its popup. The popup extends outside the
         // canvas, so this also checks that it is not clipped by the root bounds.
@@ -315,7 +330,9 @@ namespace
         router.Process(
             canvas,
             {{50.0F, 145.0F}, true, false, false, true, 0.0F, 70});
-        Check(combo.IsExpanded(), "combo box opens a popup from the field click");
+        Check(
+            comboBehavior->IsExpanded(),
+            "combo box opens a popup from the field click");
 
         // Moving the pointer to an unrelated Canvas area must not dismiss the
         // device list. The player may return to the popup and continue input.
@@ -323,7 +340,7 @@ namespace
             canvas,
             {{300.0F, 20.0F}, true, false, false, false, 0.0F, 75});
         Check(
-            combo.IsExpanded(),
+            comboBehavior->IsExpanded(),
             "combo box remains open after losing pointer focus");
 
         // One normalized wheel tick advances the first visible row by one.
@@ -336,11 +353,13 @@ namespace
         router.Process(
             canvas,
             {{50.0F, 180.0F}, true, false, false, true, 0.0F, 100});
-        const std::vector<mrg::ui::UiAction> comboActions = canvas.TakeActions();
+        const std::vector<mrg::visual2d::Action> comboActions =
+            canvas.TakeActions();
         Check(
-            combo.SelectedIndex() == 2 &&
+            comboBehavior->SelectedIndex() == 2 &&
                 !comboActions.empty() &&
-                comboActions.back().type == mrg::ui::UiActionType::SelectionChanged,
+                comboActions.back().type ==
+                    mrg::visual2d::ActionType::SelectionChanged,
             "combo box wheel scrolling selects the shifted visible item");
 
         // Reopen and drag upward by one row before selecting the second row.
@@ -366,33 +385,39 @@ namespace
             canvas,
             {{50.0F, 190.0F}, true, false, false, true, 0.0F, 170});
         Check(
-            combo.SelectedIndex() == 3,
+            comboBehavior->SelectedIndex() == 3,
             "combo box drag scrolling selects the shifted visible item");
     }
 
-    void TestUiTreeZOrder()
+    void TestVisual2DTreeZOrder()
     {
-        mrg::ui::UiCanvas canvas({240.0F, 140.0F});
-        auto& front = canvas.Root().EmplaceChild<mrg::ui::UiButton>(L"Front");
-        front.SetBounds({40.0F, 40.0F, 100.0F, 48.0F});
+        mrg::visual2d::Visual2DCanvas canvas(
+            {240.0F, 140.0F},
+            mrg::visual2d::CanvasScaleMode::Fixed);
+        auto& front = mrg::visual2d::CreateButton(
+            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+            {40.0F, 40.0F, 100.0F, 48.0F},
+            L"Front");
         front.SetZIndex(10);
-        auto& back = canvas.Root().EmplaceChild<mrg::ui::UiButton>(L"Back");
-        back.SetBounds({20.0F, 20.0F, 180.0F, 100.0F});
+        auto& back = mrg::visual2d::CreateButton(
+            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+            {20.0F, 20.0F, 180.0F, 100.0F},
+            L"Back");
 
-        const std::vector<mrg::ui::UiDrawCommand> commands =
+        const std::vector<mrg::visual2d::DrawPacket> commands =
             canvas.BuildDrawList();
         Check(
             !commands.empty() && commands.back().text == L"Front",
             "larger sibling Z-index paints its complete subtree last");
 
-        mrg::ui::UiInputRouter router;
+        mrg::visual2d::Visual2DInputRouter router;
         router.Process(
             canvas,
             {{60.0F, 60.0F}, true, true, true, false, 0.0F, 10});
         router.Process(
             canvas,
             {{60.0F, 60.0F}, true, false, false, true, 0.0F, 20});
-        std::vector<mrg::ui::UiAction> actions = canvas.TakeActions();
+        std::vector<mrg::visual2d::Action> actions = canvas.TakeActions();
         Check(
             actions.size() == 1 && actions.front().source == front.Id(),
             "hit testing uses the reverse of sibling paint order");
@@ -410,6 +435,70 @@ namespace
             actions.size() == 1 && actions.front().source == back.Id(),
             "a widget hit box matches its rendered bounds");
     }
+
+    void TestVisual2DAnchorsAndComponents()
+    {
+        mrg::visual2d::Visual2DCanvas canvas;
+        canvas.SetViewportSize({2560.0F, 1080.0F});
+        Check(
+            NearlyEqual(canvas.PixelScale(), 1.5F) &&
+                NearlyEqual(canvas.LogicalSize().height, 720.0F) &&
+                NearlyEqual(canvas.LogicalSize().width, 2560.0F / 1.5F),
+            "fixed-height Canvas scales from 720 vertical design pixels");
+        Check(
+            !canvas.RemoveNode(
+                canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft).Id()),
+            "reserved Canvas anchor nodes cannot be deleted");
+
+        auto& centered = canvas.CreateNode(
+            mrg::visual2d::Anchor::Center,
+            "CenteredSprite");
+        centered.SetBounds({0.0F, 0.0F, 100.0F, 60.0F});
+        centered.AddComponent<mrg::visual2d::SpriteVisualComponent>();
+        centered.AddComponent<mrg::visual2d::RectangleCollider2DComponent>();
+        centered.AddComponent<mrg::visual2d::PointerReceiverComponent>();
+        const mrg::visual2d::Rect centeredBounds = centered.BoundsInCanvas();
+        Check(
+            NearlyEqual(
+                centeredBounds.x,
+                canvas.LogicalSize().width * 0.5F - 50.0F) &&
+                NearlyEqual(centeredBounds.y, 330.0F),
+            "center anchor fixes a node around the screen center");
+
+        auto& right = canvas.CreateNode(
+            mrg::visual2d::Anchor::TopRight,
+            "RightSprite");
+        right.SetBounds({-20.0F, 20.0F, 100.0F, 50.0F});
+        right.AddComponent<mrg::visual2d::SpriteVisualComponent>();
+        const mrg::visual2d::Rect rightBounds = right.BoundsInCanvas();
+        Check(
+            NearlyEqual(
+                rightBounds.x + rightBounds.width,
+                canvas.LogicalSize().width - 20.0F),
+            "right anchor keeps a fixed inward offset after aspect changes");
+
+        Check(
+            centered.RemoveComponent<mrg::visual2d::PointerReceiverComponent>() &&
+                centered.GetComponent<
+                    mrg::visual2d::PointerReceiverComponent>() == nullptr,
+            "Visual2D behavior components can be removed at runtime");
+
+        centered.Transform().SetRotationRollPitchYaw(
+            0.0F,
+            0.0F,
+            DirectX::XM_PIDIV4);
+        mrg::visual2d::Visual2DInputRouter router;
+        const mrg::visual2d::Point centerPoint{
+            canvas.LogicalSize().width * 0.5F,
+            canvas.LogicalSize().height * 0.5F};
+        router.Process(
+            canvas,
+            {centerPoint, true, true, true, false, 0.0F, 10});
+        Check(
+            router.CapturedNode() == centered.Id(),
+            "rotated Sprite collision uses the same Transform as rendering");
+        router.Reset(canvas);
+    }
 }
 
 int main()
@@ -418,8 +507,9 @@ int main()
     TestTwoDimensionalQueries();
     TestThreeDimensionalVolumes();
     TestTriangleAndUvSurfaces();
-    TestUiRouting();
-    TestUiTreeZOrder();
+    TestVisual2DRouting();
+    TestVisual2DTreeZOrder();
+    TestVisual2DAnchorsAndComponents();
 
     if (failureCount != 0)
     {
@@ -427,6 +517,6 @@ int main()
         return 1;
     }
 
-    std::cout << "All collision and UI tests passed.\n";
+    std::cout << "All collision and Visual2D tests passed.\n";
     return 0;
 }

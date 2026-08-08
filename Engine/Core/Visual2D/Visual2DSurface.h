@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core/UiCanvas.h"
+#include "Visual2D/Visual2DCanvas.h"
 #include "Query/Collision.h"
 #include "Shape/Shape.h"
 
@@ -10,9 +10,9 @@
 #include <optional>
 #include <vector>
 
-namespace mrg::ui
+namespace mrg::visual2d
 {
-    struct UiSurfaceHit
+    struct SurfaceHit
     {
         float rayParameter{};
         DirectX::XMFLOAT3 worldPosition{};
@@ -20,20 +20,20 @@ namespace mrg::ui
         DirectX::XMFLOAT2 uv{};
     };
 
-    class IUiSurface
+    class IVisual2DSurface
     {
     public:
-        virtual ~IUiSurface();
-        [[nodiscard]] virtual std::optional<UiSurfaceHit> Raycast(
+        virtual ~IVisual2DSurface();
+        [[nodiscard]] virtual std::optional<SurfaceHit> Raycast(
             const collision::Ray3D& worldRay) const noexcept = 0;
     };
 
     // Finite XY plane. Local UV (0,0) is the upper-left corner, matching the
     // RectangleShape and canvas coordinate convention.
-    class PlaneUiSurface final : public IUiSurface
+    class PlaneVisual2DSurface final : public IVisual2DSurface
     {
     public:
-        PlaneUiSurface(
+        PlaneVisual2DSurface(
             float width,
             float height,
             const DirectX::XMFLOAT4X4& worldTransform,
@@ -43,8 +43,8 @@ namespace mrg::ui
             const DirectX::XMFLOAT4X4& worldTransform) noexcept;
         [[nodiscard]] const DirectX::XMFLOAT4X4& WorldTransform()
             const noexcept;
-        [[nodiscard]] UiSize WorldSize() const noexcept;
-        [[nodiscard]] std::optional<UiSurfaceHit> Raycast(
+        [[nodiscard]] Size WorldSize() const noexcept;
+        [[nodiscard]] std::optional<SurfaceHit> Raycast(
             const collision::Ray3D& worldRay) const noexcept override;
 
     private:
@@ -56,11 +56,11 @@ namespace mrg::ui
 
     // Copies CPU positions/UVs from a Shape. This O(triangle-count) baseline
     // is intended for modest interactive surfaces; a later BVH can replace
-    // the query internally without changing IUiSurface or client code.
-    class MeshUvUiSurface final : public IUiSurface
+    // the query internally without changing IVisual2DSurface or client code.
+    class MeshUvVisual2DSurface final : public IVisual2DSurface
     {
     public:
-        MeshUvUiSurface(
+        MeshUvVisual2DSurface(
             const geometry::Shape& shape,
             const DirectX::XMFLOAT4X4& worldTransform,
             bool twoSided = false);
@@ -69,7 +69,7 @@ namespace mrg::ui
             const DirectX::XMFLOAT4X4& worldTransform) noexcept;
         [[nodiscard]] const DirectX::XMFLOAT4X4& WorldTransform()
             const noexcept;
-        [[nodiscard]] std::optional<UiSurfaceHit> Raycast(
+        [[nodiscard]] std::optional<SurfaceHit> Raycast(
             const collision::Ray3D& worldRay) const noexcept override;
 
     private:
@@ -86,35 +86,30 @@ namespace mrg::ui
     };
 
     // Owns a logical Canvas and composes it with a replaceable world surface.
-    // It does not inherit UiCanvas because presentation is not UI ownership.
-    class WorldSpaceCanvas final
+    // It does not inherit Visual2DCanvas because presentation is not content
+    // ownership.
+    class WorldSpaceVisual2DCanvas final
     {
     public:
-        WorldSpaceCanvas(
-            UiSize logicalSize,
-            std::unique_ptr<IUiSurface> surface);
+        WorldSpaceVisual2DCanvas(
+            Size logicalSize,
+            std::unique_ptr<IVisual2DSurface> surface);
 
-        [[nodiscard]] UiCanvas& Canvas() noexcept;
-        [[nodiscard]] const UiCanvas& Canvas() const noexcept;
-        [[nodiscard]] IUiSurface& Surface() noexcept;
-        [[nodiscard]] const IUiSurface& Surface() const noexcept;
-        void SetSurface(std::unique_ptr<IUiSurface> surface);
-        [[nodiscard]] std::optional<UiPoint> MapPointer(
+        [[nodiscard]] Visual2DCanvas& Canvas() noexcept;
+        [[nodiscard]] const Visual2DCanvas& Canvas() const noexcept;
+        [[nodiscard]] IVisual2DSurface& Surface() noexcept;
+        [[nodiscard]] const IVisual2DSurface& Surface() const noexcept;
+        void SetSurface(std::unique_ptr<IVisual2DSurface> surface);
+        [[nodiscard]] std::optional<Point> MapPointer(
             const collision::Ray3D& worldRay) const noexcept;
 
     private:
-        UiCanvas canvas_;
-        std::unique_ptr<IUiSurface> surface_;
+        Visual2DCanvas canvas_;
+        std::unique_ptr<IVisual2DSurface> surface_;
     };
 
-    [[nodiscard]] std::optional<UiPoint> MapScreenPointer(
-        UiPoint screenPosition,
-        UiSize viewportSize,
-        UiSize canvasSize,
-        UiPoint canvasOrigin = {}) noexcept;
-
     [[nodiscard]] std::optional<collision::Ray3D> CreateWorldPointerRay(
-        UiPoint screenPosition,
-        UiSize viewportSize,
+        Point screenPosition,
+        Size viewportSize,
         const DirectX::XMFLOAT4X4& viewProjection) noexcept;
 }

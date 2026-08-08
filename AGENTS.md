@@ -32,9 +32,10 @@ This file applies to the entire repository.
   Scene delete itself.
 - Common shaders belong to `Engine/Graphics.D3D12/Shader` and are embedded at
   build time.
-- Keep `Engine/UI` retained state, input routing, and surface UV mapping
-  backend-neutral. A world presentation owns/composes a `UiCanvas`; it must
-  not subclass the Canvas. D3D12 drawing belongs in `Graphics.D3D12/UI`.
+- Keep `Engine/Core/Visual2D` nodes, components, input routing, nine anchors,
+  and surface UV mapping backend-neutral. A world presentation composes a
+  `Visual2DCanvas`; it must not subclass it. D3D12 drawing belongs in
+  `Engine/Graphics.D3D12/Visual2D`.
 - Treat absolute mouse position as UI placement data. Rhythm judgement must
   continue to use the ordered Raw Input QPC event stream.
 - Keep functions readable as they grow. If a function performs multiple
@@ -43,6 +44,21 @@ This file applies to the entire repository.
   short section comments at each meaningful phase boundary to explain the
   intent and required ordering; do not add comments that merely restate an
   obvious statement.
+
+## Repository synchronization
+
+- Treat synchronization as part of every completed engine task. Fetch the
+  engine and Client remotes, verify the local work branch matches its upstream,
+  and report exact commit IDs when handing work back.
+- In a combined engine/Client workspace, make the final engine commit available
+  on the engine remote before updating the Client submodule gitlink. Verify the
+  Client gitlink and the checked-out engine `HEAD` are identical.
+- After approved PRs are merged, fast-forward both `main` branches and run the
+  Client's recursive submodule synchronization/update before declaring the
+  repositories current.
+- Never claim that `main` is current while a required PR remains open. Do not
+  merge a PR or otherwise change remote `main` without explicit authorization;
+  report that remaining integration step instead.
 
 ## Verification
 

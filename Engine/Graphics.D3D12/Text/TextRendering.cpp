@@ -181,6 +181,7 @@ namespace mrg::graphics
     {
         struct GlyphInstance final
         {
+            DirectX::XMFLOAT4X4 transform{};
             DirectX::XMFLOAT2 positionPixels{};
             DirectX::XMFLOAT2 sizePixels{};
             DirectX::XMFLOAT4 uvRectangle{};
@@ -191,6 +192,7 @@ namespace mrg::graphics
 
         struct GpuGlyphInstance final
         {
+            DirectX::XMFLOAT4X4 transform{};
             DirectX::XMFLOAT2 positionPixels{};
             DirectX::XMFLOAT2 sizePixels{};
             DirectX::XMFLOAT4 uvRectangle{};
@@ -198,7 +200,7 @@ namespace mrg::graphics
             float depth{};
         };
 
-        static_assert(sizeof(GpuGlyphInstance) == 52);
+        static_assert(sizeof(GpuGlyphInstance) == 116);
 
         struct FrameInstanceBuffer final
         {
@@ -317,10 +319,12 @@ namespace mrg::graphics
             GlyphRunCollector(
                 Impl& owner,
                 const DirectX::XMFLOAT4& color,
-                const float depth) noexcept
+                const float depth,
+                const DirectX::XMFLOAT4X4& transform) noexcept
                 : owner_(owner),
                   color_(color),
-                  depth_(depth)
+                  depth_(depth),
+                  transform_(transform)
             {
             }
 
@@ -423,7 +427,8 @@ namespace mrg::graphics
                         measuringMode,
                         *glyphRun,
                         color_,
-                        depth_);
+                        depth_,
+                        transform_);
                     return S_OK;
                 }
                 catch (...)
@@ -475,6 +480,7 @@ namespace mrg::graphics
             Impl& owner_;
             DirectX::XMFLOAT4 color_{};
             float depth_{};
+            DirectX::XMFLOAT4X4 transform_{};
             std::exception_ptr error_;
         };
 
@@ -695,7 +701,8 @@ namespace mrg::graphics
                 new GlyphRunCollector(
                     *this,
                     command.style.color,
-                    command.depth));
+                    command.depth,
+                    command.transform));
             const HRESULT drawResult = layout->Draw(
                 nullptr,
                 collector.Get(),
@@ -748,6 +755,7 @@ namespace mrg::graphics
                 {
                     const GlyphInstance& source = pendingInstances[index];
                     destination[index] = GpuGlyphInstance{
+                        source.transform,
                         source.positionPixels,
                         source.sizePixels,
                         source.uvRectangle,
@@ -822,7 +830,8 @@ namespace mrg::graphics
             const DWRITE_MEASURING_MODE measuringMode,
             const DWRITE_GLYPH_RUN& glyphRun,
             const DirectX::XMFLOAT4& color,
-            const float depth)
+            const float depth,
+            const DirectX::XMFLOAT4X4& transform)
         {
             float penX = baselineOriginX;
             const bool rightToLeft = (glyphRun.bidiLevel & 1U) != 0;
@@ -841,6 +850,7 @@ namespace mrg::graphics
                 if (glyph.drawable)
                 {
                     pendingInstances.push_back(GlyphInstance{
+                        transform,
                         {
                             penX + offset.advanceOffset +
                                 glyph.bearingPixels.x,

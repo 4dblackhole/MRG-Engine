@@ -62,6 +62,14 @@ namespace mrg::graphics
         // from its sorted draw-command order so popup text obeys the same
         // Z-order as its rectangle and image background.
         float depth{};
+        // Maps glyph pixel coordinates to final viewport pixel coordinates.
+        // Visual2D supplies its hierarchical XYZ transform; ordinary text
+        // submissions use the identity default.
+        DirectX::XMFLOAT4X4 transform{
+            1.0F, 0.0F, 0.0F, 0.0F,
+            0.0F, 1.0F, 0.0F, 0.0F,
+            0.0F, 0.0F, 1.0F, 0.0F,
+            0.0F, 0.0F, 0.0F, 1.0F};
         TextHorizontalAlignment horizontalAlignment{
             TextHorizontalAlignment::Leading};
         TextVerticalAlignment verticalAlignment{

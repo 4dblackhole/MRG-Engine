@@ -2,7 +2,6 @@
 
 #include "System/ComApartment.h"
 #include "System/HighResolutionClock.h"
-#include "System/RuntimePaths.h"
 #include "Window/Win32Window.h"
 
 #include <Windows.h>
@@ -11,7 +10,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
-#include <filesystem>
 #include <stdexcept>
 #include <string>
 
@@ -36,147 +34,18 @@ namespace mrg
             }
         }
 
-        struct PerformanceValues final
-        {
-            std::uint64_t framesPerSecond{};
-            std::uint64_t updatesPerSecond{};
-        };
-
-        [[nodiscard]] PerformanceValues CalculatePerformanceValues(
-            const std::uint64_t renderedFrameCount,
-            const std::uint64_t updateCount,
-            const double elapsedSeconds)
-        {
-            return {
-                static_cast<std::uint64_t>(
-                    static_cast<double>(renderedFrameCount) /
-                        elapsedSeconds +
-                    0.5),
-                static_cast<std::uint64_t>(
-                    static_cast<double>(updateCount) /
-                        elapsedSeconds +
-                    0.5)};
-        }
-
-        [[nodiscard]] graphics::FontHandle LoadOverlayFont(
-            graphics::TextRenderSystem& textRendering,
-            const std::filesystem::path& fontFile,
-            const std::wstring_view systemFont)
-        {
-            if (!fontFile.empty())
-            {
-                return textRendering.LoadFontFile(
-                    platform::ResolveExecutableRelativePath(fontFile));
-            }
-            return textRendering.LoadSystemFont(systemFont);
-        }
-
-        void SubmitPerformanceOverlay(
-            graphics::TextRenderSystem& textRendering,
-            const PerformanceOverlayConfig& config,
-            const graphics::FontHandle& framesPerSecondFont,
-            const graphics::FontHandle& updatesPerSecondFont,
-            const std::wstring_view framesPerSecondText,
-            const std::wstring_view updatesPerSecondText,
-            const std::uint32_t viewportWidth,
-            const std::uint32_t viewportHeight)
-        {
-            const float width = static_cast<float>(viewportWidth);
-            const float height = static_cast<float>(viewportHeight);
-            const float availableWidth = std::max(
-                width - config.rightMarginPixels,
-                1.0F);
-            const float layoutWidth = std::clamp(
-                config.layoutWidthPixels,
-                1.0F,
-                availableWidth);
-            const float layoutX = std::max(
-                availableWidth - layoutWidth,
-                0.0F);
-            const float framesLineHeight = std::max(
-                config.framesPerSecondFontSizePixels * 1.5F,
-                1.0F);
-            const float updatesLineHeight = std::max(
-                config.updatesPerSecondFontSizePixels * 1.5F,
-                1.0F);
-            const float updatesY = std::max(
-                height - config.bottomMarginPixels - updatesLineHeight,
-                0.0F);
-            const float framesY = std::max(
-                updatesY - config.lineGapPixels - framesLineHeight,
-                0.0F);
-
-            const auto submitLine =
-                [&textRendering, layoutX, layoutWidth](
-                    const std::wstring_view text,
-                    const graphics::FontHandle& font,
-                    const float fontSizePixels,
-                    const DirectX::XMFLOAT4& color,
-                    const float y,
-                    const float lineHeight)
-            {
-                graphics::TextDrawCommand command;
-                command.positionPixels = {layoutX, y};
-                command.layoutSizePixels = {layoutWidth, lineHeight};
-                command.horizontalAlignment =
-                    graphics::TextHorizontalAlignment::Trailing;
-                command.verticalAlignment =
-                    graphics::TextVerticalAlignment::Center;
-                command.style.font = font;
-                command.style.fontSizePixels = fontSizePixels;
-
-                // A small shadow keeps both configured colors legible over
-                // bright and textured Client content.
-                command.positionPixels.x += 1.5F;
-                command.positionPixels.y += 1.5F;
-                command.style.color = {0.0F, 0.0F, 0.0F, 0.65F};
-                textRendering.Submit(text, command);
-
-                command.positionPixels.x -= 1.5F;
-                command.positionPixels.y -= 1.5F;
-                command.style.color = color;
-                textRendering.Submit(text, command);
-            };
-
-            submitLine(
-                framesPerSecondText,
-                framesPerSecondFont,
-                config.framesPerSecondFontSizePixels,
-                config.framesPerSecondColor,
-                framesY,
-                framesLineHeight);
-            submitLine(
-                updatesPerSecondText,
-                updatesPerSecondFont,
-                config.updatesPerSecondFontSizePixels,
-                config.updatesPerSecondColor,
-                updatesY,
-                updatesLineHeight);
-        }
-
         struct MainLoopState final
         {
             MainLoopState(
                 const EngineConfig& config,
                 const double refreshRateHz)
-                : showPerformanceStatistics(
-                      config.performanceOverlay.initiallyVisible),
-                  renderInterval(
+                : renderInterval(
                       1.0 / ValidRate(
                           config.renderRateOverrideHz,
                           refreshRateHz)),
                   audioInterval(
                       1.0 / ValidRate(config.audioUpdateRateHz, 500.0))
             {
-            }
-
-            void ResetPerformanceMeasurement() noexcept
-            {
-                updatesSinceStatisticsReport = 0;
-                rendersSinceStatisticsReport = 0;
-                statisticsReportStartSeconds = totalSeconds;
-                framesPerSecondText = L"FPS: measuring...";
-                updatesPerSecondText = L"UPS: measuring...";
             }
 
             system::HighResolutionClock clock;
@@ -186,28 +55,12 @@ namespace mrg
             std::uint64_t updatesSinceStatisticsReport{};
             std::uint64_t rendersSinceStatisticsReport{};
             double statisticsReportStartSeconds{};
-            bool showPerformanceStatistics{};
-            std::wstring framesPerSecondText{L"FPS: measuring..."};
-            std::wstring updatesPerSecondText{L"UPS: measuring..."};
+            PerformanceStatistics performance{};
             double renderInterval{};
             double nextRenderTime{};
             double audioInterval{};
             double nextAudioUpdateTime{};
         };
-
-        void HandleEngineCommands(
-            const platform::InputState& input,
-            MainLoopState& state)
-        {
-            if (!input.WasKeyPressed(VK_F1))
-            {
-                return;
-            }
-
-            state.showPerformanceStatistics =
-                !state.showPerformanceStatistics;
-            state.ResetPerformanceMeasurement();
-        }
 
         void HandleWindowChanges(
             platform::Win32Window& window,
@@ -249,15 +102,13 @@ namespace mrg
                 state.totalSeconds,
                 state.updateIndex++,
                 input,
-                audioSystem};
+                audioSystem,
+                state.performance};
 
             // Update is intentionally unthrottled. Rendering and FMOD use
             // independent deadlines and never sleep this loop.
             const bool keepRunning = client.Update(updateContext);
-            if (state.showPerformanceStatistics)
-            {
-                ++state.updatesSinceStatisticsReport;
-            }
+            ++state.updatesSinceStatisticsReport;
             return keepRunning;
         }
 
@@ -282,8 +133,6 @@ namespace mrg
             const platform::Win32Window& window,
             graphics::D3D12Renderer& renderer,
             const EngineConfig& config,
-            const graphics::FontHandle& framesPerSecondFont,
-            const graphics::FontHandle& updatesPerSecondFont,
             MainLoopState& state)
         {
             if (window.IsMinimized() ||
@@ -297,25 +146,10 @@ namespace mrg
             const graphics::RenderContext renderContext =
                 renderer.BeginFrame(config.clearColor);
             client.Render(renderContext);
-            if (state.showPerformanceStatistics)
-            {
-                SubmitPerformanceOverlay(
-                    renderer.TextRendering(),
-                    config.performanceOverlay,
-                    framesPerSecondFont,
-                    updatesPerSecondFont,
-                    state.framesPerSecondText,
-                    state.updatesPerSecondText,
-                    renderContext.width,
-                    renderContext.height);
-            }
             renderer.EndFrame();
 
             ++state.renderedFrames;
-            if (state.showPerformanceStatistics)
-            {
-                ++state.rendersSinceStatisticsReport;
-            }
+            ++state.rendersSinceStatisticsReport;
             AdvanceDeadline(
                 state.nextRenderTime,
                 state.renderInterval,
@@ -325,23 +159,27 @@ namespace mrg
                 state.renderedFrames < config.autoExitAfterRenderedFrames;
         }
 
-        void RefreshPerformanceText(MainLoopState& state)
+        void RefreshPerformanceStatistics(MainLoopState& state)
         {
             const double elapsedSeconds =
                 state.totalSeconds - state.statisticsReportStartSeconds;
-            if (!state.showPerformanceStatistics || elapsedSeconds < 1.0)
+            if (elapsedSeconds < 1.0)
             {
                 return;
             }
 
-            const PerformanceValues values = CalculatePerformanceValues(
-                state.rendersSinceStatisticsReport,
-                state.updatesSinceStatisticsReport,
-                elapsedSeconds);
-            state.framesPerSecondText =
-                L"FPS: " + std::to_wstring(values.framesPerSecond);
-            state.updatesPerSecondText =
-                L"UPS: " + std::to_wstring(values.updatesPerSecond);
+            state.performance.framesPerSecond =
+                static_cast<std::uint64_t>(
+                    static_cast<double>(state.rendersSinceStatisticsReport) /
+                        elapsedSeconds +
+                    0.5);
+            state.performance.updatesPerSecond =
+                static_cast<std::uint64_t>(
+                    static_cast<double>(state.updatesSinceStatisticsReport) /
+                        elapsedSeconds +
+                    0.5);
+            ++state.performance.measurementIndex;
+            state.performance.hasMeasurement = true;
             state.updatesSinceStatisticsReport = 0;
             state.rendersSinceStatisticsReport = 0;
             state.statisticsReportStartSeconds = state.totalSeconds;
@@ -353,9 +191,7 @@ namespace mrg
             platform::Win32Window& window,
             graphics::D3D12Renderer& renderer,
             audio::AudioSystem& audioSystem,
-            const EngineConfig& config,
-            const graphics::FontHandle& framesPerSecondFont,
-            const graphics::FontHandle& updatesPerSecondFont)
+            const EngineConfig& config)
         {
             MainLoopState state(config, window.RefreshRateHz());
             bool running = true;
@@ -365,7 +201,6 @@ namespace mrg
                 // queued Raw Input message before the Client update.
                 const double rawDeltaSeconds =
                     state.clock.Tick(state.totalSeconds);
-                HandleEngineCommands(input, state);
                 HandleWindowChanges(window, renderer, client, config, state);
                 running = UpdateClient(
                     client,
@@ -382,11 +217,9 @@ namespace mrg
                         window,
                         renderer,
                         config,
-                        framesPerSecondFont,
-                        updatesPerSecondFont,
                         state);
                 }
-                RefreshPerformanceText(state);
+                RefreshPerformanceStatistics(state);
             }
         }
     }
@@ -426,17 +259,6 @@ namespace mrg
                 window.ClientWidth(),
                 window.ClientHeight());
 
-            const graphics::FontHandle framesPerSecondFont =
-                LoadOverlayFont(
-                    renderer.TextRendering(),
-                    config.performanceOverlay.framesPerSecondFontFile,
-                    config.performanceOverlay.framesPerSecondSystemFont);
-            const graphics::FontHandle updatesPerSecondFont =
-                LoadOverlayFont(
-                    renderer.TextRendering(),
-                    config.performanceOverlay.updatesPerSecondFontFile,
-                    config.performanceOverlay.updatesPerSecondSystemFont);
-
             audio::AudioSystem audioSystem;
             config.audio.nativeWindowHandle = window.Handle();
             std::string audioError;
@@ -468,9 +290,7 @@ namespace mrg
                 window,
                 renderer,
                 audioSystem,
-                config,
-                framesPerSecondFont,
-                updatesPerSecondFont);
+                config);
 
             // Client scenes own D3D12 resources.  First ensure no submitted
             // frame refers to them, then release Client resources while the

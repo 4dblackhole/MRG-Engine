@@ -15,8 +15,8 @@
    초기화한다.
 4. Client/Scene의 `Render`에서 `RenderContext::textRendering`에 문자열을
    제출한다.
-5. 엔진 성능 오버레이가 활성화되어 있으면 Client 렌더 뒤에 FPS/UPS 문자열을
-   제출한다.
+5. 루트 Client는 필요하다면 `SceneGameClient::OnClientRendered`에서 활성 Scene
+   뒤에 전역 디버그 텍스트를 제출한다.
 6. `D3D12Renderer::EndFrame`은 메시 draw를 먼저 기록하고 텍스트 draw를
    기록한다. 그러므로 일반 텍스트는 3D 장면 위에 합성된다.
 
@@ -79,18 +79,11 @@ strikethrough, inline object, SDF 확대 렌더링은 아직 지원하지 않는
 
 ## FPS/UPS 성능 오버레이
 
-`EngineConfig::performanceOverlay`에서 두 줄의 글꼴, 크기, 색상과 우측/하단
-여백을 설정한다. F1은 오버레이 표시 여부만 전환하며 창 제목은 바꾸지 않는다.
-통계 문자열은 실제 측정된 QPC 경과 시간 기준으로 초당 한 번만 갱신되며,
-렌더/업데이트 스케줄이나 GPU 동기화에는 영향을 주지 않는다.
-자동 화면 회귀 검증에서는 `--show-performance-overlay`로 표시 상태만 켜서
-시작할 수 있다. 이 옵션을 주지 않은 일반 실행은 숨김 상태로 시작한다.
+엔진은 `UpdateContext::performance`로 QPC 기반 FPS/UPS 표본만 전달한다.
+글꼴 선택, F1 입력, 표시 여부와 화면 배치는 게임마다 달라지는 Client 책임이다.
+따라서 엔진은 성능 오버레이 텍스트를 자동으로 제출하지 않는다.
 
-샘플 Client는 서로 다른 무료 글꼴을 사용한다.
-
-- `PressStart2P-Regular.ttf`: FPS
-- `Rajdhani-SemiBold.ttf`: UPS
-
-두 글꼴은 SIL Open Font License 1.1로 배포되며 각 라이선스 원문은
-`Client/Assets/Fonts`에 함께 있다. 다른 Client에서 글꼴을 교체할 때에도
-해당 글꼴의 재배포 조건과 라이선스 파일을 함께 관리해야 한다.
+`SceneGameClient`를 쓰는 Client는 `OnClientInitialized`, `OnClientUpdated`,
+`OnClientRendered` 훅으로 글꼴을 생성하고, 최신 성능 표본을 문자열로 바꾸고,
+활성 Scene 뒤에 텍스트를 제출할 수 있다. 자세한 계약은
+[`PerformanceStatistics.md`](PerformanceStatistics.md)를 참고한다.

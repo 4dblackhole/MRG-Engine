@@ -152,3 +152,11 @@ input.Process(canvas, pointerSnapshot);
 
 renderContext.visual2DRendering->SubmitScreen(canvas, renderContext);
 ```
+
+## Transparent PNG composition
+
+Visual2D image pages use an alpha-blended texture material for screen and
+world submissions. The mesh renderer records opaque primitives first and then
+keeps alpha-blended submissions in Canvas paint order. Transparent PNG pixels
+therefore reveal the existing scene, while translucent edges compose without
+writing over the opaque depth buffer.

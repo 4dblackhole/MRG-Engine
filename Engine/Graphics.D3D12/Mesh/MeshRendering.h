@@ -97,6 +97,7 @@ namespace mrg::graphics
     {
         UnlitVertexColor,
         UnlitVertexColorTextureArray,
+        UnlitVertexColorTextureArrayAlphaBlend,
     };
 
     // Shared shader/root-signature/PSO definition.  Instances refer to this
@@ -120,6 +121,7 @@ namespace mrg::graphics
         MeshVertexLayout requiredVertexLayout_{
             MeshVertexLayout::PositionColor};
         bool usesTextureSet_{};
+        bool alphaBlended_{};
         Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
     };
@@ -253,7 +255,9 @@ namespace mrg::graphics
         [[nodiscard]] std::shared_ptr<MaterialTemplate>
             CreateUnlitVertexColorTemplate();
         [[nodiscard]] std::shared_ptr<MaterialTemplate>
-            CreateUnlitVertexColorTextureArrayTemplate();
+            CreateUnlitVertexColorTextureArrayTemplate(
+                BuiltInMaterial materialType,
+                bool alphaBlended);
         void SortPendingItems();
         void UploadPendingInstances(FrameInstanceBuffer& instanceBuffer);
         [[nodiscard]] std::size_t FindBatchEnd(
@@ -273,6 +277,8 @@ namespace mrg::graphics
         std::shared_ptr<MaterialTemplate> unlitVertexColorTemplate_;
         std::shared_ptr<MaterialTemplate>
             unlitVertexColorTextureArrayTemplate_;
+        std::shared_ptr<MaterialTemplate>
+            unlitVertexColorTextureArrayAlphaBlendTemplate_;
         TextureManager textureManager_;
         std::array<FrameInstanceBuffer, FrameCount> instanceBuffers_{};
         std::vector<PendingItem> pendingItems_;

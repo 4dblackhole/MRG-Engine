@@ -2,6 +2,8 @@
 
 #include "Backend/Fmod/FmodAudioBackend.h"
 
+#include <Windows.h>
+
 #include <utility>
 
 namespace mrg::audio
@@ -13,13 +15,13 @@ namespace mrg::audio
 
     AudioClip::AudioClip(
         std::unique_ptr<IAudioClipBackend> implementation,
-        std::shared_ptr<std::atomic_size_t> liveClipCount)
+        std::shared_ptr<std::atomic_size_t> liveObjectCount)
         : implementation_(std::move(implementation)),
-          liveClipCount_(std::move(liveClipCount))
+          liveObjectCount_(std::move(liveObjectCount))
     {
-        if (liveClipCount_ != nullptr)
+        if (liveObjectCount_ != nullptr)
         {
-            liveClipCount_->fetch_add(1, std::memory_order_relaxed);
+            liveObjectCount_->fetch_add(1, std::memory_order_relaxed);
         }
     }
 
@@ -28,9 +30,9 @@ namespace mrg::audio
         // Release the native sound before decrementing the count so mixer
         // reconfiguration cannot start while destruction is still in flight.
         implementation_.reset();
-        if (liveClipCount_ != nullptr)
+        if (liveObjectCount_ != nullptr)
         {
-            liveClipCount_->fetch_sub(1, std::memory_order_release);
+            liveObjectCount_->fetch_sub(1, std::memory_order_release);
         }
     }
 
@@ -41,12 +43,33 @@ namespace mrg::audio
 
     bool AudioClip::Play(std::string& errorMessage)
     {
+        return Play(AudioPlaybackSettings{}, nullptr, errorMessage) != nullptr;
+    }
+
+    std::unique_ptr<AudioVoice> AudioClip::Play(
+        const AudioPlaybackSettings& settings,
+        AudioBus* const bus,
+        std::string& errorMessage)
+    {
         if (implementation_ == nullptr)
         {
             errorMessage = "The audio clip is not initialized.";
-            return false;
+            return nullptr;
         }
-        return implementation_->Play(errorMessage);
+
+        IAudioBusBackend* const busImplementation =
+            bus != nullptr ? bus->implementation_.get() : nullptr;
+        std::unique_ptr<IAudioVoiceBackend> voice = implementation_->Play(
+            settings,
+            busImplementation,
+            errorMessage);
+        if (voice == nullptr)
+        {
+            return nullptr;
+        }
+        return std::unique_ptr<AudioVoice>(new AudioVoice(
+            std::move(voice),
+            liveObjectCount_));
     }
 
     AudioSystem::~AudioSystem()
@@ -71,7 +94,7 @@ namespace mrg::audio
             : (backendFactory == nullptr
                 ? &CreateFmodAudioClipBackend
                 : nullptr);
-        liveClipCount_ = std::make_shared<std::atomic_size_t>(0);
+        liveObjectCount_ = std::make_shared<std::atomic_size_t>(0);
 
         if (InitializeExactBackend(
                 config,
@@ -121,7 +144,7 @@ namespace mrg::audio
 
         errorMessage = std::move(combinedError);
         clipFactory_ = nullptr;
-        liveClipCount_.reset();
+        liveObjectCount_.reset();
         return false;
     }
 
@@ -143,7 +166,7 @@ namespace mrg::audio
         initialized_ = false;
         clipFactory_ = nullptr;
         config_ = {};
-        liveClipCount_.reset();
+        liveObjectCount_.reset();
     }
 
     bool AudioSystem::IsInitialized() const noexcept
@@ -291,8 +314,22 @@ namespace mrg::audio
         return backend_ != nullptr ? backend_->DspClock() : 0;
     }
 
+    AudioClockSnapshot AudioSystem::CaptureClockSnapshot() const noexcept
+    {
+        LARGE_INTEGER counter{};
+        LARGE_INTEGER frequency{};
+        QueryPerformanceCounter(&counter);
+        QueryPerformanceFrequency(&frequency);
+        return AudioClockSnapshot{
+            DspClock(),
+            SampleRate(),
+            counter.QuadPart,
+            frequency.QuadPart};
+    }
+
     std::unique_ptr<AudioClip> AudioSystem::LoadSound(
         const std::filesystem::path& path,
+        const AudioLoadMode loadMode,
         std::string& errorMessage)
     {
         if (!initialized_ || backend_ == nullptr)
@@ -307,14 +344,45 @@ namespace mrg::audio
         }
 
         std::unique_ptr<IAudioClipBackend> implementation =
-            clipFactory_(*backend_, path, errorMessage);
+            clipFactory_(*backend_, path, loadMode, errorMessage);
         if (implementation == nullptr)
         {
             return nullptr;
         }
         return std::unique_ptr<AudioClip>(new AudioClip(
             std::move(implementation),
-            liveClipCount_));
+            liveObjectCount_));
+    }
+
+    std::unique_ptr<AudioClip> AudioSystem::LoadSound(
+        const std::filesystem::path& path,
+        std::string& errorMessage)
+    {
+        return LoadSound(path, AudioLoadMode::Sample, errorMessage);
+    }
+
+    std::unique_ptr<AudioBus> AudioSystem::CreateBus(
+        const std::string_view name,
+        AudioBus* const parent,
+        std::string& errorMessage)
+    {
+        if (!initialized_ || backend_ == nullptr)
+        {
+            errorMessage = "The audio system is not initialized.";
+            return nullptr;
+        }
+
+        IAudioBusBackend* const parentImplementation =
+            parent != nullptr ? parent->implementation_.get() : nullptr;
+        std::unique_ptr<IAudioBusBackend> implementation =
+            backend_->CreateBus(name, parentImplementation, errorMessage);
+        if (implementation == nullptr)
+        {
+            return nullptr;
+        }
+        return std::unique_ptr<AudioBus>(new AudioBus(
+            std::move(implementation),
+            liveObjectCount_));
     }
 
     bool AudioSystem::InitializeExactBackend(
@@ -354,11 +422,12 @@ namespace mrg::audio
             errorMessage = "The audio system is not initialized.";
             return false;
         }
-        if (liveClipCount_ != nullptr &&
-            liveClipCount_->load(std::memory_order_acquire) != 0)
+        if (liveObjectCount_ != nullptr &&
+            liveObjectCount_->load(std::memory_order_acquire) != 0)
         {
             errorMessage =
-                "Release all Client-owned AudioClip objects before changing "
+                "Release all Client-owned audio clips, voices, buses, and "
+                "effects before changing "
                 "the sample rate or DSP buffer size.";
             return false;
         }

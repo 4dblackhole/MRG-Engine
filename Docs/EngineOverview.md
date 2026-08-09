@@ -200,14 +200,16 @@ Canvas 좌표로 변환한다.
 - AUTO, WASAPI, ASIO 같은 output API 변경
 - 현재 output의 driver snapshot 조회와 driver index 선택
 - DSP buffer length와 buffer count 조회·변경
-- Client 소유 `AudioClip` 생성과 재생
-- DSP clock 및 출력 지연 정보 제공
+- Client 소유 `AudioClip`과 예약 재생 `AudioVoice` 생성
+- 계층적 `AudioBus`, DSP effect, sample-accurate volume fade point
+- DSP/QPC clock snapshot 및 출력 지연 정보 제공
 
 output API를 변경할 때 backend가 다시 초기화되고 그 시점에만 장치 목록을 다시
 조사한다. wav/음악 clip은 게임 asset이므로 Client가 소유한다. FMOD SDK와 DLL은
 저장소에 포함하지 않으며 배포 게임이 FMOD 라이선스 요건을 충족해야 한다.
 
-자세한 내용은 [AudioOutput.md](AudioOutput.md)를 참고한다.
+출력 초기화는 [AudioOutput.md](AudioOutput.md), 예약 재생과 mixer graph는
+[AudioPlayback.md](AudioPlayback.md)를 참고한다.
 
 ## 10. 충돌
 
@@ -254,6 +256,7 @@ backend 프로젝트에 둔다.
 | [ProjectStructure.md](ProjectStructure.md) | 저장소·프로젝트 경계를 찾을 때 |
 | [EngineIntegration.md](EngineIntegration.md) | 새 Client나 바이너리 SDK를 연결할 때 |
 | [AudioOutput.md](AudioOutput.md) | FMOD, WASAPI/ASIO, 장치와 DSP buffer를 다룰 때 |
+| [AudioPlayback.md](AudioPlayback.md) | DSP 예약 재생, bus, voice와 effect를 다룰 때 |
 | [Collision.md](Collision.md) | 충돌 타입과 질의 계약을 사용할 때 |
 | [TextRendering.md](TextRendering.md) | 글꼴·글자·glyph atlas 수명을 다룰 때 |
 | [PerformanceStatistics.md](PerformanceStatistics.md) | FPS/UPS 수집과 표시 책임을 구분할 때 |

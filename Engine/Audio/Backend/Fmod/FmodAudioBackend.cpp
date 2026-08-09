@@ -1,5 +1,7 @@
 #include "FmodAudioBackend.h"
 
+#include "FmodAudioBus.h"
+
 #include <fmod_errors.h>
 
 #include <Windows.h>
@@ -394,6 +396,80 @@ namespace mrg::audio
             return 0;
         }
         return static_cast<std::uint64_t>(dspClock);
+    }
+
+    std::unique_ptr<IAudioBusBackend> FmodAudioBackend::CreateBus(
+        const std::string_view name,
+        IAudioBusBackend* const parent,
+        std::string& errorMessage)
+    {
+        if (!initialized_ || system_ == nullptr || masterChannelGroup_ == nullptr)
+        {
+            errorMessage = "FMOD is not initialized.";
+            return nullptr;
+        }
+        if (name.empty())
+        {
+            errorMessage = "An audio bus name cannot be empty.";
+            return nullptr;
+        }
+
+        FMOD::ChannelGroup* parentGroup = masterChannelGroup_;
+        if (parent != nullptr)
+        {
+            auto* const fmodParent = dynamic_cast<FmodAudioBus*>(parent);
+            if (fmodParent == nullptr || !fmodParent->HasLiveSystem())
+            {
+                errorMessage = "The parent audio bus belongs to another backend or is invalid.";
+                return nullptr;
+            }
+            parentGroup = fmodParent->NativeGroup();
+        }
+
+        const std::string ownedName(name);
+        FMOD::ChannelGroup* group = nullptr;
+        FMOD_RESULT result = system_->createChannelGroup(
+            ownedName.c_str(),
+            &group);
+        if (result != FMOD_OK || group == nullptr)
+        {
+            errorMessage = MakeFmodError(
+                "FMOD::System::createChannelGroup",
+                result);
+            return nullptr;
+        }
+
+        result = parentGroup->addGroup(group);
+        if (result != FMOD_OK)
+        {
+            static_cast<void>(group->release());
+            errorMessage = MakeFmodError(
+                "FMOD::ChannelGroup::addGroup",
+                result);
+            return nullptr;
+        }
+
+        errorMessage.clear();
+        return std::make_unique<FmodAudioBus>(
+            lifetime_,
+            group,
+            ownedName);
+    }
+
+    FMOD::System* FmodAudioBackend::NativeSystem() const noexcept
+    {
+        return initialized_ ? system_ : nullptr;
+    }
+
+    const std::shared_ptr<FmodSystemLifetime>&
+    FmodAudioBackend::Lifetime() const noexcept
+    {
+        return lifetime_;
+    }
+
+    bool FmodAudioBackend::IsMixerInitialized() const noexcept
+    {
+        return initialized_ && system_ != nullptr;
     }
 
     bool FmodAudioBackend::CreateSystem(std::string& errorMessage)

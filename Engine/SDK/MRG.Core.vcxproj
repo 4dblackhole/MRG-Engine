@@ -63,8 +63,10 @@
     <ClInclude Include="..\Platform.Win32\System\ComApartment.h" />
     <ClInclude Include="..\Platform.Win32\System\RuntimePaths.h" />
     <ClInclude Include="..\Platform.Win32\Window\Win32Window.h" />
+    <ClInclude Include="..\Audio\System\AudioPlayback.h" />
     <ClInclude Include="..\Audio\System\AudioSystem.h" />
     <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBackend.h" />
+    <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBus.h" />
     <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioClip.h" />
     <ClInclude Include="..\Collision\Query\Collision.h" />
     <ClInclude Include="..\Geometry\Shape\Vertex.h" />
@@ -102,8 +104,10 @@
     <ClCompile Include="..\Platform.Win32\System\ComApartment.cpp" />
     <ClCompile Include="..\Platform.Win32\System\RuntimePaths.cpp" />
     <ClCompile Include="..\Platform.Win32\Window\Win32Window.cpp" />
+    <ClCompile Include="..\Audio\System\AudioPlayback.cpp" />
     <ClCompile Include="..\Audio\System\AudioSystem.cpp" />
     <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBackend.cpp" />
+    <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBus.cpp" />
     <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioClip.cpp" />
     <ClCompile Include="..\Collision\Query\Collision.cpp" />
     <ClCompile Include="..\Geometry\Shape\Shape.cpp" />
@@ -142,6 +146,7 @@
     <None Include="..\Graphics.D3D12\Shader\Visual2DRectangle.hlsl" />
   </ItemGroup>
   <ItemGroup>
+    <CorePublicHeader Include="$(ProjectDir)..\Audio\System\AudioPlayback.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Audio\System\AudioSystem.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Platform.Win32\System\RuntimePaths.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Platform.Win32\Input\Input.h" />

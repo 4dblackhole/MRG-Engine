@@ -57,14 +57,20 @@ namespace mrg::audio
             std::string& errorMessage) override;
 
         [[nodiscard]] std::uint64_t DspClock() const noexcept override;
+        [[nodiscard]] std::unique_ptr<IAudioBusBackend> CreateBus(
+            std::string_view name,
+            IAudioBusBackend* parent,
+            std::string& errorMessage) override;
+
+        // Internal FMOD feature accessors. These are not selected for the
+        // generated Client SDK and avoid friend-based coupling between the
+        // backend and its clip/bus implementations.
+        [[nodiscard]] FMOD::System* NativeSystem() const noexcept;
+        [[nodiscard]] const std::shared_ptr<FmodSystemLifetime>&
+            Lifetime() const noexcept;
+        [[nodiscard]] bool IsMixerInitialized() const noexcept;
 
     private:
-        friend std::unique_ptr<IAudioClipBackend>
-            CreateFmodAudioClipBackend(
-                IAudioBackend& backend,
-                const std::filesystem::path& path,
-                std::string& errorMessage);
-
         [[nodiscard]] bool CreateSystem(std::string& errorMessage);
         [[nodiscard]] bool InitializeMixer(
             AudioOutputBackend output,

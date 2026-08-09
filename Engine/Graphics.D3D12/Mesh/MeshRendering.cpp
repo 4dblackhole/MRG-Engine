@@ -84,6 +84,24 @@ namespace mrg::graphics
             return description;
         }
 
+        [[nodiscard]] D3D12_RENDER_TARGET_BLEND_DESC
+            AlphaBlendDescription() noexcept
+        {
+            D3D12_RENDER_TARGET_BLEND_DESC description{};
+            description.BlendEnable = TRUE;
+            description.LogicOpEnable = FALSE;
+            description.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+            description.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+            description.BlendOp = D3D12_BLEND_OP_ADD;
+            description.SrcBlendAlpha = D3D12_BLEND_ONE;
+            description.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+            description.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+            description.LogicOp = D3D12_LOGIC_OP_NOOP;
+            description.RenderTargetWriteMask =
+                D3D12_COLOR_WRITE_ENABLE_ALL;
+            return description;
+        }
+
         [[nodiscard]] std::size_t NextCapacity(
             const std::size_t requiredCount)
         {
@@ -183,7 +201,14 @@ namespace mrg::graphics
             unlitVertexColorTemplate_ =
                 CreateUnlitVertexColorTemplate();
             unlitVertexColorTextureArrayTemplate_ =
-                CreateUnlitVertexColorTextureArrayTemplate();
+                CreateUnlitVertexColorTextureArrayTemplate(
+                    BuiltInMaterial::UnlitVertexColorTextureArray,
+                    false);
+            unlitVertexColorTextureArrayAlphaBlendTemplate_ =
+                CreateUnlitVertexColorTextureArrayTemplate(
+                    BuiltInMaterial::
+                        UnlitVertexColorTextureArrayAlphaBlend,
+                    true);
             initialized_ = true;
         }
         catch (...)
@@ -210,6 +235,7 @@ namespace mrg::graphics
             buffer.resource.Reset();
         }
 
+        unlitVertexColorTextureArrayAlphaBlendTemplate_.reset();
         unlitVertexColorTextureArrayTemplate_.reset();
         unlitVertexColorTemplate_.reset();
         textureManager_.Shutdown();
@@ -237,6 +263,10 @@ namespace mrg::graphics
             break;
         case BuiltInMaterial::UnlitVertexColorTextureArray:
             materialTemplate = unlitVertexColorTextureArrayTemplate_;
+            break;
+        case BuiltInMaterial::UnlitVertexColorTextureArrayAlphaBlend:
+            materialTemplate =
+                unlitVertexColorTextureArrayAlphaBlendTemplate_;
             break;
         }
 
@@ -405,8 +435,10 @@ namespace mrg::graphics
 
     void MeshRenderSystem::SortPendingItems()
     {
-        // A material instance is part of the key because it also identifies
-        // the TextureSet descriptor block shared by the batch.
+        // Opaque draws can be freely regrouped by material and mesh because
+        // the depth buffer resolves their visibility. Alpha-blended draws run
+        // afterwards in their original submission order so Canvas painter
+        // order is preserved while adjacent compatible images still batch.
         const std::less<const void*> pointerLess;
         std::stable_sort(
             pendingItems_.begin(),
@@ -415,6 +447,21 @@ namespace mrg::graphics
                 const PendingItem& left,
                 const PendingItem& right)
             {
+                const bool leftAlpha =
+                    left.material->Template()->alphaBlended_;
+                const bool rightAlpha =
+                    right.material->Template()->alphaBlended_;
+                if (leftAlpha != rightAlpha)
+                {
+                    return !leftAlpha;
+                }
+                if (leftAlpha)
+                {
+                    return false;
+                }
+
+                // A material instance is part of the opaque key because it
+                // also identifies the TextureSet descriptor block.
                 const void* leftMaterial = left.material.get();
                 const void* rightMaterial = right.material.get();
                 if (leftMaterial != rightMaterial)
@@ -760,7 +807,9 @@ namespace mrg::graphics
     }
 
     std::shared_ptr<MaterialTemplate>
-        MeshRenderSystem::CreateUnlitVertexColorTextureArrayTemplate()
+        MeshRenderSystem::CreateUnlitVertexColorTextureArrayTemplate(
+            const BuiltInMaterial materialType,
+            const bool alphaBlended)
     {
         // The textured variant uses its own embedded shader pair and one SRV
         // descriptor table containing independently sized Texture2D objects.
@@ -843,11 +892,11 @@ namespace mrg::graphics
 
         std::shared_ptr<MaterialTemplate> material{
             new MaterialTemplate()};
-        material->type_ =
-            BuiltInMaterial::UnlitVertexColorTextureArray;
+        material->type_ = materialType;
         material->requiredVertexLayout_ =
             MeshVertexLayout::PositionUvColor;
         material->usesTextureSet_ = true;
+        material->alphaBlended_ = alphaBlended;
 
         ThrowIfFailed(
             device_->CreateRootSignature(
@@ -919,8 +968,9 @@ namespace mrg::graphics
                 static_cast<UINT>(offsetof(InstanceData, textureIndex)),
                 D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1}};
 
-        // Build the opaque depth-tested PSO after both the root signature and
-        // complete vertex/instance layout are fixed.
+        // Build the depth-tested PSO after both the root signature and
+        // complete vertex/instance layout are fixed. Transparent materials
+        // preserve the existing depth and blend over the opaque pass.
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDescription{};
         pipelineDescription.pRootSignature =
             material->rootSignature_.Get();
@@ -935,7 +985,9 @@ namespace mrg::graphics
         for (auto& target :
             pipelineDescription.BlendState.RenderTarget)
         {
-            target = OpaqueBlendDescription();
+            target = alphaBlended
+                ? AlphaBlendDescription()
+                : OpaqueBlendDescription();
         }
         pipelineDescription.SampleMask =
             std::numeric_limits<UINT>::max();
@@ -953,9 +1005,13 @@ namespace mrg::graphics
         pipelineDescription.RasterizerState.DepthClipEnable = TRUE;
         pipelineDescription.DepthStencilState.DepthEnable = TRUE;
         pipelineDescription.DepthStencilState.DepthWriteMask =
-            D3D12_DEPTH_WRITE_MASK_ALL;
+            alphaBlended
+                ? D3D12_DEPTH_WRITE_MASK_ZERO
+                : D3D12_DEPTH_WRITE_MASK_ALL;
         pipelineDescription.DepthStencilState.DepthFunc =
-            D3D12_COMPARISON_FUNC_LESS;
+            alphaBlended
+                ? D3D12_COMPARISON_FUNC_LESS_EQUAL
+                : D3D12_COMPARISON_FUNC_LESS;
         pipelineDescription.DepthStencilState.StencilEnable = FALSE;
         pipelineDescription.InputLayout = {
             inputLayout.data(),

@@ -290,7 +290,8 @@ namespace mrg::graphics
                 ImagePage page{};
                 page.textures = meshRendering->Textures().LoadTextureSet(paths);
                 page.material = meshRendering->CreateMaterial(
-                    BuiltInMaterial::UnlitVertexColorTextureArray);
+                    BuiltInMaterial::
+                        UnlitVertexColorTextureArrayAlphaBlend);
                 page.material->SetTextureSet(page.textures);
                 imagePages.push_back(std::move(page));
             }

@@ -4,6 +4,10 @@ MRG-Engine은 Visual Studio 2022, C++20, DirectX 12 기반의 Windows 게임 엔
 저장소다. 게임 전용 코드는 포함하지 않으며, 소비 프로젝트에는 통합 정적
 라이브러리 `MRG.Core.lib`와 단일 공개 헤더 `MRG_Core.h`를 제공한다.
 
+처음 사용하는 개발자나 새 Codex 세션은
+[Docs/EngineOverview.md](Docs/EngineOverview.md)부터 읽는다. 주요 기능, 코드 위치,
+객체 수명, Client 경계, 기능별 문서와 작업 체크리스트를 한곳에서 확인할 수 있다.
+
 ## 저장소 구성
 
 ```text
@@ -34,7 +38,8 @@ FMOD SDK 헤더, import library와 DLL은 라이선스상 이 저장소에 포�
   MRG-Engine.sln /m /t:Rebuild /p:Configuration=Release /p:Platform=x64
 ```
 
-산출물은 `bin/x64/<Configuration>/`에 생성된다. 자세한 연결 방법은
+산출물은 `bin/x64/<Configuration>/`에 생성된다. 엔진 전체 안내는
+[Docs/EngineOverview.md](Docs/EngineOverview.md), 자세한 연결 방법은
 [Docs/EngineIntegration.md](Docs/EngineIntegration.md)를 참고한다.
 
 ## Client 저장소에서 사용

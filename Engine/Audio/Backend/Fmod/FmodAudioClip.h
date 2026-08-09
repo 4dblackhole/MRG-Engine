@@ -18,7 +18,10 @@ namespace mrg::audio
             FMOD::Sound* sound) noexcept;
         ~FmodAudioClip() override;
 
-        [[nodiscard]] bool Play(std::string& errorMessage) override;
+        [[nodiscard]] std::unique_ptr<IAudioVoiceBackend> Play(
+            const AudioPlaybackSettings& settings,
+            IAudioBusBackend* bus,
+            std::string& errorMessage) override;
 
     private:
         [[nodiscard]] bool HasLiveSystem() const noexcept;

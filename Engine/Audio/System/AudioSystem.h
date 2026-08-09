@@ -2,6 +2,8 @@
 
 // Audio feature: backend-neutral system, device, and clip contracts.
 
+#include "System/AudioPlayback.h"
+
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -51,7 +53,10 @@ namespace mrg::audio
     {
     public:
         virtual ~IAudioClipBackend() = default;
-        [[nodiscard]] virtual bool Play(std::string& errorMessage) = 0;
+        [[nodiscard]] virtual std::unique_ptr<IAudioVoiceBackend> Play(
+            const AudioPlaybackSettings& settings,
+            IAudioBusBackend* bus,
+            std::string& errorMessage) = 0;
     };
 
     class AudioClip final
@@ -66,16 +71,20 @@ namespace mrg::audio
 
         [[nodiscard]] bool IsValid() const noexcept;
         [[nodiscard]] bool Play(std::string& errorMessage);
+        [[nodiscard]] std::unique_ptr<AudioVoice> Play(
+            const AudioPlaybackSettings& settings,
+            AudioBus* bus,
+            std::string& errorMessage);
 
     private:
         friend class AudioSystem;
 
         AudioClip(
             std::unique_ptr<IAudioClipBackend> implementation,
-            std::shared_ptr<std::atomic_size_t> liveClipCount);
+            std::shared_ptr<std::atomic_size_t> liveObjectCount);
 
         std::unique_ptr<IAudioClipBackend> implementation_;
-        std::shared_ptr<std::atomic_size_t> liveClipCount_;
+        std::shared_ptr<std::atomic_size_t> liveObjectCount_;
     };
 
     // The backend controls exactly one native audio system and its current
@@ -121,12 +130,17 @@ namespace mrg::audio
             std::string& errorMessage) = 0;
 
         [[nodiscard]] virtual std::uint64_t DspClock() const noexcept = 0;
+        [[nodiscard]] virtual std::unique_ptr<IAudioBusBackend> CreateBus(
+            std::string_view name,
+            IAudioBusBackend* parent,
+            std::string& errorMessage) = 0;
     };
 
     using AudioBackendFactory = std::unique_ptr<IAudioBackend> (*)();
     using AudioClipBackendFactory = std::unique_ptr<IAudioClipBackend> (*)(
         IAudioBackend& backend,
         const std::filesystem::path& path,
+        AudioLoadMode loadMode,
         std::string& errorMessage);
 
     [[nodiscard]] std::unique_ptr<IAudioBackend> CreateFmodAudioBackend();
@@ -134,6 +148,7 @@ namespace mrg::audio
         CreateFmodAudioClipBackend(
             IAudioBackend& backend,
             const std::filesystem::path& path,
+            AudioLoadMode loadMode,
             std::string& errorMessage);
 
     // Public backend-neutral service exposed to the rest of the engine. It
@@ -185,8 +200,17 @@ namespace mrg::audio
             std::string& errorMessage);
 
         [[nodiscard]] std::uint64_t DspClock() const noexcept;
+        [[nodiscard]] AudioClockSnapshot CaptureClockSnapshot() const noexcept;
         [[nodiscard]] std::unique_ptr<AudioClip> LoadSound(
             const std::filesystem::path& path,
+            AudioLoadMode loadMode,
+            std::string& errorMessage);
+        [[nodiscard]] std::unique_ptr<AudioClip> LoadSound(
+            const std::filesystem::path& path,
+            std::string& errorMessage);
+        [[nodiscard]] std::unique_ptr<AudioBus> CreateBus(
+            std::string_view name,
+            AudioBus* parent,
             std::string& errorMessage);
 
     private:
@@ -199,7 +223,7 @@ namespace mrg::audio
         std::unique_ptr<IAudioBackend> backend_;
         AudioClipBackendFactory clipFactory_{};
         AudioConfig config_{};
-        std::shared_ptr<std::atomic_size_t> liveClipCount_;
+        std::shared_ptr<std::atomic_size_t> liveObjectCount_;
         bool initialized_{};
     };
 }

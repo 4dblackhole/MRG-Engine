@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <ClInclude Include="System\AudioPlayback.h">
+      <Filter>System</Filter>
+    </ClInclude>
     <Filter Include="System">
       <UniqueIdentifier>{30333333-3333-4333-8333-333333333331}</UniqueIdentifier>
     </Filter>
@@ -18,15 +21,24 @@
     <ClInclude Include="Backend\Fmod\FmodAudioBackend.h">
       <Filter>Backend\Fmod</Filter>
     </ClInclude>
+    <ClInclude Include="Backend\Fmod\FmodAudioBus.h">
+      <Filter>Backend\Fmod</Filter>
+    </ClInclude>
     <ClInclude Include="Backend\Fmod\FmodAudioClip.h">
       <Filter>Backend\Fmod</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="System\AudioPlayback.cpp">
+      <Filter>System</Filter>
+    </ClCompile>
     <ClCompile Include="System\AudioSystem.cpp">
       <Filter>System</Filter>
     </ClCompile>
     <ClCompile Include="Backend\Fmod\FmodAudioBackend.cpp">
+      <Filter>Backend\Fmod</Filter>
+    </ClCompile>
+    <ClCompile Include="Backend\Fmod\FmodAudioBus.cpp">
       <Filter>Backend\Fmod</Filter>
     </ClCompile>
     <ClCompile Include="Backend\Fmod\FmodAudioClip.cpp">

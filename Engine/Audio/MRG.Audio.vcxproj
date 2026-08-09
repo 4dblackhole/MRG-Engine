@@ -58,13 +58,17 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="System\AudioPlayback.h" />
     <ClInclude Include="System\AudioSystem.h" />
     <ClInclude Include="Backend\Fmod\FmodAudioBackend.h" />
+    <ClInclude Include="Backend\Fmod\FmodAudioBus.h" />
     <ClInclude Include="Backend\Fmod\FmodAudioClip.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="System\AudioPlayback.cpp" />
     <ClCompile Include="System\AudioSystem.cpp" />
     <ClCompile Include="Backend\Fmod\FmodAudioBackend.cpp" />
+    <ClCompile Include="Backend\Fmod\FmodAudioBus.cpp" />
     <ClCompile Include="Backend\Fmod\FmodAudioClip.cpp" />
   </ItemGroup>
   <Target Name="EnsureFmodSdk" BeforeTargets="PrepareForBuild">

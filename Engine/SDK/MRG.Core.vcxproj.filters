@@ -89,8 +89,10 @@
     <ClInclude Include="..\Platform.Win32\System\ComApartment.h"><Filter>Platform.Win32\System</Filter></ClInclude>
     <ClInclude Include="..\Platform.Win32\System\RuntimePaths.h"><Filter>Platform.Win32\System</Filter></ClInclude>
     <ClInclude Include="..\Platform.Win32\Window\Win32Window.h"><Filter>Platform.Win32\Window</Filter></ClInclude>
+    <ClInclude Include="..\Audio\System\AudioPlayback.h"><Filter>Audio\System</Filter></ClInclude>
     <ClInclude Include="..\Audio\System\AudioSystem.h"><Filter>Audio\System</Filter></ClInclude>
     <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBackend.h"><Filter>Audio\Backend\Fmod</Filter></ClInclude>
+    <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBus.h"><Filter>Audio\Backend\Fmod</Filter></ClInclude>
     <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioClip.h"><Filter>Audio\Backend\Fmod</Filter></ClInclude>
     <ClInclude Include="..\Collision\Query\Collision.h"><Filter>Collision\Query</Filter></ClInclude>
     <ClInclude Include="..\Geometry\Shape\Vertex.h"><Filter>Geometry\Shape</Filter></ClInclude>
@@ -128,8 +130,10 @@
     <ClCompile Include="..\Platform.Win32\System\ComApartment.cpp"><Filter>Platform.Win32\System</Filter></ClCompile>
     <ClCompile Include="..\Platform.Win32\System\RuntimePaths.cpp"><Filter>Platform.Win32\System</Filter></ClCompile>
     <ClCompile Include="..\Platform.Win32\Window\Win32Window.cpp"><Filter>Platform.Win32\Window</Filter></ClCompile>
+    <ClCompile Include="..\Audio\System\AudioPlayback.cpp"><Filter>Audio\System</Filter></ClCompile>
     <ClCompile Include="..\Audio\System\AudioSystem.cpp"><Filter>Audio\System</Filter></ClCompile>
     <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBackend.cpp"><Filter>Audio\Backend\Fmod</Filter></ClCompile>
+    <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBus.cpp"><Filter>Audio\Backend\Fmod</Filter></ClCompile>
     <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioClip.cpp"><Filter>Audio\Backend\Fmod</Filter></ClCompile>
     <ClCompile Include="..\Collision\Query\Collision.cpp"><Filter>Collision\Query</Filter></ClCompile>
     <ClCompile Include="..\Geometry\Shape\Shape.cpp"><Filter>Geometry\Shape</Filter></ClCompile>

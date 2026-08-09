@@ -3,6 +3,9 @@
 이 저장소는 엔진 소스, 엔진 테스트와 문서만 보관한다. 게임 전용 Client는 별도
 저장소에서 관리한다.
 
+전체 기능과 신규 작업 시작 순서는 [EngineOverview.md](EngineOverview.md)를 먼저
+참고한다. 이 문서는 실제 디렉터리와 프로젝트 경계만 집중해서 설명한다.
+
 ```text
 MRG-Engine/
 ├─ Engine/

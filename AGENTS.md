@@ -2,6 +2,16 @@
 
 This file applies to the entire repository.
 
+## Session onboarding
+
+- Read `Docs/EngineOverview.md` before changing engine code in a new session.
+  It is the canonical index for features, ownership, source locations, Client
+  boundaries, validation, and the remaining detailed documents.
+- For a combined engine/Client task, also read the Client repository's
+  `AGENTS.md` and `Docs/ExecutionFlow.md` before deciding where a change belongs.
+- Keep `README.md`, `Docs/EngineOverview.md`, and feature documentation in sync
+  when a major public feature, ownership boundary, or validation rule changes.
+
 ## Purpose and boundary
 
 - This repository contains reusable Windows game-engine code only.

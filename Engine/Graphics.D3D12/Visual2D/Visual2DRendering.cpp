@@ -840,14 +840,27 @@ namespace mrg::graphics
                         screenOrigin.x,
                         screenOrigin.y,
                         depth));
+
+                // RectangleShape's mesh-space positive Y has V=0, while a
+                // screen Canvas uses positive Y downward. The geometry is
+                // therefore vertically reversed only on the screen path.
+                // Compose that correction with the caller's UV transform so
+                // image cropping and intentional negative UV scales remain
+                // correct instead of special-casing PNG assets in a Client.
+                const DirectX::XMFLOAT2 screenUvScale{
+                    command.uvScale.x,
+                    -command.uvScale.y};
+                const DirectX::XMFLOAT2 screenUvOffset{
+                    command.uvOffset.x,
+                    command.uvOffset.y + command.uvScale.y};
                 state.meshRendering->Submit(
                     state.imageMesh,
                     state.imagePages[image->second.pageIndex].material,
                     world,
                     viewProjection,
                     ToFloat4(command.color),
-                    command.uvScale,
-                    command.uvOffset,
+                    screenUvScale,
+                    screenUvOffset,
                     image->second.textureIndex);
                 continue;
             }

@@ -58,7 +58,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 | 공통 시스템 | `Engine/Core/System` | `Camera`, `TransformNode`, `MeshInstance`, `HighResolutionClock` |
 | 입력·창 | `Engine/Platform.Win32` | HWND, 메시지 펌프, Raw Input, Virtual-Key, QPC 입력 이벤트 |
 | 오디오 | `Engine/Audio` | backend-neutral `AudioSystem`, 출력 API·장치·DSP buffer, FMOD backend |
-| 충돌 | `Engine/Collision` | 렌더러 비종속 선·ray·면·원·구·OBB·삼각형 질의 |
+| 충돌 | `Engine/Collision` | 렌더러 비종속 선·ray·면·원·구·OBB·삼각형·절두체 질의 |
 | Geometry | `Engine/Geometry` | `Shape`, 정점 속성, 사각형·곡면·정육면체·구 primitive |
 | D3D12 Graphics | `Engine/Graphics.D3D12` | device, swap chain, frame resource, mesh/material, texture, text, shader |
 | Visual2D Core | `Engine/Core/Visual2D` | Sprite·위젯 공통 Node, component, Canvas, 입력, 평면·곡면 Surface |
@@ -141,7 +141,7 @@ Shape
   CPU 정점/인덱스와 primitive 형상
 
 GpuMesh
-  Shape에서 생성한 GPU vertex/index resource
+  Shape에서 생성한 GPU vertex/index resource와 로컬 Bounding Sphere
 
 MaterialInstance
   엔진 공통 root signature/PSO와 texture 설정
@@ -150,13 +150,19 @@ TransformNode
   부모·자식 위치, 회전, scale
 
 MeshInstance
-  GpuMesh + MaterialInstance + TransformNode의 Scene용 조합
+  GpuMesh + MaterialInstance + TransformNode의 Scene용 조합과 Camera 가시성 판정
 ```
 
 `Shape`에는 D3D12 resource, Material, Render 함수나 Transform을 넣지 않는다.
 Scene은 같은 `GpuMesh`와 `MaterialInstance`를 여러 `MeshInstance`가 공유하게 만들고,
 `Render`에서 `MeshInstance::Submit`을 호출한다. `MeshRenderSystem`은 같은
 mesh/material 조합을 모아 `DrawIndexedInstanced`로 기록한다.
+
+`GpuMesh` 생성 시 Shape의 canonical position 정점으로 로컬 Bounding Sphere를 한
+번 계산한다. `MeshInstance::Submit`은 부모를 포함한 월드 행렬로 Sphere 중심과
+반지름을 변환하고 `Camera::Frustum()`에 완전히 벗어난 인스턴스는
+`MeshRenderSystem`에 넘기지 않는다. Camera의 절두체는 View 또는 Projection이
+바뀔 때만 다시 계산되며 D3D12 renderer는 Camera를 소유하거나 참조하지 않는다.
 
 크기가 다른 이미지는 각각 독립 `Texture2D`로 원본 크기를 유지한다.
 `TextureSet`은 이 리소스의 SRV descriptor 묶음이며 D3D11/12의 동일 크기
@@ -218,7 +224,8 @@ ray, 유한 선분을 구분하며 경계 접촉도 충돌로 취급한다. 잘�
 line/ray는 예외 대신 충돌 없음으로 처리한다.
 
 제공되는 주요 질의에는 plane-line/ray/segment, circle-line/OBB,
-sphere-ray/OBB, OBB-OBB와 triangle-ray가 포함된다. 전체 목록과 예제는
+sphere-ray/OBB, OBB-OBB, triangle-ray와 ViewFrustum-sphere 3단계 분류가 포함된다.
+전체 목록과 예제는
 [Collision.md](Collision.md)에 있다.
 
 ## 11. Text

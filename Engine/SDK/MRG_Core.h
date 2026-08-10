@@ -615,6 +615,7 @@ namespace mrg::platform
 
 #include <DirectXMath.h>
 
+#include <cstdint>
 #include <optional>
 
 namespace mrg::collision
@@ -679,6 +680,25 @@ namespace mrg::collision
         float radius{};
     };
 
+    // All normals point into the visible volume. The planes use the same
+    // dot(normal, point) = distanceFromOrigin convention as Plane3D.
+    struct ViewFrustum
+    {
+        Plane3D left{{}, 0.0F};
+        Plane3D right{{}, 0.0F};
+        Plane3D bottom{{}, 0.0F};
+        Plane3D top{{}, 0.0F};
+        Plane3D nearPlane{{}, 0.0F};
+        Plane3D farPlane{{}, 0.0F};
+    };
+
+    enum class VolumeIntersection : std::uint8_t
+    {
+        Outside,
+        Intersecting,
+        Inside,
+    };
+
     struct Triangle3D
     {
         DirectX::XMFLOAT3 first{};
@@ -715,6 +735,23 @@ namespace mrg::collision
         DirectX::XMFLOAT3 barycentric{};
         float parameter{};
     };
+
+    // Extracts a left-handed DirectX frustum (x/y in [-w, w], z in [0, w])
+    // from a row-vector view-projection matrix. Extracted planes are normalized.
+    [[nodiscard]] ViewFrustum MakeViewFrustum(
+        const DirectX::XMFLOAT4X4& viewProjection) noexcept;
+
+    // Transforms a sphere by an affine world matrix. The radius uses the
+    // largest world-axis scale and falls back to a conservative matrix-norm
+    // bound when a transform hierarchy introduces shear.
+    [[nodiscard]] Sphere3D TransformSphere(
+        const Sphere3D& sphere,
+        const DirectX::XMFLOAT4X4& world) noexcept;
+
+    [[nodiscard]] VolumeIntersection Classify(
+        const ViewFrustum& frustum,
+        const Sphere3D& sphere,
+        float epsilon = DefaultEpsilon) noexcept;
 
     [[nodiscard]] DirectX::XMFLOAT2 ClosestPoint(
         const LineSegment2D& segment,
@@ -2431,6 +2468,8 @@ namespace mrg::graphics
 
         [[nodiscard]] MeshVertexLayout VertexLayout() const noexcept;
         [[nodiscard]] std::uint32_t IndexCount() const noexcept;
+        [[nodiscard]] const collision::Sphere3D&
+            LocalBoundingSphere() const noexcept;
 
     private:
         friend class MeshRenderSystem;
@@ -2443,6 +2482,7 @@ namespace mrg::graphics
         D3D12_INDEX_BUFFER_VIEW indexBufferView_{};
         MeshVertexLayout vertexLayout_{MeshVertexLayout::Unsupported};
         std::uint32_t indexCount_{};
+        collision::Sphere3D localBoundingSphere_{};
     };
 
     using GpuMeshHandle = std::shared_ptr<const GpuMesh>;
@@ -2546,7 +2586,8 @@ namespace mrg::graphics
                 std::as_bytes(vertexSpan),
                 sizeof(VertexType),
                 layout,
-                shape.Indices());
+                shape.Indices(),
+                ComputeLocalBoundingSphere(shape));
         }
 
         [[nodiscard]] MaterialInstanceHandle CreateMaterial(
@@ -2605,7 +2646,10 @@ namespace mrg::graphics
             std::span<const std::byte> vertexBytes,
             std::size_t vertexStrideBytes,
             MeshVertexLayout layout,
-            std::span<const std::uint32_t> indices);
+            std::span<const std::uint32_t> indices,
+            const collision::Sphere3D& localBoundingSphere);
+        [[nodiscard]] static collision::Sphere3D ComputeLocalBoundingSphere(
+            const geometry::Shape& shape) noexcept;
         [[nodiscard]] std::shared_ptr<MaterialTemplate>
             CreateUnlitVertexColorTemplate();
         [[nodiscard]] std::shared_ptr<MaterialTemplate>
@@ -2958,6 +3002,7 @@ namespace mrg::system
 
 // System feature: backend-neutral view and projection matrices.
 
+
 #include <DirectXMath.h>
 
 #include <cstdint>
@@ -3027,6 +3072,7 @@ namespace mrg::scene
         [[nodiscard]] DirectX::XMMATRIX ViewMatrix() const noexcept;
         [[nodiscard]] DirectX::XMMATRIX ProjectionMatrix() const noexcept;
         [[nodiscard]] DirectX::XMMATRIX ViewProjectionMatrix() const noexcept;
+        [[nodiscard]] const collision::ViewFrustum& Frustum() const noexcept;
 
     private:
         [[nodiscard]] static float ClampPitch(float pitchRadians) noexcept;
@@ -3035,6 +3081,7 @@ namespace mrg::scene
         void UpdateViewMatrix() const noexcept;
         void UpdateProjectionMatrix() const noexcept;
         void UpdateViewProjectionMatrix() const noexcept;
+        void UpdateFrustum() const noexcept;
 
         DirectX::XMFLOAT3 position_{};
         float yawRadians_{};
@@ -3049,9 +3096,11 @@ namespace mrg::scene
         mutable DirectX::XMFLOAT4X4 viewMatrix_{};
         mutable DirectX::XMFLOAT4X4 projectionMatrix_{};
         mutable DirectX::XMFLOAT4X4 viewProjectionMatrix_{};
+        mutable collision::ViewFrustum frustum_{};
         mutable bool viewDirty_{true};
         mutable bool projectionDirty_{true};
         mutable bool viewProjectionDirty_{true};
+        mutable bool frustumDirty_{true};
     };
 }
 // ===== END Engine\Core\System\Camera.h =====
@@ -3148,8 +3197,13 @@ namespace mrg::scene
         [[nodiscard]] const DirectX::XMFLOAT2& UvScale() const noexcept;
         [[nodiscard]] const DirectX::XMFLOAT2& UvOffset() const noexcept;
         [[nodiscard]] bool IsReady() const noexcept;
+        [[nodiscard]] const collision::Sphere3D&
+            LocalBoundingSphere() const;
+        [[nodiscard]] collision::Sphere3D WorldBoundingSphere() const;
+        [[nodiscard]] bool IsVisible(const Camera& camera) const;
 
-        // Queues this instance; D3D12Renderer batches matching mesh/material
+        // Queues this instance when its world bounding sphere is not outside
+        // the camera frustum. D3D12Renderer batches matching mesh/material
         // pairs and performs DrawIndexedInstanced in EndFrame.
         void Submit(
             const graphics::RenderContext& context,

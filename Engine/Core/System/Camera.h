@@ -2,6 +2,8 @@
 
 // System feature: backend-neutral view and projection matrices.
 
+#include "Query/Collision.h"
+
 #include <DirectXMath.h>
 
 #include <cstdint>
@@ -71,6 +73,7 @@ namespace mrg::scene
         [[nodiscard]] DirectX::XMMATRIX ViewMatrix() const noexcept;
         [[nodiscard]] DirectX::XMMATRIX ProjectionMatrix() const noexcept;
         [[nodiscard]] DirectX::XMMATRIX ViewProjectionMatrix() const noexcept;
+        [[nodiscard]] const collision::ViewFrustum& Frustum() const noexcept;
 
     private:
         [[nodiscard]] static float ClampPitch(float pitchRadians) noexcept;
@@ -79,6 +82,7 @@ namespace mrg::scene
         void UpdateViewMatrix() const noexcept;
         void UpdateProjectionMatrix() const noexcept;
         void UpdateViewProjectionMatrix() const noexcept;
+        void UpdateFrustum() const noexcept;
 
         DirectX::XMFLOAT3 position_{};
         float yawRadians_{};
@@ -93,8 +97,10 @@ namespace mrg::scene
         mutable DirectX::XMFLOAT4X4 viewMatrix_{};
         mutable DirectX::XMFLOAT4X4 projectionMatrix_{};
         mutable DirectX::XMFLOAT4X4 viewProjectionMatrix_{};
+        mutable collision::ViewFrustum frustum_{};
         mutable bool viewDirty_{true};
         mutable bool projectionDirty_{true};
         mutable bool viewProjectionDirty_{true};
+        mutable bool frustumDirty_{true};
     };
 }

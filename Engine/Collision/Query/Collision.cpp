@@ -89,6 +89,87 @@ namespace
         return std::isfinite(radius) && radius >= 0.0F;
     }
 
+    [[nodiscard]] bool HasFiniteCoordinates(const XMFLOAT3& value) noexcept
+    {
+        return std::isfinite(value.x) &&
+            std::isfinite(value.y) &&
+            std::isfinite(value.z);
+    }
+
+    [[nodiscard]] bool TryMakeFrustumPlane(
+        const float x,
+        const float y,
+        const float z,
+        const float constant,
+        mrg::collision::Plane3D& plane) noexcept
+    {
+        const float lengthSquared = x * x + y * y + z * z;
+        if (!std::isfinite(lengthSquared) ||
+            !std::isfinite(constant) ||
+            lengthSquared <= std::numeric_limits<float>::epsilon())
+        {
+            plane = {{}, 0.0F};
+            return false;
+        }
+
+        const float inverseLength = 1.0F / std::sqrt(lengthSquared);
+        plane.normal = {
+            x * inverseLength,
+            y * inverseLength,
+            z * inverseLength};
+        plane.distanceFromOrigin = -constant * inverseLength;
+        return true;
+    }
+
+    [[nodiscard]] float MaximumWorldScale(
+        const DirectX::XMFLOAT4X4& world) noexcept
+    {
+        const std::array<XMFLOAT3, 3> axes{
+            XMFLOAT3{world._11, world._12, world._13},
+            XMFLOAT3{world._21, world._22, world._23},
+            XMFLOAT3{world._31, world._32, world._33}};
+        const std::array<float, 3> lengthSquared{
+            LengthSquared(axes[0]),
+            LengthSquared(axes[1]),
+            LengthSquared(axes[2])};
+        if (!std::isfinite(lengthSquared[0]) ||
+            !std::isfinite(lengthSquared[1]) ||
+            !std::isfinite(lengthSquared[2]))
+        {
+            return std::numeric_limits<float>::quiet_NaN();
+        }
+
+        const float maximumAxisScale = std::sqrt(
+            std::max({lengthSquared[0], lengthSquared[1], lengthSquared[2]}));
+        const auto axesAreOrthogonal =
+            [&axes, &lengthSquared](const std::size_t first,
+                const std::size_t second) noexcept
+            {
+                const float threshold = mrg::collision::DefaultEpsilon *
+                    std::sqrt(
+                        lengthSquared[first] * lengthSquared[second]);
+                return std::abs(Dot(axes[first], axes[second])) <= threshold;
+            };
+        if (axesAreOrthogonal(0, 1) &&
+            axesAreOrthogonal(0, 2) &&
+            axesAreOrthogonal(1, 2))
+        {
+            return maximumAxisScale;
+        }
+
+        // sqrt(||A||1 * ||A||inf) bounds the largest singular value and is
+        // therefore safe for hierarchy-induced shear.
+        const float maximumRowSum = std::max({
+            std::abs(world._11) + std::abs(world._12) + std::abs(world._13),
+            std::abs(world._21) + std::abs(world._22) + std::abs(world._23),
+            std::abs(world._31) + std::abs(world._32) + std::abs(world._33)});
+        const float maximumColumnSum = std::max({
+            std::abs(world._11) + std::abs(world._21) + std::abs(world._31),
+            std::abs(world._12) + std::abs(world._22) + std::abs(world._32),
+            std::abs(world._13) + std::abs(world._23) + std::abs(world._33)});
+        return std::sqrt(maximumRowSum * maximumColumnSum);
+    }
+
     [[nodiscard]] bool HasValidExtents(const XMFLOAT2& extents) noexcept
     {
         return std::isfinite(extents.x) &&
@@ -304,6 +385,128 @@ namespace
 
 namespace mrg::collision
 {
+    ViewFrustum MakeViewFrustum(
+        const DirectX::XMFLOAT4X4& viewProjection) noexcept
+    {
+        ViewFrustum frustum{};
+        (void)TryMakeFrustumPlane(
+            viewProjection._11 + viewProjection._14,
+            viewProjection._21 + viewProjection._24,
+            viewProjection._31 + viewProjection._34,
+            viewProjection._41 + viewProjection._44,
+            frustum.left);
+        (void)TryMakeFrustumPlane(
+            viewProjection._14 - viewProjection._11,
+            viewProjection._24 - viewProjection._21,
+            viewProjection._34 - viewProjection._31,
+            viewProjection._44 - viewProjection._41,
+            frustum.right);
+        (void)TryMakeFrustumPlane(
+            viewProjection._12 + viewProjection._14,
+            viewProjection._22 + viewProjection._24,
+            viewProjection._32 + viewProjection._34,
+            viewProjection._42 + viewProjection._44,
+            frustum.bottom);
+        (void)TryMakeFrustumPlane(
+            viewProjection._14 - viewProjection._12,
+            viewProjection._24 - viewProjection._22,
+            viewProjection._34 - viewProjection._32,
+            viewProjection._44 - viewProjection._42,
+            frustum.top);
+        (void)TryMakeFrustumPlane(
+            viewProjection._13,
+            viewProjection._23,
+            viewProjection._33,
+            viewProjection._43,
+            frustum.nearPlane);
+        (void)TryMakeFrustumPlane(
+            viewProjection._14 - viewProjection._13,
+            viewProjection._24 - viewProjection._23,
+            viewProjection._34 - viewProjection._33,
+            viewProjection._44 - viewProjection._43,
+            frustum.farPlane);
+        return frustum;
+    }
+
+    Sphere3D TransformSphere(
+        const Sphere3D& sphere,
+        const DirectX::XMFLOAT4X4& world) noexcept
+    {
+        if (!HasValidRadius(sphere.radius) ||
+            !HasFiniteCoordinates(sphere.center) ||
+            !std::isfinite(world._41) ||
+            !std::isfinite(world._42) ||
+            !std::isfinite(world._43))
+        {
+            return {{}, -1.0F};
+        }
+
+        const float worldScale = MaximumWorldScale(world);
+        if (!std::isfinite(worldScale))
+        {
+            return {{}, -1.0F};
+        }
+
+        XMFLOAT3 center{};
+        XMStoreFloat3(
+            &center,
+            XMVector3TransformCoord(
+                XMLoadFloat3(&sphere.center),
+                XMLoadFloat4x4(&world)));
+        if (!HasFiniteCoordinates(center))
+        {
+            return {{}, -1.0F};
+        }
+        return {center, sphere.radius * worldScale};
+    }
+
+    VolumeIntersection Classify(
+        const ViewFrustum& frustum,
+        const Sphere3D& sphere,
+        const float epsilon) noexcept
+    {
+        if (!HasValidRadius(sphere.radius) ||
+            !HasFiniteCoordinates(sphere.center))
+        {
+            return VolumeIntersection::Outside;
+        }
+
+        const float absoluteEpsilon = AbsEpsilon(epsilon);
+        const std::array<const Plane3D*, 6> planes{
+            &frustum.left,
+            &frustum.right,
+            &frustum.bottom,
+            &frustum.top,
+            &frustum.nearPlane,
+            &frustum.farPlane};
+        VolumeIntersection result = VolumeIntersection::Inside;
+        for (const Plane3D* plane : planes)
+        {
+            const float normalLengthSquared = LengthSquared(plane->normal);
+            if (!std::isfinite(normalLengthSquared) ||
+                !std::isfinite(plane->distanceFromOrigin) ||
+                normalLengthSquared <=
+                    std::numeric_limits<float>::epsilon())
+            {
+                return VolumeIntersection::Outside;
+            }
+
+            const float signedDistance =
+                (Dot(plane->normal, sphere.center) -
+                    plane->distanceFromOrigin) /
+                std::sqrt(normalLengthSquared);
+            if (signedDistance < -sphere.radius - absoluteEpsilon)
+            {
+                return VolumeIntersection::Outside;
+            }
+            if (signedDistance <= sphere.radius + absoluteEpsilon)
+            {
+                result = VolumeIntersection::Intersecting;
+            }
+        }
+        return result;
+    }
+
     DirectX::XMFLOAT2 ClosestPoint(
         const LineSegment2D& segment,
         const DirectX::XMFLOAT2& point) noexcept

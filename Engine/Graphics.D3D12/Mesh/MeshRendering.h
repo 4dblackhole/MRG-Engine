@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Query/Collision.h"
 #include "Shape/Shape.h"
 #include "Shape/Vertex.h"
 #include "Texture/TextureManager.h"
@@ -77,6 +78,8 @@ namespace mrg::graphics
 
         [[nodiscard]] MeshVertexLayout VertexLayout() const noexcept;
         [[nodiscard]] std::uint32_t IndexCount() const noexcept;
+        [[nodiscard]] const collision::Sphere3D&
+            LocalBoundingSphere() const noexcept;
 
     private:
         friend class MeshRenderSystem;
@@ -89,6 +92,7 @@ namespace mrg::graphics
         D3D12_INDEX_BUFFER_VIEW indexBufferView_{};
         MeshVertexLayout vertexLayout_{MeshVertexLayout::Unsupported};
         std::uint32_t indexCount_{};
+        collision::Sphere3D localBoundingSphere_{};
     };
 
     using GpuMeshHandle = std::shared_ptr<const GpuMesh>;
@@ -192,7 +196,8 @@ namespace mrg::graphics
                 std::as_bytes(vertexSpan),
                 sizeof(VertexType),
                 layout,
-                shape.Indices());
+                shape.Indices(),
+                ComputeLocalBoundingSphere(shape));
         }
 
         [[nodiscard]] MaterialInstanceHandle CreateMaterial(
@@ -251,7 +256,10 @@ namespace mrg::graphics
             std::span<const std::byte> vertexBytes,
             std::size_t vertexStrideBytes,
             MeshVertexLayout layout,
-            std::span<const std::uint32_t> indices);
+            std::span<const std::uint32_t> indices,
+            const collision::Sphere3D& localBoundingSphere);
+        [[nodiscard]] static collision::Sphere3D ComputeLocalBoundingSphere(
+            const geometry::Shape& shape) noexcept;
         [[nodiscard]] std::shared_ptr<MaterialTemplate>
             CreateUnlitVertexColorTemplate();
         [[nodiscard]] std::shared_ptr<MaterialTemplate>

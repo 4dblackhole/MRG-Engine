@@ -32,6 +32,7 @@
 - `LineSegment3D`: 두 점 사이의 유한 선분
 - `Plane3D`: `dot(normal, point) = distanceFromOrigin` 평면
 - `Sphere3D`: 중심과 반지름
+- `ViewFrustum`: 안쪽을 향하는 left/right/bottom/top/near/far 평면
 - `Obb3D`: 중심, 로컬 반크기, quaternion 회전
 
 지원 판정:
@@ -40,6 +41,7 @@
 - 구와 직선, ray 또는 선분
 - 구와 OBB
 - OBB와 OBB
+- ViewFrustum과 Sphere의 `Outside`/`Intersecting`/`Inside` 분류
 
 `Plane3D`의 normal은 정규화하지 않아도 된다. `Obb3D::orientation`은
 `(x, y, z, w)` quaternion이며 판정 전에 내부에서 정규화된다.
@@ -114,6 +116,36 @@ const bool overlap3D = Intersects(player, worldBox);
 Windows SDK의 DirectXCollision 구현을 사용하되 공개 API에는 해당 구현 타입을
 노출하지 않는다.
 
+## Camera 절두체와 Bounding Sphere
+
+`MakeViewFrustum`은 DirectX의 left-handed row-vector ViewProjection 행렬에서
+정규화된 여섯 평면을 추출한다. Sphere 판정은 bool 대신
+`VolumeIntersection::Outside`, `Intersecting`, `Inside`를 반환한다.
+
+```cpp
+using namespace mrg::collision;
+
+const ViewFrustum& frustum = camera.Frustum();
+const Sphere3D worldBounds = TransformSphere(
+    localBounds,
+    transform.WorldMatrix());
+const VolumeIntersection visibility = Classify(frustum, worldBounds);
+```
+
+`TransformSphere`는 로컬 중심을 월드 행렬로 변환하고 반지름에는 월드 축 중 가장
+큰 절댓값 배율을 적용한다. 부모 비균일 scale과 자식 회전의 조합이 shear를 만들면
+largest singular value를 넘는 보수적 matrix-norm 상한을 사용해 반지름을
+과소평가하지 않는다.
+
+`GpuMesh`의 로컬 Sphere는 Shape의 canonical position 정점에서 GPU mesh 생성 시
+한 번 계산된다. `Camera`는 View/Projection dirty 상태에 Frustum 캐시를 연결하고,
+`MeshInstance::Submit`은 `Outside`일 때 `MeshRenderSystem` 제출 전에 반환한다.
+판정 코드는 Collision/Core에 있으므로 D3D12 renderer가 Camera를 소유하거나 직접
+참조하지 않는다.
+
+Screen Canvas의 `XMMatrixOrthographicOffCenterLH` 투영과 2D Rect clipping은 이
+Camera 절두체 경로를 사용하지 않는다.
+
 ## 경계와 잘못된 입력
 
 - 서로 접하기만 해도 충돌로 판정한다.
@@ -132,5 +164,7 @@ Windows SDK의 DirectXCollision 구현을 사용하되 공개 API에는 해당 �
 - 회전된 2D/3D OBB 판정
 - 원/구와 OBB 판정
 - 가장 가까운 점과 잘못된 크기·방향 처리
+- Perspective/Orthographic 절두체의 여섯 평면과 경계 교차
+- 부모 이동, 회전, 비균일 scale이 적용된 월드 Sphere와 Camera dirty 갱신
 
 테스트 프로젝트도 기능 헤더가 아닌 `MRG_Core.h`만 포함한다.

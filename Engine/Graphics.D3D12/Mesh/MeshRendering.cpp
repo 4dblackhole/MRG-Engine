@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -127,6 +128,12 @@ namespace mrg::graphics
     std::uint32_t GpuMesh::IndexCount() const noexcept
     {
         return indexCount_;
+    }
+
+    const collision::Sphere3D&
+    GpuMesh::LocalBoundingSphere() const noexcept
+    {
+        return localBoundingSphere_;
     }
 
     BuiltInMaterial MaterialTemplate::Type() const noexcept
@@ -555,7 +562,8 @@ namespace mrg::graphics
         const std::span<const std::byte> vertexBytes,
         const std::size_t vertexStrideBytes,
         const MeshVertexLayout layout,
-        const std::span<const std::uint32_t> indices)
+        const std::span<const std::uint32_t> indices,
+        const collision::Sphere3D& localBoundingSphere)
     {
         if (!initialized_ || device_ == nullptr)
         {
@@ -577,6 +585,7 @@ namespace mrg::graphics
         mesh->vertexLayout_ = layout;
         mesh->indexCount_ =
             static_cast<std::uint32_t>(indices.size());
+        mesh->localBoundingSphere_ = localBoundingSphere;
 
         mesh->vertexBuffer_ =
             CreateUploadBuffer(*device_, vertexBytes.size());
@@ -622,6 +631,45 @@ namespace mrg::graphics
             static_cast<UINT>(indices.size_bytes());
         mesh->indexBufferView_.Format = DXGI_FORMAT_R32_UINT;
         return mesh;
+    }
+
+    collision::Sphere3D MeshRenderSystem::ComputeLocalBoundingSphere(
+        const geometry::Shape& shape) noexcept
+    {
+        const std::span<const geometry::VertexAttributes> vertices =
+            shape.Vertices();
+        if (vertices.empty())
+        {
+            return {{}, -1.0F};
+        }
+
+        XMFLOAT3 minimum = vertices.front().position;
+        XMFLOAT3 maximum = minimum;
+        for (const geometry::VertexAttributes& vertex : vertices)
+        {
+            minimum.x = std::min(minimum.x, vertex.position.x);
+            minimum.y = std::min(minimum.y, vertex.position.y);
+            minimum.z = std::min(minimum.z, vertex.position.z);
+            maximum.x = std::max(maximum.x, vertex.position.x);
+            maximum.y = std::max(maximum.y, vertex.position.y);
+            maximum.z = std::max(maximum.z, vertex.position.z);
+        }
+
+        const XMFLOAT3 center{
+            (minimum.x + maximum.x) * 0.5F,
+            (minimum.y + maximum.y) * 0.5F,
+            (minimum.z + maximum.z) * 0.5F};
+        float radiusSquared = 0.0F;
+        for (const geometry::VertexAttributes& vertex : vertices)
+        {
+            const float x = vertex.position.x - center.x;
+            const float y = vertex.position.y - center.y;
+            const float z = vertex.position.z - center.z;
+            radiusSquared = std::max(
+                radiusSquared,
+                x * x + y * y + z * z);
+        }
+        return {center, std::sqrt(radiusSquared)};
     }
 
     std::shared_ptr<MaterialTemplate>

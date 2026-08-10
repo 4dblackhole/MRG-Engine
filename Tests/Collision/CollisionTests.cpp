@@ -101,6 +101,175 @@ namespace
             "orthographic mode refreshes the cached view-projection matrix");
     }
 
+    void TestPerspectiveFrustum()
+    {
+        using namespace mrg::collision;
+
+        mrg::scene::Camera camera;
+        camera.SetPerspective(DirectX::XM_PIDIV2, 1.0F, 1.0F, 10.0F);
+        const ViewFrustum& frustum = camera.Frustum();
+
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 0.0F, 5.0F}, 0.5F}) ==
+                VolumeIntersection::Inside,
+            "perspective frustum contains a sphere in front of the camera");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 0.0F, -2.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "perspective frustum rejects a sphere behind the camera");
+        Check(
+            Classify(frustum, Sphere3D{{-6.0F, 0.0F, 5.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "perspective frustum rejects a sphere beyond the left plane");
+        Check(
+            Classify(frustum, Sphere3D{{6.0F, 0.0F, 5.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "perspective frustum rejects a sphere beyond the right plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 6.0F, 5.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "perspective frustum rejects a sphere beyond the top plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, -6.0F, 5.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "perspective frustum rejects a sphere beyond the bottom plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 0.0F, 0.25F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "perspective frustum rejects a sphere before the near plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 0.0F, 11.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "perspective frustum rejects a sphere beyond the far plane");
+        Check(
+            Classify(frustum, Sphere3D{{5.2F, 0.0F, 5.0F}, 0.5F}) ==
+                VolumeIntersection::Intersecting,
+            "perspective frustum reports a sphere crossing a side plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 0.0F, 0.75F}, 0.5F}) ==
+                VolumeIntersection::Intersecting,
+            "perspective frustum reports a sphere crossing the near plane");
+    }
+
+    void TestOrthographicFrustum()
+    {
+        using namespace mrg::collision;
+
+        mrg::scene::Camera camera;
+        camera.SetOrthographic(8.0F, 6.0F, 1.0F, 10.0F);
+        const ViewFrustum& frustum = camera.Frustum();
+
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 0.0F, 5.0F}, 0.5F}) ==
+                VolumeIntersection::Inside,
+            "orthographic frustum contains a centered sphere");
+        Check(
+            Classify(frustum, Sphere3D{{-4.5F, 0.0F, 5.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "orthographic frustum rejects a sphere beyond the left plane");
+        Check(
+            Classify(frustum, Sphere3D{{4.5F, 0.0F, 5.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "orthographic frustum rejects a sphere beyond the right plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 3.5F, 5.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "orthographic frustum rejects a sphere beyond the top plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, -3.5F, 5.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "orthographic frustum rejects a sphere beyond the bottom plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 0.0F, 0.25F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "orthographic frustum rejects a sphere before the near plane");
+        Check(
+            Classify(frustum, Sphere3D{{0.0F, 0.0F, 11.0F}, 0.25F}) ==
+                VolumeIntersection::Outside,
+            "orthographic frustum rejects a sphere beyond the far plane");
+        Check(
+            Classify(frustum, Sphere3D{{4.2F, 0.0F, 5.0F}, 0.5F}) ==
+                VolumeIntersection::Intersecting,
+            "orthographic frustum reports a sphere crossing a side plane");
+
+        const Sphere3D projectionProbe{{3.0F, 0.0F, 5.0F}, 0.25F};
+        Check(
+            Classify(frustum, projectionProbe) == VolumeIntersection::Inside,
+            "orthographic probe starts inside the cached frustum");
+        camera.SetOrthographicSize(4.0F, 6.0F);
+        Check(
+            Classify(camera.Frustum(), projectionProbe) ==
+                VolumeIntersection::Outside,
+            "projection changes refresh the cached camera frustum");
+    }
+
+    void TestFrustumAndWorldBoundsUpdates()
+    {
+        using namespace mrg::collision;
+
+        mrg::scene::Camera camera;
+        camera.SetOrthographic(10.0F, 10.0F, 1.0F, 20.0F);
+        const Sphere3D localSphere{{0.0F, 0.0F, 0.0F}, 1.0F};
+
+        mrg::scene::TransformNode parent;
+        parent.SetPosition(3.0F, 2.0F, 5.0F);
+        parent.SetScale(2.0F, 3.0F, 4.0F);
+
+        mrg::scene::TransformNode instanceTransform;
+        instanceTransform.SetParent(&parent);
+        instanceTransform.SetPosition(1.0F, 0.0F, 0.0F);
+        instanceTransform.SetRotationRollPitchYaw(
+            0.0F,
+            DirectX::XM_PIDIV4,
+            0.0F);
+
+        const Sphere3D initialWorldSphere = TransformSphere(
+            localSphere,
+            instanceTransform.WorldMatrix());
+        Check(
+            NearlyEqual(initialWorldSphere.center.x, 5.0F) &&
+                NearlyEqual(initialWorldSphere.center.y, 2.0F) &&
+                NearlyEqual(initialWorldSphere.center.z, 5.0F),
+            "world sphere center follows the parent transform");
+        Check(
+            initialWorldSphere.radius >= 4.0F,
+            "world sphere conservatively covers rotation and nonuniform scale");
+        Check(
+            Classify(camera.Frustum(), initialWorldSphere) !=
+                VolumeIntersection::Outside,
+            "transformed instance bounds remain visible when crossing a plane");
+
+        parent.SetPosition(20.0F, 2.0F, 5.0F);
+        const Sphere3D movedWorldSphere = TransformSphere(
+            localSphere,
+            instanceTransform.WorldMatrix());
+        Check(
+            movedWorldSphere.center.x > initialWorldSphere.center.x + 10.0F,
+            "world sphere refreshes after its parent moves");
+        Check(
+            Classify(camera.Frustum(), movedWorldSphere) ==
+                VolumeIntersection::Outside,
+            "moved instance bounds leave the cached camera frustum");
+
+        camera.SetPosition(20.0F, 0.0F, 0.0F);
+        Check(
+            Classify(camera.Frustum(), movedWorldSphere) !=
+                VolumeIntersection::Outside,
+            "camera movement refreshes the frustum around moved bounds");
+
+        DirectX::XMFLOAT4X4 rotatedNonuniformWorld{};
+        DirectX::XMStoreFloat4x4(
+            &rotatedNonuniformWorld,
+            DirectX::XMMatrixScaling(-2.0F, 3.0F, 4.0F) *
+                DirectX::XMMatrixRotationY(DirectX::XM_PIDIV4));
+        const Sphere3D rotatedWorldSphere = TransformSphere(
+            Sphere3D{{1.0F, 0.0F, 0.0F}, 2.0F},
+            rotatedNonuniformWorld);
+        Check(
+            NearlyEqual(rotatedWorldSphere.radius, 8.0F),
+            "rotated sphere radius uses the largest absolute axis scale");
+    }
+
     void TestPlaneAndLines()
     {
         using namespace mrg::collision;
@@ -675,6 +844,9 @@ namespace
 int main()
 {
     TestCameraMatrices();
+    TestPerspectiveFrustum();
+    TestOrthographicFrustum();
+    TestFrustumAndWorldBoundsUpdates();
     TestPlaneAndLines();
     TestTwoDimensionalQueries();
     TestThreeDimensionalVolumes();

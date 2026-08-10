@@ -5,6 +5,7 @@
 
 #include <DirectXMath.h>
 
+#include <cstdint>
 #include <optional>
 
 namespace mrg::collision
@@ -69,6 +70,25 @@ namespace mrg::collision
         float radius{};
     };
 
+    // All normals point into the visible volume. The planes use the same
+    // dot(normal, point) = distanceFromOrigin convention as Plane3D.
+    struct ViewFrustum
+    {
+        Plane3D left{{}, 0.0F};
+        Plane3D right{{}, 0.0F};
+        Plane3D bottom{{}, 0.0F};
+        Plane3D top{{}, 0.0F};
+        Plane3D nearPlane{{}, 0.0F};
+        Plane3D farPlane{{}, 0.0F};
+    };
+
+    enum class VolumeIntersection : std::uint8_t
+    {
+        Outside,
+        Intersecting,
+        Inside,
+    };
+
     struct Triangle3D
     {
         DirectX::XMFLOAT3 first{};
@@ -105,6 +125,23 @@ namespace mrg::collision
         DirectX::XMFLOAT3 barycentric{};
         float parameter{};
     };
+
+    // Extracts a left-handed DirectX frustum (x/y in [-w, w], z in [0, w])
+    // from a row-vector view-projection matrix. Extracted planes are normalized.
+    [[nodiscard]] ViewFrustum MakeViewFrustum(
+        const DirectX::XMFLOAT4X4& viewProjection) noexcept;
+
+    // Transforms a sphere by an affine world matrix. The radius uses the
+    // largest world-axis scale and falls back to a conservative matrix-norm
+    // bound when a transform hierarchy introduces shear.
+    [[nodiscard]] Sphere3D TransformSphere(
+        const Sphere3D& sphere,
+        const DirectX::XMFLOAT4X4& world) noexcept;
+
+    [[nodiscard]] VolumeIntersection Classify(
+        const ViewFrustum& frustum,
+        const Sphere3D& sphere,
+        float epsilon = DefaultEpsilon) noexcept;
 
     [[nodiscard]] DirectX::XMFLOAT2 ClosestPoint(
         const LineSegment2D& segment,

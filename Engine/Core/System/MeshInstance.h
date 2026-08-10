@@ -44,8 +44,13 @@ namespace mrg::scene
         [[nodiscard]] const DirectX::XMFLOAT2& UvScale() const noexcept;
         [[nodiscard]] const DirectX::XMFLOAT2& UvOffset() const noexcept;
         [[nodiscard]] bool IsReady() const noexcept;
+        [[nodiscard]] const collision::Sphere3D&
+            LocalBoundingSphere() const;
+        [[nodiscard]] collision::Sphere3D WorldBoundingSphere() const;
+        [[nodiscard]] bool IsVisible(const Camera& camera) const;
 
-        // Queues this instance; D3D12Renderer batches matching mesh/material
+        // Queues this instance when its world bounding sphere is not outside
+        // the camera frustum. D3D12Renderer batches matching mesh/material
         // pairs and performs DrawIndexedInstanced in EndFrame.
         void Submit(
             const graphics::RenderContext& context,

@@ -48,7 +48,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Geometry;$(ProjectDir)..\Core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Collision;$(ProjectDir)..\Geometry;$(ProjectDir)..\Core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
@@ -82,6 +82,9 @@
     <None Include="Shader\Visual2DRectangle.hlsl" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Collision\MRG.Collision.vcxproj">
+      <Project>{A9999999-9999-4999-8999-999999999999}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Geometry\MRG.Geometry.vcxproj">
       <Project>{96666666-6666-4666-8666-666666666666}</Project>
     </ProjectReference>

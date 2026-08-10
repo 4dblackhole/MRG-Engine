@@ -28,6 +28,79 @@ namespace
         return std::abs(first - second) <= epsilon;
     }
 
+    [[nodiscard]] bool MatricesNearlyEqual(
+        const DirectX::XMMATRIX first,
+        const DirectX::XMMATRIX second,
+        const float epsilon = 1.0e-4F) noexcept
+    {
+        const DirectX::XMVECTOR tolerance =
+            DirectX::XMVectorReplicate(epsilon);
+        return DirectX::XMVector4NearEqual(first.r[0], second.r[0], tolerance) &&
+            DirectX::XMVector4NearEqual(first.r[1], second.r[1], tolerance) &&
+            DirectX::XMVector4NearEqual(first.r[2], second.r[2], tolerance) &&
+            DirectX::XMVector4NearEqual(first.r[3], second.r[3], tolerance);
+    }
+
+    void TestCameraMatrices()
+    {
+        using namespace DirectX;
+
+        mrg::scene::Camera camera;
+        const mrg::scene::Camera& readOnlyCamera = camera;
+        const XMMATRIX initialView = readOnlyCamera.ViewMatrix();
+        const XMMATRIX initialProjection = readOnlyCamera.ProjectionMatrix();
+        Check(
+            MatricesNearlyEqual(
+                readOnlyCamera.ViewProjectionMatrix(),
+                initialView * initialProjection),
+            "a const Camera returns its cached view-projection matrix");
+
+        camera.SetPosition(2.0F, 3.0F, -4.0F);
+        camera.SetYawPitchRadians(XM_PIDIV4, -0.2F);
+        const XMMATRIX movedView = readOnlyCamera.ViewMatrix();
+        Check(
+            !MatricesNearlyEqual(movedView, initialView),
+            "camera movement invalidates the cached view matrix");
+        Check(
+            MatricesNearlyEqual(
+                readOnlyCamera.ProjectionMatrix(),
+                initialProjection),
+            "camera movement preserves the cached projection matrix");
+        Check(
+            MatricesNearlyEqual(
+                readOnlyCamera.ViewProjectionMatrix(),
+                movedView * initialProjection),
+            "camera movement refreshes the cached view-projection matrix");
+
+        camera.SetPerspective(XM_PIDIV2, 16.0F / 9.0F, 0.5F, 500.0F);
+        const XMMATRIX perspectiveProjection = readOnlyCamera.ProjectionMatrix();
+        Check(
+            MatricesNearlyEqual(readOnlyCamera.ViewMatrix(), movedView),
+            "projection changes preserve the cached view matrix");
+        Check(
+            !MatricesNearlyEqual(perspectiveProjection, initialProjection),
+            "perspective changes invalidate the cached projection matrix");
+        Check(
+            MatricesNearlyEqual(
+                readOnlyCamera.ViewProjectionMatrix(),
+                movedView * perspectiveProjection),
+            "perspective changes refresh the cached view-projection matrix");
+
+        camera.SetOrthographic(1920.0F, 1080.0F, 0.0F, 10.0F);
+        const XMMATRIX orthographicProjection =
+            XMMatrixOrthographicLH(1920.0F, 1080.0F, 0.0F, 10.0F);
+        Check(
+            MatricesNearlyEqual(
+                readOnlyCamera.ProjectionMatrix(),
+                orthographicProjection),
+            "orthographic mode refreshes the cached projection matrix");
+        Check(
+            MatricesNearlyEqual(
+                readOnlyCamera.ViewProjectionMatrix(),
+                movedView * orthographicProjection),
+            "orthographic mode refreshes the cached view-projection matrix");
+    }
+
     void TestPlaneAndLines()
     {
         using namespace mrg::collision;
@@ -601,6 +674,7 @@ namespace
 
 int main()
 {
+    TestCameraMatrices();
     TestPlaneAndLines();
     TestTwoDimensionalQueries();
     TestThreeDimensionalVolumes();
@@ -615,6 +689,6 @@ int main()
         return 1;
     }
 
-    std::cout << "All collision and Visual2D tests passed.\n";
+    std::cout << "All Camera, collision, and Visual2D tests passed.\n";
     return 0;
 }

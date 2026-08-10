@@ -3030,6 +3030,11 @@ namespace mrg::scene
 
     private:
         [[nodiscard]] static float ClampPitch(float pitchRadians) noexcept;
+        void MarkViewDirty() noexcept;
+        void MarkProjectionDirty() noexcept;
+        void UpdateViewMatrix() const noexcept;
+        void UpdateProjectionMatrix() const noexcept;
+        void UpdateViewProjectionMatrix() const noexcept;
 
         DirectX::XMFLOAT3 position_{};
         float yawRadians_{};
@@ -3041,6 +3046,12 @@ namespace mrg::scene
         float orthographicHeight_{1.0F};
         float nearPlane_{0.1F};
         float farPlane_{1000.0F};
+        mutable DirectX::XMFLOAT4X4 viewMatrix_{};
+        mutable DirectX::XMFLOAT4X4 projectionMatrix_{};
+        mutable DirectX::XMFLOAT4X4 viewProjectionMatrix_{};
+        mutable bool viewDirty_{true};
+        mutable bool projectionDirty_{true};
+        mutable bool viewProjectionDirty_{true};
     };
 }
 // ===== END Engine\Core\System\Camera.h =====

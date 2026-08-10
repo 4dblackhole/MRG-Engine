@@ -17,6 +17,15 @@ namespace mrg::scene
             return std::isfinite(value) && value > 0.0F;
         }
 
+        [[nodiscard]] bool Equal(
+            const XMFLOAT3& value,
+            const float x,
+            const float y,
+            const float z) noexcept
+        {
+            return value.x == x && value.y == y && value.z == z;
+        }
+
         void ValidateFieldOfView(const float fieldOfViewRadians)
         {
             if (!std::isfinite(fieldOfViewRadians) ||
@@ -89,12 +98,17 @@ namespace mrg::scene
         const float y,
         const float z) noexcept
     {
+        if (Equal(position_, x, y, z))
+        {
+            return;
+        }
         position_ = {x, y, z};
+        MarkViewDirty();
     }
 
     void Camera::SetPosition(const XMFLOAT3& position) noexcept
     {
-        position_ = position;
+        SetPosition(position.x, position.y, position.z);
     }
 
     const XMFLOAT3& Camera::Position() const noexcept
@@ -106,8 +120,14 @@ namespace mrg::scene
         const float yawRadians,
         const float pitchRadians) noexcept
     {
+        const float clampedPitch = ClampPitch(pitchRadians);
+        if (yawRadians_ == yawRadians && pitchRadians_ == clampedPitch)
+        {
+            return;
+        }
         yawRadians_ = yawRadians;
-        pitchRadians_ = ClampPitch(pitchRadians);
+        pitchRadians_ = clampedPitch;
+        MarkViewDirty();
     }
 
     void Camera::AddYawPitchRadians(
@@ -163,11 +183,19 @@ namespace mrg::scene
             aspectRatio,
             nearPlane,
             farPlane);
+        if (projectionType_ == CameraProjectionType::Perspective &&
+            verticalFieldOfViewRadians_ == verticalFieldOfViewRadians &&
+            perspectiveAspectRatio_ == aspectRatio &&
+            nearPlane_ == nearPlane && farPlane_ == farPlane)
+        {
+            return;
+        }
         projectionType_ = CameraProjectionType::Perspective;
         verticalFieldOfViewRadians_ = verticalFieldOfViewRadians;
         perspectiveAspectRatio_ = aspectRatio;
         nearPlane_ = nearPlane;
         farPlane_ = farPlane;
+        MarkProjectionDirty();
     }
 
     void Camera::SetVerticalFieldOfViewRadians(const float fieldOfViewRadians)
@@ -175,7 +203,15 @@ namespace mrg::scene
         // Perspective values may be prepared while orthographic mode uses a
         // zero near plane, so validate this independent setting by itself.
         ValidateFieldOfView(fieldOfViewRadians);
+        if (verticalFieldOfViewRadians_ == fieldOfViewRadians)
+        {
+            return;
+        }
         verticalFieldOfViewRadians_ = fieldOfViewRadians;
+        if (projectionType_ == CameraProjectionType::Perspective)
+        {
+            MarkProjectionDirty();
+        }
     }
 
     void Camera::SetPerspectiveAspectRatio(const float aspectRatio)
@@ -185,7 +221,15 @@ namespace mrg::scene
             throw std::invalid_argument(
                 "The camera perspective aspect ratio is invalid.");
         }
+        if (perspectiveAspectRatio_ == aspectRatio)
+        {
+            return;
+        }
         perspectiveAspectRatio_ = aspectRatio;
+        if (projectionType_ == CameraProjectionType::Perspective)
+        {
+            MarkProjectionDirty();
+        }
     }
 
     void Camera::SetOrthographic(
@@ -195,18 +239,33 @@ namespace mrg::scene
         const float farPlane)
     {
         ValidateOrthographic(width, height, nearPlane, farPlane);
+        if (projectionType_ == CameraProjectionType::Orthographic &&
+            orthographicWidth_ == width && orthographicHeight_ == height &&
+            nearPlane_ == nearPlane && farPlane_ == farPlane)
+        {
+            return;
+        }
         projectionType_ = CameraProjectionType::Orthographic;
         orthographicWidth_ = width;
         orthographicHeight_ = height;
         nearPlane_ = nearPlane;
         farPlane_ = farPlane;
+        MarkProjectionDirty();
     }
 
     void Camera::SetOrthographicSize(const float width, const float height)
     {
         ValidateOrthographic(width, height, nearPlane_, farPlane_);
+        if (orthographicWidth_ == width && orthographicHeight_ == height)
+        {
+            return;
+        }
         orthographicWidth_ = width;
         orthographicHeight_ = height;
+        if (projectionType_ == CameraProjectionType::Orthographic)
+        {
+            MarkProjectionDirty();
+        }
     }
 
     void Camera::SetDepthRange(
@@ -230,8 +289,13 @@ namespace mrg::scene
                 farPlane);
         }
 
+        if (nearPlane_ == nearPlane && farPlane_ == farPlane)
+        {
+            return;
+        }
         nearPlane_ = nearPlane;
         farPlane_ = farPlane;
+        MarkProjectionDirty();
     }
 
     CameraProjectionType Camera::ProjectionType() const noexcept
@@ -271,33 +335,20 @@ namespace mrg::scene
 
     XMMATRIX Camera::ViewMatrix() const noexcept
     {
-        return XMMatrixLookToLH(
-            XMLoadFloat3(&position_),
-            ForwardVector(yawRadians_, pitchRadians_),
-            XMVectorSet(0.0F, 1.0F, 0.0F, 0.0F));
+        UpdateViewMatrix();
+        return XMLoadFloat4x4(&viewMatrix_);
     }
 
     XMMATRIX Camera::ProjectionMatrix() const noexcept
     {
-        if (projectionType_ == CameraProjectionType::Orthographic)
-        {
-            return XMMatrixOrthographicLH(
-                orthographicWidth_,
-                orthographicHeight_,
-                nearPlane_,
-                farPlane_);
-        }
-
-        return XMMatrixPerspectiveFovLH(
-            verticalFieldOfViewRadians_,
-            perspectiveAspectRatio_,
-            nearPlane_,
-            farPlane_);
+        UpdateProjectionMatrix();
+        return XMLoadFloat4x4(&projectionMatrix_);
     }
 
     XMMATRIX Camera::ViewProjectionMatrix() const noexcept
     {
-        return ViewMatrix() * ProjectionMatrix();
+        UpdateViewProjectionMatrix();
+        return XMLoadFloat4x4(&viewProjectionMatrix_);
     }
 
     float Camera::ClampPitch(const float pitchRadians) noexcept
@@ -306,5 +357,72 @@ namespace mrg::scene
             pitchRadians,
             -XM_PIDIV2 + PitchMarginRadians,
             XM_PIDIV2 - PitchMarginRadians);
+    }
+
+    void Camera::MarkViewDirty() noexcept
+    {
+        viewDirty_ = true;
+        viewProjectionDirty_ = true;
+    }
+
+    void Camera::MarkProjectionDirty() noexcept
+    {
+        projectionDirty_ = true;
+        viewProjectionDirty_ = true;
+    }
+
+    void Camera::UpdateViewMatrix() const noexcept
+    {
+        if (!viewDirty_)
+        {
+            return;
+        }
+
+        XMStoreFloat4x4(
+            &viewMatrix_,
+            XMMatrixLookToLH(
+                XMLoadFloat3(&position_),
+                ForwardVector(yawRadians_, pitchRadians_),
+                XMVectorSet(0.0F, 1.0F, 0.0F, 0.0F)));
+        viewDirty_ = false;
+    }
+
+    void Camera::UpdateProjectionMatrix() const noexcept
+    {
+        if (!projectionDirty_)
+        {
+            return;
+        }
+
+        const XMMATRIX projection =
+            projectionType_ == CameraProjectionType::Orthographic
+            ? XMMatrixOrthographicLH(
+                orthographicWidth_,
+                orthographicHeight_,
+                nearPlane_,
+                farPlane_)
+            : XMMatrixPerspectiveFovLH(
+                verticalFieldOfViewRadians_,
+                perspectiveAspectRatio_,
+                nearPlane_,
+                farPlane_);
+        XMStoreFloat4x4(&projectionMatrix_, projection);
+        projectionDirty_ = false;
+    }
+
+    void Camera::UpdateViewProjectionMatrix() const noexcept
+    {
+        UpdateViewMatrix();
+        UpdateProjectionMatrix();
+        if (!viewProjectionDirty_)
+        {
+            return;
+        }
+
+        XMStoreFloat4x4(
+            &viewProjectionMatrix_,
+            XMLoadFloat4x4(&viewMatrix_) *
+                XMLoadFloat4x4(&projectionMatrix_));
+        viewProjectionDirty_ = false;
     }
 }

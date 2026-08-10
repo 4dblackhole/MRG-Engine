@@ -124,6 +124,33 @@ namespace mrg::scene
         return mesh_ != nullptr && material_ != nullptr;
     }
 
+    const collision::Sphere3D&
+    MeshInstance::LocalBoundingSphere() const
+    {
+        if (mesh_ == nullptr)
+        {
+            throw std::logic_error(
+                "MeshInstance must have a mesh before reading its bounds.");
+        }
+        return mesh_->LocalBoundingSphere();
+    }
+
+    collision::Sphere3D MeshInstance::WorldBoundingSphere() const
+    {
+        return collision::TransformSphere(
+            LocalBoundingSphere(),
+            transform_.WorldMatrix());
+    }
+
+    bool MeshInstance::IsVisible(const Camera& camera) const
+    {
+        return mesh_ != nullptr &&
+            collision::Classify(
+                camera.Frustum(),
+                WorldBoundingSphere()) !=
+                collision::VolumeIntersection::Outside;
+    }
+
     void MeshInstance::Submit(
         const graphics::RenderContext& context,
         const Camera& camera)
@@ -139,6 +166,16 @@ namespace mrg::scene
                 "RenderContext has no mesh rendering service.");
         }
 
+        const XMFLOAT4X4& world = transform_.WorldMatrix();
+        if (collision::Classify(
+                camera.Frustum(),
+                collision::TransformSphere(
+                    mesh_->LocalBoundingSphere(),
+                    world)) == collision::VolumeIntersection::Outside)
+        {
+            return;
+        }
+
         XMFLOAT4X4 viewProjection{};
         XMStoreFloat4x4(
             &viewProjection,
@@ -146,7 +183,7 @@ namespace mrg::scene
         context.meshRendering->Submit(
             mesh_,
             material_,
-            transform_.WorldMatrix(),
+            world,
             viewProjection,
             color_,
             uvScale_,

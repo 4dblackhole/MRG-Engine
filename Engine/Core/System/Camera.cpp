@@ -351,6 +351,12 @@ namespace mrg::scene
         return XMLoadFloat4x4(&viewProjectionMatrix_);
     }
 
+    const collision::ViewFrustum& Camera::Frustum() const noexcept
+    {
+        UpdateFrustum();
+        return frustum_;
+    }
+
     float Camera::ClampPitch(const float pitchRadians) noexcept
     {
         return std::clamp(
@@ -363,12 +369,14 @@ namespace mrg::scene
     {
         viewDirty_ = true;
         viewProjectionDirty_ = true;
+        frustumDirty_ = true;
     }
 
     void Camera::MarkProjectionDirty() noexcept
     {
         projectionDirty_ = true;
         viewProjectionDirty_ = true;
+        frustumDirty_ = true;
     }
 
     void Camera::UpdateViewMatrix() const noexcept
@@ -424,5 +432,17 @@ namespace mrg::scene
             XMLoadFloat4x4(&viewMatrix_) *
                 XMLoadFloat4x4(&projectionMatrix_));
         viewProjectionDirty_ = false;
+    }
+
+    void Camera::UpdateFrustum() const noexcept
+    {
+        UpdateViewProjectionMatrix();
+        if (!frustumDirty_)
+        {
+            return;
+        }
+
+        frustum_ = collision::MakeViewFrustum(viewProjectionMatrix_);
+        frustumDirty_ = false;
     }
 }

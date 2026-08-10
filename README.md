@@ -3,6 +3,8 @@
 MRG-Engine은 Visual Studio 2022, C++20, DirectX 12 기반의 Windows 게임 엔진
 저장소다. 게임 전용 코드는 포함하지 않으며, 소비 프로젝트에는 통합 정적
 라이브러리 `MRG.Core.lib`와 단일 공개 헤더 `MRG_Core.h`를 제공한다.
+3D `MeshInstance`는 Camera의 Perspective/Orthographic 절두체와 로컬 Bounding
+Sphere를 사용해 화면 밖 인스턴스를 제출 전에 제외한다.
 
 처음 사용하는 개발자나 새 Codex 세션은
 [Docs/EngineOverview.md](Docs/EngineOverview.md)부터 읽는다. 주요 기능, 코드 위치,

@@ -27,6 +27,13 @@ namespace mrg::graphics
         [[nodiscard]] virtual visual2d::ImageHandle LoadImage(
             const std::filesystem::path& path) = 0;
 
+        // Returns the original decoded pixel extent for an image handle.
+        // Invalid or expired handles return a zero size. Sprite bounds remain
+        // a Client presentation choice; this lets them preserve source aspect
+        // ratios when scaling to a game-specific target width or height.
+        [[nodiscard]] virtual visual2d::Size GetImageSize(
+            visual2d::ImageHandle image) const noexcept = 0;
+
         // Renders at pixel size with a top-left screen origin. A larger Canvas
         // Z-order places the Canvas and its complete element tree in front of
         // a smaller one. Values above 31 are clamped to the front-most band.

@@ -105,6 +105,11 @@ capture를 재사용하고 hit-test와 move 이벤트를 생략한다. 포인터
 전달하므로 크기를 강제로 통일하는 `Texture2DArray`가 필요하지 않다. 화면과 평면
 Sprite는 같은 mesh/material 조합을 사용하여 `DrawIndexedInstanced` 배치에 들어간다.
 
+`GetImageSize(ImageHandle)`은 WIC가 읽은 원본 픽셀 크기를 돌려준다. Sprite Bounds는
+여전히 Client가 정하지만, 이 크기로 목표 폭 또는 높이에 맞는 다른 축을 계산하면
+스킨 교체 뒤에도 원본 비율을 유지할 수 있다. 잘못되었거나 더 이상 유효하지 않은
+handle은 `{0, 0}`을 돌려준다.
+
 `SpriteVisualComponent::SetUvTransform`으로 cover/crop UV를 인스턴스별로 지정할
 수 있다. 화면 Visual2D는 Depth Write 대신 트리 순서를 기준으로 하며, 월드의
 불투명 Mesh는 기존 Mesh 렌더러의 Depth 상태를 사용한다.

@@ -316,6 +316,23 @@ namespace mrg::graphics
             return visual2d::ImageHandle{handleValue};
         }
 
+        [[nodiscard]] visual2d::Size GetImageSize(
+            const visual2d::ImageHandle image) const noexcept
+        {
+            const auto found = imagesByHandle.find(image.value);
+            if (!image || found == imagesByHandle.end())
+            {
+                return {};
+            }
+
+            const ImageResource& resource = found->second;
+            const TextureInfo& info = imagePages[resource.pageIndex].textures->
+                Info(resource.textureIndex);
+            return {
+                static_cast<float>(info.width),
+                static_cast<float>(info.height)};
+        }
+
         void CreateRectanglePipeline()
         {
             std::array<D3D12_ROOT_PARAMETER, 2> parameters{};
@@ -730,6 +747,12 @@ namespace mrg::graphics
         const std::filesystem::path& path)
     {
         return implementation_->LoadImage(path);
+    }
+
+    visual2d::Size D3D12Visual2DRenderer::GetImageSize(
+        const visual2d::ImageHandle image) const noexcept
+    {
+        return implementation_->GetImageSize(image);
     }
 
     void D3D12Visual2DRenderer::SubmitScreen(

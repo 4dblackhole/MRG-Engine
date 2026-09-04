@@ -34,9 +34,10 @@ namespace mrg::graphics
         [[nodiscard]] virtual visual2d::Size GetImageSize(
             visual2d::ImageHandle image) const noexcept = 0;
 
-        // Renders at pixel size with a top-left screen origin. A larger Canvas
-        // Z-order places the Canvas and its complete element tree in front of
-        // a smaller one. Values above 31 are clamped to the front-most band.
+        // Renders a centered, Y-up Canvas at pixel size. screenOrigin remains
+        // the Canvas panel's top-left point in Win32 screen pixels. A larger
+        // Canvas Z-order places the complete tree in front of a smaller one.
+        // Values above 31 are clamped to the front-most band.
         virtual void SubmitScreen(
             const visual2d::Visual2DCanvas& canvas,
             const RenderContext& context,

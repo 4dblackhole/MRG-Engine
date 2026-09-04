@@ -505,7 +505,9 @@ namespace mrg::visual2d
             return std::nullopt;
         }
         const Size size = canvas_.LogicalSize();
-        return Point{hit->uv.x * size.width, hit->uv.y * size.height};
+        return Point{
+            (hit->uv.x - 0.5F) * size.width,
+            (0.5F - hit->uv.y) * size.height};
     }
 
     std::optional<collision::Ray3D> CreateWorldPointerRay(

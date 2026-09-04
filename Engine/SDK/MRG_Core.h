@@ -1406,7 +1406,7 @@ namespace mrg::visual2d
         [[nodiscard]] scene::TransformNode& Transform() noexcept;
         [[nodiscard]] const scene::TransformNode& Transform() const noexcept;
         // Position is measured from the selected parent/anchor to this node's
-        // normalized Pivot. It is converted to the Transform's top-left
+        // normalized Pivot. It is converted to the Transform's lower-left
         // position whenever position, size or Pivot changes.
         [[nodiscard]] Point Position() const noexcept;
         void SetPosition(Point position);
@@ -1552,7 +1552,8 @@ namespace mrg::visual2d
         FixedHeight,
     };
 
-    // Owns one Visual2D tree and nine non-rendering anchor nodes. A Canvas may
+    // Owns one Visual2D tree and nine non-rendering anchor nodes. Canvas-local
+    // coordinates are centered with positive Y pointing upward. A Canvas may
     // cover the whole viewport or only a panel-sized logical region. FixedHeight
     // keeps the logical height constant and expands only the logical width.
     class Visual2DCanvas final
@@ -1604,9 +1605,10 @@ namespace mrg::visual2d
         std::vector<Action> actions_;
     };
 
-    // Converts an absolute screen pixel to Canvas-local coordinates. The
-    // viewport clips only the physical screen; points outside the Canvas are
-    // intentionally preserved so pointer capture can continue while dragging.
+    // Converts an absolute top-left-origin screen pixel to centered, Y-up
+    // Canvas-local coordinates. The viewport clips only the physical screen;
+    // points outside the Canvas are intentionally preserved so pointer capture
+    // can continue while dragging.
     [[nodiscard]] std::optional<Point> MapScreenPointer(
         Point screenPosition,
         Size viewportSize,
@@ -1940,8 +1942,8 @@ namespace mrg::visual2d
             const collision::Ray3D& worldRay) const noexcept = 0;
     };
 
-    // Finite XY plane. Local UV (0,0) is the upper-left corner, matching the
-    // RectangleShape and canvas coordinate convention.
+    // Finite XY plane. Local UV (0,0) remains the upper-left texture corner;
+    // WorldSpaceVisual2DCanvas converts it to centered, Y-up Canvas space.
     class PlaneVisual2DSurface final : public IVisual2DSurface
     {
     public:
@@ -2858,9 +2860,10 @@ namespace mrg::graphics
         [[nodiscard]] virtual visual2d::Size GetImageSize(
             visual2d::ImageHandle image) const noexcept = 0;
 
-        // Renders at pixel size with a top-left screen origin. A larger Canvas
-        // Z-order places the Canvas and its complete element tree in front of
-        // a smaller one. Values above 31 are clamped to the front-most band.
+        // Renders a centered, Y-up Canvas at pixel size. screenOrigin remains
+        // the Canvas panel's top-left point in Win32 screen pixels. A larger
+        // Canvas Z-order places the complete tree in front of a smaller one.
+        // Values above 31 are clamped to the front-most band.
         virtual void SubmitScreen(
             const visual2d::Visual2DCanvas& canvas,
             const RenderContext& context,

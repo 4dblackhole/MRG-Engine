@@ -29,8 +29,8 @@ namespace mrg::visual2d
             const collision::Ray3D& worldRay) const noexcept = 0;
     };
 
-    // Finite XY plane. Local UV (0,0) is the upper-left corner, matching the
-    // RectangleShape and canvas coordinate convention.
+    // Finite XY plane. Local UV (0,0) remains the upper-left texture corner;
+    // WorldSpaceVisual2DCanvas converts it to centered, Y-up Canvas space.
     class PlaneVisual2DSurface final : public IVisual2DSurface
     {
     public:

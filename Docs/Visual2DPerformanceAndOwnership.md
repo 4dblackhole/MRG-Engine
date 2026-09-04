@@ -27,6 +27,10 @@ BVH(Bounding Volume Hierarchy)를 한 번 만든다. 각 노드는 삼각형 묶
   `screenOrigin`으로 지정한다.
 - 입력에도 동일한 `screenOrigin`을 `MapScreenPointer`에 전달한다.
 
+Canvas 내부 좌표는 정중앙 원점과 Y-up을 사용한다. `screenOrigin`은 Canvas
+좌표가 아니라 Win32 화면 배치 경계이므로 예외적으로 패널의 좌상단 픽셀을
+뜻한다. `MapScreenPointer`가 좌상단 원점 픽셀을 중앙 원점 Canvas 좌표로 바꾼다.
+
 `MapScreenPointer`는 물리 viewport 밖의 점만 거부한다. Canvas 영역 밖이지만
 화면 안인 좌표는 반환하므로 Slider·ComboBox가 pointer capture를 가진 동안에도
 드래그와 release 좌표가 끊기지 않는다. capture가 없을 때 Canvas 영역을 차단할지는

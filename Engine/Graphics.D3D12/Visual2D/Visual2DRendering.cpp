@@ -776,12 +776,20 @@ namespace mrg::graphics
             DirectX::XMMatrixOrthographicOffCenterLH(
                 0.0F,
                 static_cast<float>(context.width),
-                static_cast<float>(context.height),
                 0.0F,
+                static_cast<float>(context.height),
                 0.0F,
                 1.0F));
 
         const float pixelScale = canvas.PixelScale();
+        const visual2d::Size canvasSize = canvas.LogicalSize();
+        const float canvasCenterX =
+            screenOrigin.x + canvasSize.width * pixelScale * 0.5F;
+        const float canvasCenterY =
+            static_cast<float>(context.height) - screenOrigin.y -
+            canvasSize.height * pixelScale * 0.5F;
+        const float canvasCenterInScreenPixelsY =
+            screenOrigin.y + canvasSize.height * pixelScale * 0.5F;
 
         const float canvasFarDepth = ScreenUiDepthRange -
             static_cast<float>(std::min(
@@ -803,8 +811,10 @@ namespace mrg::graphics
                 command.bounds,
                 command.nodeTransform);
             const visual2d::Rect bounds{
-                screenOrigin.x + logicalBounds.x * pixelScale,
-                screenOrigin.y + logicalBounds.y * pixelScale,
+                canvasCenterX + logicalBounds.x * pixelScale,
+                screenOrigin.y +
+                    (canvasSize.height * 0.5F - logicalBounds.y -
+                     logicalBounds.height) * pixelScale,
                 logicalBounds.width * pixelScale,
                 logicalBounds.height * pixelScale};
             if (command.type == visual2d::DrawPacketType::Text)
@@ -812,7 +822,7 @@ namespace mrg::graphics
                 TextDrawCommand text{};
                 text.positionPixels = {
                     command.bounds.x * pixelScale,
-                    command.bounds.y * pixelScale};
+                    -(command.bounds.y + command.bounds.height) * pixelScale};
                 text.layoutSizePixels = {
                     command.bounds.width * pixelScale,
                     command.bounds.height * pixelScale};
@@ -821,16 +831,16 @@ namespace mrg::graphics
                     &text.transform,
                     DirectX::XMMatrixScaling(
                         1.0F / pixelScale,
-                        1.0F / pixelScale,
+                        -1.0F / pixelScale,
                         1.0F) *
                     DirectX::XMLoadFloat4x4(&command.nodeTransform) *
                     DirectX::XMMatrixScaling(
                         pixelScale,
-                        pixelScale,
+                        -pixelScale,
                         0.0001F) *
                     DirectX::XMMatrixTranslation(
-                        screenOrigin.x,
-                        screenOrigin.y,
+                        canvasCenterX,
+                        canvasCenterInScreenPixelsY,
                         0.0F));
                 text.horizontalAlignment = ToTextAlignment(
                     command.horizontalAlignment);
@@ -861,30 +871,18 @@ namespace mrg::graphics
                         pixelScale,
                         0.0001F) *
                     DirectX::XMMatrixTranslation(
-                        screenOrigin.x,
-                        screenOrigin.y,
+                        canvasCenterX,
+                        canvasCenterY,
                         depth));
 
-                // RectangleShape's mesh-space positive Y has V=0, while a
-                // screen Canvas uses positive Y downward. The geometry is
-                // therefore vertically reversed only on the screen path.
-                // Compose that correction with the caller's UV transform so
-                // image cropping and intentional negative UV scales remain
-                // correct instead of special-casing PNG assets in a Client.
-                const DirectX::XMFLOAT2 screenUvScale{
-                    command.uvScale.x,
-                    -command.uvScale.y};
-                const DirectX::XMFLOAT2 screenUvOffset{
-                    command.uvOffset.x,
-                    command.uvOffset.y + command.uvScale.y};
                 state.meshRendering->Submit(
                     state.imageMesh,
                     state.imagePages[image->second.pageIndex].material,
                     world,
                     viewProjection,
                     ToFloat4(command.color),
-                    screenUvScale,
-                    screenUvOffset,
+                    command.uvScale,
+                    command.uvOffset,
                     image->second.textureIndex);
                 continue;
             }
@@ -903,8 +901,8 @@ namespace mrg::graphics
                     pixelScale,
                     0.0001F) *
                 DirectX::XMMatrixTranslation(
-                    screenOrigin.x,
-                    screenOrigin.y,
+                    canvasCenterX,
+                    canvasCenterY,
                     depth));
             state.meshRendering->Submit(
                 state.rectangleMesh,
@@ -957,11 +955,11 @@ namespace mrg::graphics
                 DirectX::XMLoadFloat4x4(&command.nodeTransform) *
                 DirectX::XMMatrixScaling(
                     surfaceWorldSize.width / canvasSize.width,
-                    -surfaceWorldSize.height / canvasSize.height,
+                    surfaceWorldSize.height / canvasSize.height,
                     1.0F) *
                 DirectX::XMMatrixTranslation(
-                    -surfaceWorldSize.width * 0.5F,
-                    surfaceWorldSize.height * 0.5F,
+                    0.0F,
+                    0.0F,
                     layer) *
                 surface);
 
@@ -1162,7 +1160,11 @@ namespace mrg::graphics
             DirectX::XMStoreFloat4x4(
                 &primitiveTransform,
                 DirectX::XMLoadFloat4x4(&command.nodeTransform) *
-                DirectX::XMMatrixScaling(scaleX, scaleY, 0.0001F));
+                DirectX::XMMatrixScaling(scaleX, -scaleY, 0.0001F) *
+                DirectX::XMMatrixTranslation(
+                    static_cast<float>(targetWidth) * 0.5F,
+                    static_cast<float>(targetHeight) * 0.5F,
+                    0.0F));
             if (command.type == visual2d::DrawPacketType::Rectangle)
             {
                 selectBatch(BatchType::Rectangles);
@@ -1195,9 +1197,9 @@ namespace mrg::graphics
                     ToFloat4(command.color),
                     primitiveTransform,
                     {command.uvScale.x,
-                     command.uvScale.y,
+                     -command.uvScale.y,
                      command.uvOffset.x,
-                     command.uvOffset.y},
+                     command.uvOffset.y + command.uvScale.y},
                     image->second.textureIndex});
                 continue;
             }
@@ -1205,7 +1207,7 @@ namespace mrg::graphics
             TextDrawCommand text{};
             text.positionPixels = {
                 command.bounds.x * scaleX,
-                command.bounds.y * scaleY};
+                -(command.bounds.y + command.bounds.height) * scaleY};
             text.layoutSizePixels = {
                 command.bounds.width * scaleX,
                 command.bounds.height * scaleY};
@@ -1213,10 +1215,14 @@ namespace mrg::graphics
                 &text.transform,
                 DirectX::XMMatrixScaling(
                     1.0F / scaleX,
-                    1.0F / scaleY,
+                    -1.0F / scaleY,
                     1.0F) *
                 DirectX::XMLoadFloat4x4(&command.nodeTransform) *
-                DirectX::XMMatrixScaling(scaleX, scaleY, 0.0001F));
+                DirectX::XMMatrixScaling(scaleX, -scaleY, 0.0001F) *
+                DirectX::XMMatrixTranslation(
+                    static_cast<float>(targetWidth) * 0.5F,
+                    static_cast<float>(targetHeight) * 0.5F,
+                    0.0F));
             text.horizontalAlignment = ToTextAlignment(
                 command.horizontalAlignment);
             text.verticalAlignment = TextVerticalAlignment::Center;

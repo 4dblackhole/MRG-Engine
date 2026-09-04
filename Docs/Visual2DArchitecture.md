@@ -42,17 +42,17 @@ Canvas의 `Visual2DNode` 트리가 모든 노드의 유일한 소유자다. 각 
 따라서 노드와 Transform이 같은 자식을 각각 `unique_ptr`로 소유하지 않는다.
 
 노드 위치는 부모 또는 화면 앵커에서 Pivot까지의 거리다. 실제 Transform의
-좌측 상단 위치는 다음과 같이 계산된다.
+좌측 하단 위치는 다음과 같이 계산된다.
 
 ```text
-Transform top-left = node position - normalized pivot × node size
+Transform lower-left = node position - normalized pivot × node size
 ```
 
 XYZ 회전, 크기, 위치와 부모 Transform이 Sprite, 글자, 충돌 영역에 동일하게
 적용된다. 화면 포인터는 Canvas 광선으로 만든 뒤 각 노드의 월드 행렬 역변환을
 거쳐 로컬 Collider에 전달하므로 회전된 사각형의 표시와 hit box가 일치한다.
 
-## 720 세로 기준 좌표와 9개 앵커
+## 중앙 원점 Y-up 좌표와 9개 앵커
 
 기본 Canvas 기준은 1280×720이고 `CanvasScaleMode::FixedHeight`를 사용한다.
 
@@ -65,6 +65,11 @@ logicalWidth  = viewportWidth / pixelScale
 100 논리 단위는 720p에서 100px, 1080p에서 150px다. 가로·세로에 같은 배율을
 적용하므로 화면비가 바뀌어도 이미지와 글자가 찌그러지지 않는다.
 
+Canvas 논리 원점은 정중앙이고 `+X`는 오른쪽, `+Y`는 위쪽이다. 따라서 논리
+범위는 `[-width/2, +width/2] × [-height/2, +height/2]`다. Win32 마우스 위치와
+`SubmitScreen`의 `screenOrigin`만 운영체제 규약에 따라 좌상단 픽셀 원점을
+사용하며, `MapScreenPointer`가 이를 중앙 원점 Y-up 좌표로 변환한다.
+
 Canvas는 렌더링과 hit-test를 하지 않는 다음 9개 앵커 노드를 항상 소유한다.
 
 ```text
@@ -73,9 +78,10 @@ MiddleLeft    Center          MiddleRight
 BottomLeft    BottomCenter    BottomRight
 ```
 
-`CreateNode(Anchor::BottomRight)`로 만든 노드는 기본 Pivot도 `(1,1)`이 된다.
-`SetBounds({-20,-20,w,h})`로 두면 화면비가 달라져도 우측·하단에서 20 논리 단위
-안쪽에 고정된다. 기존 좌측 상단 좌표는 `Anchor::TopLeft`가 기본이다.
+`CreateNode(Anchor::BottomRight)`로 만든 노드는 기본 Pivot이 `(1,0)`이다.
+`SetBounds({-20,20,w,h})`로 두면 화면비가 달라져도 우측·하단에서 20 논리 단위
+안쪽에 고정된다. `TopLeft`의 기본 Pivot은 `(0,1)`이고, 화면 안쪽 배치는
+양의 X와 음의 Y 오프셋을 사용한다.
 
 RenderTexture나 월드 표면처럼 크기가 고정되어야 하는 Canvas는
 `CanvasScaleMode::Fixed`를 사용한다.
@@ -109,6 +115,8 @@ Sprite는 같은 mesh/material 조합을 사용하여 `DrawIndexedInstanced` 배
 여전히 Client가 정하지만, 이 크기로 목표 폭 또는 높이에 맞는 다른 축을 계산하면
 스킨 교체 뒤에도 원본 비율을 유지할 수 있다. 잘못되었거나 더 이상 유효하지 않은
 handle은 `{0, 0}`을 돌려준다.
+PNG의 위쪽은 Sprite 로컬 `+Y`에 대응하므로, Y-up Canvas에서는 자산별 뒤집기나
+추가 회전 없이 부모 Transform만 상속하면 된다.
 
 `SpriteVisualComponent::SetUvTransform`으로 cover/crop UV를 인스턴스별로 지정할
 수 있다. 화면 Visual2D는 Depth Write 대신 트리 순서를 기준으로 하며, 월드의
@@ -116,7 +124,8 @@ handle은 `{0, 0}`을 돌려준다.
 
 ## 화면과 곡면
 
-화면 입력은 다음 경로를 사용한다.
+화면 입력은 다음 경로를 사용한다. 첫 좌표는 좌상단 원점의 Win32 픽셀이고,
+마지막 좌표는 중앙 원점 Y-up Canvas 좌표다.
 
 ```text
 Mouse pixel → MapScreenPointer → Canvas logical point → InputRouter
@@ -147,7 +156,7 @@ canvas.SetViewportSize({1920.0F, 1080.0F});
 auto& sprite = canvas.CreateNode(
     mrg::visual2d::Anchor::BottomCenter,
     "Character");
-sprite.SetBounds({0.0F, -48.0F, 128.0F, 128.0F});
+sprite.SetBounds({0.0F, 48.0F, 128.0F, 128.0F});
 sprite.AddComponent<mrg::visual2d::SpriteVisualComponent>().SetImage(image);
 sprite.AddComponent<mrg::visual2d::RectangleCollider2DComponent>();
 sprite.AddComponent<mrg::visual2d::PointerReceiverComponent>(handler);

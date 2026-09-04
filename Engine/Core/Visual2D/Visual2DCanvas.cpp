@@ -209,10 +209,10 @@ namespace mrg::visual2d
 
     void Visual2DCanvas::UpdateAnchorTransforms()
     {
-        const float centerX = logicalSize_.width * 0.5F;
-        const float centerY = logicalSize_.height * 0.5F;
-        const float xPositions[]{0.0F, centerX, logicalSize_.width};
-        const float yPositions[]{0.0F, centerY, logicalSize_.height};
+        const float halfWidth = logicalSize_.width * 0.5F;
+        const float halfHeight = logicalSize_.height * 0.5F;
+        const float xPositions[]{-halfWidth, 0.0F, halfWidth};
+        const float yPositions[]{halfHeight, 0.0F, -halfHeight};
         for (std::size_t row = 0; row < 3; ++row)
         {
             for (std::size_t column = 0; column < 3; ++column)
@@ -234,7 +234,7 @@ namespace mrg::visual2d
         const std::size_t index = AnchorIndex(anchor);
         return {
             static_cast<float>(index % 3) * 0.5F,
-            static_cast<float>(index / 3) * 0.5F};
+            1.0F - static_cast<float>(index / 3) * 0.5F};
     }
 
     std::optional<Point> MapScreenPointer(
@@ -257,7 +257,9 @@ namespace mrg::visual2d
             screenPosition.x - canvasOrigin.x,
             screenPosition.y - canvasOrigin.y};
         return Point{
-            localPixels.x / canvas.PixelScale(),
-            localPixels.y / canvas.PixelScale()};
+            localPixels.x / canvas.PixelScale() -
+                canvas.LogicalSize().width * 0.5F,
+            canvas.LogicalSize().height * 0.5F -
+                localPixels.y / canvas.PixelScale()};
     }
 }

@@ -456,6 +456,17 @@ namespace
                     NearlyEqual(planeHit->uv.y, 0.5F),
                 "plane center maps to center UV");
         }
+        mrg::visual2d::WorldSpaceVisual2DCanvas worldCanvas(
+            {200.0F, 100.0F},
+            std::make_unique<mrg::visual2d::PlaneVisual2DSurface>(
+                2.0F, 2.0F, identity));
+        const auto upperCanvasPoint = worldCanvas.MapPointer(
+            Ray3D{{0.0F, 0.5F, -2.0F}, {0.0F, 0.0F, 1.0F}});
+        Check(
+            upperCanvasPoint.has_value() &&
+                NearlyEqual(upperCanvasPoint->x, 0.0F) &&
+                NearlyEqual(upperCanvasPoint->y, 25.0F),
+            "world surface input maps to centered Y-up Canvas coordinates");
 
         const mrg::geometry::RectangleShape rectangle(2.0F, 2.0F);
         const mrg::visual2d::MeshUvVisual2DSurface mesh(rectangle, identity);
@@ -508,19 +519,33 @@ namespace
         mrg::visual2d::Visual2DCanvas canvas(
             {320.0F, 180.0F},
             mrg::visual2d::CanvasScaleMode::Fixed);
+        const auto canvasPoint = [](const float x, const float y)
+        {
+            return mrg::visual2d::Point{x - 160.0F, 90.0F - y};
+        };
+        const auto topLeftRect = [](
+            const float x,
+            const float y,
+            const float width,
+            const float height)
+        {
+            return mrg::visual2d::Rect{x, -y - height, width, height};
+        };
         auto& button = mrg::visual2d::CreateButton(
             canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
-            {20.0F, 20.0F, 120.0F, 40.0F},
+            topLeftRect(20.0F, 20.0F, 120.0F, 40.0F),
             L"Apply");
 
         mrg::visual2d::Visual2DInputRouter router;
         router.Process(
             canvas,
-            {{40.0F, 35.0F}, true, true, true, false, 0.0F, 10});
+            {canvasPoint(40.0F, 35.0F),
+                true, true, true, false, 0.0F, 10});
         Check(button.IsPressed(), "UI button captures a pointer press");
         router.Process(
             canvas,
-            {{40.0F, 35.0F}, true, false, false, true, 0.0F, 20});
+            {canvasPoint(40.0F, 35.0F),
+                true, false, false, true, 0.0F, 20});
         const std::vector<mrg::visual2d::Action> actions = canvas.TakeActions();
         Check(!button.IsPressed(), "UI button releases pointer capture");
         Check(
@@ -531,27 +556,30 @@ namespace
 
         auto& slider = mrg::visual2d::CreateSlider(
             canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
-            {20.0F, 80.0F, 200.0F, 40.0F},
+            topLeftRect(20.0F, 80.0F, 200.0F, 40.0F),
             0.0F);
         auto* sliderBehavior = slider.GetComponent<
             mrg::visual2d::SliderBehaviorComponent>();
         router.Process(
             canvas,
-            {{30.0F, 100.0F}, true, true, true, false, 0.0F, 30});
+            {canvasPoint(30.0F, 100.0F),
+                true, true, true, false, 0.0F, 30});
         router.Process(
             canvas,
-            {{300.0F, 100.0F}, true, true, false, false, 0.0F, 40});
+            {canvasPoint(300.0F, 100.0F),
+                true, true, false, false, 0.0F, 40});
         Check(
             sliderBehavior != nullptr &&
                 NearlyEqual(sliderBehavior->Value(), 1.0F),
             "captured slider keeps receiving movement outside its bounds");
         router.Process(
             canvas,
-            {{300.0F, 100.0F}, true, false, false, true, 0.0F, 50});
+            {canvasPoint(300.0F, 100.0F),
+                true, false, false, true, 0.0F, 50});
 
         (void)mrg::visual2d::CreateSprite(
             canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
-            {240.0F, 20.0F, 40.0F, 40.0F},
+            topLeftRect(240.0F, 20.0F, 40.0F, 40.0F),
             mrg::visual2d::ImageHandle{123});
         const std::vector<mrg::visual2d::DrawPacket> imageCommands =
             canvas.BuildDrawList();
@@ -570,7 +598,7 @@ namespace
         auto& pointerProbe = canvas.CreateNode(
             mrg::visual2d::Anchor::TopLeft,
             "StationaryPointerProbe");
-        pointerProbe.SetBounds({240.0F, 130.0F, 60.0F, 30.0F});
+        pointerProbe.SetBounds({240.0F, -130.0F, 60.0F, 30.0F});
         std::size_t hitTestCount{};
         pointerProbe.AddComponent<
             mrg::visual2d::CustomCollider2DComponent>(
@@ -599,7 +627,8 @@ namespace
 
         mrg::visual2d::Visual2DInputRouter cachedRouter;
         const mrg::visual2d::PointerInput stationaryPointer{
-            {260.0F, 145.0F}, true, false, false, false, 0.0F, 60};
+            canvasPoint(260.0F, 145.0F),
+            true, false, false, false, 0.0F, 60};
         cachedRouter.Process(canvas, stationaryPointer);
         cachedRouter.Process(canvas, stationaryPointer);
         Check(
@@ -613,7 +642,7 @@ namespace
 
         auto& combo = mrg::visual2d::CreateComboBox(
             canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
-            {20.0F, 130.0F, 180.0F, 30.0F},
+            topLeftRect(20.0F, 130.0F, 180.0F, 30.0F),
             {L"Driver 0", L"Driver 1", L"Driver 2", L"Driver 3", L"Driver 4"});
         auto* comboBehavior = combo.GetComponent<
             mrg::visual2d::ComboBoxBehaviorComponent>();
@@ -624,10 +653,12 @@ namespace
         // canvas, so this also checks that it is not clipped by the root bounds.
         router.Process(
             canvas,
-            {{50.0F, 145.0F}, true, true, true, false, 0.0F, 60});
+            {canvasPoint(50.0F, 145.0F),
+                true, true, true, false, 0.0F, 60});
         router.Process(
             canvas,
-            {{50.0F, 145.0F}, true, false, false, true, 0.0F, 70});
+            {canvasPoint(50.0F, 145.0F),
+                true, false, false, true, 0.0F, 70});
         Check(
             comboBehavior->IsExpanded(),
             "combo box opens a popup from the field click");
@@ -636,7 +667,8 @@ namespace
         // device list. The player may return to the popup and continue input.
         router.Process(
             canvas,
-            {{300.0F, 20.0F}, true, false, false, false, 0.0F, 75});
+            {canvasPoint(300.0F, 20.0F),
+                true, false, false, false, 0.0F, 75});
         Check(
             comboBehavior->IsExpanded(),
             "combo box remains open after losing pointer focus");
@@ -644,13 +676,16 @@ namespace
         // One normalized wheel tick advances the first visible row by one.
         router.Process(
             canvas,
-            {{50.0F, 180.0F}, true, false, false, false, -1.0F, 80});
+            {canvasPoint(50.0F, 180.0F),
+                true, false, false, false, -1.0F, 80});
         router.Process(
             canvas,
-            {{50.0F, 180.0F}, true, true, true, false, 0.0F, 90});
+            {canvasPoint(50.0F, 180.0F),
+                true, true, true, false, 0.0F, 90});
         router.Process(
             canvas,
-            {{50.0F, 180.0F}, true, false, false, true, 0.0F, 100});
+            {canvasPoint(50.0F, 180.0F),
+                true, false, false, true, 0.0F, 100});
         const std::vector<mrg::visual2d::Action> comboActions =
             canvas.TakeActions();
         Check(
@@ -663,25 +698,32 @@ namespace
         // Reopen and drag upward by one row before selecting the second row.
         router.Process(
             canvas,
-            {{50.0F, 145.0F}, true, true, true, false, 0.0F, 110});
+            {canvasPoint(50.0F, 145.0F),
+                true, true, true, false, 0.0F, 110});
         router.Process(
             canvas,
-            {{50.0F, 145.0F}, true, false, false, true, 0.0F, 120});
+            {canvasPoint(50.0F, 145.0F),
+                true, false, false, true, 0.0F, 120});
         router.Process(
             canvas,
-            {{50.0F, 200.0F}, true, true, true, false, 0.0F, 130});
+            {canvasPoint(50.0F, 200.0F),
+                true, true, true, false, 0.0F, 130});
         router.Process(
             canvas,
-            {{50.0F, 180.0F}, true, true, false, false, 0.0F, 140});
+            {canvasPoint(50.0F, 180.0F),
+                true, true, false, false, 0.0F, 140});
         router.Process(
             canvas,
-            {{50.0F, 180.0F}, true, false, false, true, 0.0F, 150});
+            {canvasPoint(50.0F, 180.0F),
+                true, false, false, true, 0.0F, 150});
         router.Process(
             canvas,
-            {{50.0F, 190.0F}, true, true, true, false, 0.0F, 160});
+            {canvasPoint(50.0F, 190.0F),
+                true, true, true, false, 0.0F, 160});
         router.Process(
             canvas,
-            {{50.0F, 190.0F}, true, false, false, true, 0.0F, 170});
+            {canvasPoint(50.0F, 190.0F),
+                true, false, false, true, 0.0F, 170});
         Check(
             comboBehavior->SelectedIndex() == 3,
             "combo box drag scrolling selects the shifted visible item");
@@ -693,13 +735,13 @@ namespace
             {240.0F, 140.0F},
             mrg::visual2d::CanvasScaleMode::Fixed);
         auto& front = mrg::visual2d::CreateButton(
-            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
-            {40.0F, 40.0F, 100.0F, 48.0F},
+            canvas.Root(),
+            {-80.0F, -18.0F, 100.0F, 48.0F},
             L"Front");
         front.SetZIndex(10);
         auto& back = mrg::visual2d::CreateButton(
-            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
-            {20.0F, 20.0F, 180.0F, 100.0F},
+            canvas.Root(),
+            {-100.0F, -50.0F, 180.0F, 100.0F},
             L"Back");
 
         const std::vector<mrg::visual2d::DrawPacket> commands =
@@ -711,10 +753,10 @@ namespace
         mrg::visual2d::Visual2DInputRouter router;
         router.Process(
             canvas,
-            {{60.0F, 60.0F}, true, true, true, false, 0.0F, 10});
+            {{-60.0F, 10.0F}, true, true, true, false, 0.0F, 10});
         router.Process(
             canvas,
-            {{60.0F, 60.0F}, true, false, false, true, 0.0F, 20});
+            {{-60.0F, 10.0F}, true, false, false, true, 0.0F, 20});
         std::vector<mrg::visual2d::Action> actions = canvas.TakeActions();
         Check(
             actions.size() == 1 && actions.front().source == front.Id(),
@@ -730,10 +772,10 @@ namespace
 
         router.Process(
             canvas,
-            {{60.0F, 60.0F}, true, true, true, false, 0.0F, 25});
+            {{-60.0F, 10.0F}, true, true, true, false, 0.0F, 25});
         router.Process(
             canvas,
-            {{60.0F, 60.0F}, true, false, false, true, 0.0F, 26});
+            {{-60.0F, 10.0F}, true, false, false, true, 0.0F, 26});
         actions = canvas.TakeActions();
         Check(
             actions.size() == 1 && actions.front().source == back.Id(),
@@ -743,10 +785,10 @@ namespace
         // rectangle and interactive region must still agree.
         router.Process(
             canvas,
-            {{30.0F, 30.0F}, true, true, true, false, 0.0F, 30});
+            {{-90.0F, 40.0F}, true, true, true, false, 0.0F, 30});
         router.Process(
             canvas,
-            {{30.0F, 30.0F}, true, false, false, true, 0.0F, 40});
+            {{-90.0F, 40.0F}, true, false, false, true, 0.0F, 40});
         actions = canvas.TakeActions();
         Check(
             actions.size() == 1 && actions.front().source == back.Id(),
@@ -765,8 +807,8 @@ namespace
             {20.0F, 30.0F});
         Check(
             panelPoint.has_value() &&
-                NearlyEqual(panelPoint->x, 20.0F) &&
-                NearlyEqual(panelPoint->y, 20.0F),
+                NearlyEqual(panelPoint->x, -140.0F) &&
+                NearlyEqual(panelPoint->y, 85.0F),
             "a panel-sized Canvas maps from its independent screen origin");
         const auto capturedOutsidePanel = mrg::visual2d::MapScreenPointer(
             {500.0F, 400.0F},
@@ -775,7 +817,10 @@ namespace
             {20.0F, 30.0F});
         Check(
             capturedOutsidePanel.has_value() &&
-                capturedOutsidePanel->x > panelCanvas.LogicalSize().width,
+                capturedOutsidePanel->x >
+                    panelCanvas.LogicalSize().width * 0.5F &&
+                capturedOutsidePanel->y <
+                    -panelCanvas.LogicalSize().height * 0.5F,
             "Canvas mapping preserves screen-valid drag positions outside a panel");
 
         mrg::visual2d::Visual2DCanvas canvas;
@@ -785,6 +830,29 @@ namespace
                 NearlyEqual(canvas.LogicalSize().height, 720.0F) &&
                 NearlyEqual(canvas.LogicalSize().width, 2560.0F / 1.5F),
             "fixed-height Canvas scales from 720 vertical design pixels");
+        const auto topLeft = mrg::visual2d::MapScreenPointer(
+            {0.0F, 0.0F},
+            {2560.0F, 1080.0F},
+            canvas);
+        const auto bottomRight = mrg::visual2d::MapScreenPointer(
+            {2560.0F, 1080.0F},
+            {2560.0F, 1080.0F},
+            canvas);
+        Check(
+            topLeft.has_value() && bottomRight.has_value() &&
+                NearlyEqual(
+                    topLeft->x,
+                    -canvas.LogicalSize().width * 0.5F) &&
+                NearlyEqual(
+                    topLeft->y,
+                    canvas.LogicalSize().height * 0.5F) &&
+                NearlyEqual(
+                    bottomRight->x,
+                    canvas.LogicalSize().width * 0.5F) &&
+                NearlyEqual(
+                    bottomRight->y,
+                    -canvas.LogicalSize().height * 0.5F),
+            "screen corners map to a centered Canvas with positive Y upward");
         Check(
             !canvas.RemoveNode(
                 canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft).Id()),
@@ -801,20 +869,23 @@ namespace
         Check(
             NearlyEqual(
                 centeredBounds.x,
-                canvas.LogicalSize().width * 0.5F - 50.0F) &&
-                NearlyEqual(centeredBounds.y, 330.0F),
+                -50.0F) &&
+                NearlyEqual(centeredBounds.y, -30.0F),
             "center anchor fixes a node around the screen center");
 
         auto& right = canvas.CreateNode(
             mrg::visual2d::Anchor::TopRight,
             "RightSprite");
-        right.SetBounds({-20.0F, 20.0F, 100.0F, 50.0F});
+        right.SetBounds({-20.0F, -20.0F, 100.0F, 50.0F});
         right.AddComponent<mrg::visual2d::SpriteVisualComponent>();
         const mrg::visual2d::Rect rightBounds = right.BoundsInCanvas();
         Check(
             NearlyEqual(
                 rightBounds.x + rightBounds.width,
-                canvas.LogicalSize().width - 20.0F),
+                canvas.LogicalSize().width * 0.5F - 20.0F) &&
+                NearlyEqual(
+                    rightBounds.y + rightBounds.height,
+                    canvas.LogicalSize().height * 0.5F - 20.0F),
             "right anchor keeps a fixed inward offset after aspect changes");
 
         Check(
@@ -829,8 +900,8 @@ namespace
             DirectX::XM_PIDIV4);
         mrg::visual2d::Visual2DInputRouter router;
         const mrg::visual2d::Point centerPoint{
-            canvas.LogicalSize().width * 0.5F,
-            canvas.LogicalSize().height * 0.5F};
+            0.0F,
+            0.0F};
         router.Process(
             canvas,
             {centerPoint, true, true, true, false, 0.0F, 10});

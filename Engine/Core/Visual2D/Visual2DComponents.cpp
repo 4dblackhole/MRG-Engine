@@ -681,7 +681,8 @@ namespace mrg::visual2d
             const std::size_t itemIndex = firstVisibleIndex_ + row;
             const Rect itemBounds{
                 popup.x,
-                popup.y + static_cast<float>(row) * itemHeight_,
+                popup.y + popup.height -
+                    static_cast<float>(row + 1) * itemHeight_,
                 popup.width,
                 itemHeight_};
             const VisualStyle& style = OwnerStyle();
@@ -720,7 +721,8 @@ namespace mrg::visual2d
                 {0.02F, 0.025F, 0.04F, 0.90F}));
             packets.push_back(MakeRectangle(
                 {popup.x + popup.width - trackWidth,
-                    popup.y + (popup.height - thumbHeight) * progress,
+                    popup.y +
+                        (popup.height - thumbHeight) * (1.0F - progress),
                     trackWidth,
                     thumbHeight},
                 {0.35F, 0.70F, 1.0F, 1.0F}));
@@ -752,7 +754,7 @@ namespace mrg::visual2d
             if (event.type == PointerEventType::Move && trackingDrag_ &&
                 Owner().IsPressed())
             {
-                const float displacement = dragStartY_ - event.localPosition.y;
+                const float displacement = event.localPosition.y - dragStartY_;
                 if (std::abs(displacement) > 3.0F)
                 {
                     const int itemDelta = static_cast<int>(
@@ -833,8 +835,9 @@ namespace mrg::visual2d
     Rect ComboBoxBehaviorComponent::PopupBounds() const noexcept
     {
         const Size size = Owner().NodeSize();
-        return {0.0F, size.height, size.width,
-            itemHeight_ * static_cast<float>(VisibleItemCount())};
+        const float popupHeight =
+            itemHeight_ * static_cast<float>(VisibleItemCount());
+        return {0.0F, -popupHeight, size.width, popupHeight};
     }
 
     std::size_t ComboBoxBehaviorComponent::VisibleItemCount() const noexcept
@@ -851,7 +854,7 @@ namespace mrg::visual2d
             return std::nullopt;
         }
         const std::size_t row = static_cast<std::size_t>(
-            (localPosition.y - popup.y) / itemHeight_);
+            (popup.y + popup.height - localPosition.y) / itemHeight_);
         const std::size_t index = firstVisibleIndex_ + row;
         return row < VisibleItemCount() && index < items_.size()
             ? std::optional<std::size_t>{index}

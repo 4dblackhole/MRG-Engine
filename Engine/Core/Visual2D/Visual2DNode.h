@@ -205,7 +205,7 @@ namespace mrg::visual2d
         [[nodiscard]] scene::TransformNode& Transform() noexcept;
         [[nodiscard]] const scene::TransformNode& Transform() const noexcept;
         // Position is measured from the selected parent/anchor to this node's
-        // normalized Pivot. It is converted to the Transform's top-left
+        // normalized Pivot. It is converted to the Transform's lower-left
         // position whenever position, size or Pivot changes.
         [[nodiscard]] Point Position() const noexcept;
         void SetPosition(Point position);

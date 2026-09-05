@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -112,6 +113,10 @@ namespace mrg::visual2d
         ImageHandle image{};
         DirectX::XMFLOAT2 uvScale{1.0F, 1.0F};
         DirectX::XMFLOAT2 uvOffset{};
+        float cornerRadius{};
+        // Optional axis-aligned clip rectangle in Canvas coordinates. Core
+        // resolves nested node-local clips before packets reach a backend.
+        std::optional<Rect> clipBounds;
     };
 
     enum class PointerEventType : std::uint8_t
@@ -223,6 +228,11 @@ namespace mrg::visual2d
         void SetVisible(bool visible) noexcept;
         [[nodiscard]] bool IsEnabled() const noexcept;
         void SetEnabled(bool enabled) noexcept;
+        [[nodiscard]] const std::optional<Rect>& ClipRect() const noexcept;
+        // Clips this node's complete subtree to a node-local rectangle.
+        // Set {0, 0, width, height} to clip children to the node bounds.
+        void SetClipRect(Rect localRect);
+        void ClearClipRect() noexcept;
         [[nodiscard]] bool IsHovered() const noexcept;
         [[nodiscard]] bool IsPressed() const noexcept;
 
@@ -299,14 +309,18 @@ namespace mrg::visual2d
             Point localPosition{};
         };
 
-        [[nodiscard]] HitResult HitTest(Point canvasPosition) noexcept;
+        [[nodiscard]] HitResult HitTest(
+            Point canvasPosition,
+            const std::optional<Rect>& inheritedClip = std::nullopt) noexcept;
         [[nodiscard]] bool MapCanvasPointToLocal(
             Point canvasPosition,
             Point& localPosition) noexcept;
         [[nodiscard]] Visual2DNode* Find(NodeId id) noexcept;
         [[nodiscard]] const Visual2DNode* Find(NodeId id) const noexcept;
         void UpdateRecursive(double elapsedSeconds);
-        void CollectDrawPackets(std::vector<DrawPacket>& packets) const;
+        void CollectDrawPackets(
+            std::vector<DrawPacket>& packets,
+            const std::optional<Rect>& inheritedClip = std::nullopt) const;
         void DispatchPointerEvent(
             const PointerEvent& event,
             std::vector<Action>& actions);
@@ -328,6 +342,7 @@ namespace mrg::visual2d
         mutable std::vector<Visual2DNode*> paintOrder_;
         mutable bool paintOrderDirty_{true};
         std::vector<std::unique_ptr<Visual2DComponent>> components_;
+        std::optional<Rect> clipRect_;
         bool visible_{true};
         bool enabled_{true};
         bool hovered_{};

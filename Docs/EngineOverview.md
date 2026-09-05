@@ -188,6 +188,8 @@ Canvas는 전체 화면일 필요가 없다. HUD는 `FixedHeight`, 독립 패널
 `canvasZOrder`, 그 다음 각 Canvas 내부 트리의 `ZIndex` 순서가 적용된다.
 Canvas 논리 좌표는 정중앙 원점이며 3D Transform과 마찬가지로 `+Y`가 위쪽이다.
 Win32 화면 픽셀은 입력·제출 경계에서 이 좌표로 변환된다.
+단색·이미지 Sprite는 둥근 모서리를 지정할 수 있으며 node-local clip rect는
+자식 draw packet과 hit-test에 함께 적용된다.
 
 곡면 UI는 Canvas를 render texture에 그린 뒤 UV가 있는 mesh에 샘플링한다.
 `MeshUvVisual2DSurface`는 로컬 공간 BVH로 pointer ray를 가속하고 barycentric UV를

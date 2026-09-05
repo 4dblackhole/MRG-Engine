@@ -122,6 +122,25 @@ PNG의 위쪽은 Sprite 로컬 `+Y`에 대응하므로, Y-up Canvas에서는 자
 수 있다. 화면 Visual2D는 Depth Write 대신 트리 순서를 기준으로 하며, 월드의
 불투명 Mesh는 기존 Mesh 렌더러의 Depth 상태를 사용한다.
 
+`SpriteVisualComponent::SetCornerRadius`는 단색과 이미지 Sprite 모두에 로컬
+Canvas 단위의 둥근 모서리를 적용한다. 반지름은 draw packet의 인스턴스 데이터로
+전달되므로 별도 mesh나 material을 만들지 않고 기존 batching을 유지한다.
+
+## 자식 clip rect
+
+`Visual2DNode::SetClipRect`는 node-local 사각형으로 해당 node의 전체 subtree를
+자른다. 부모 크기로 자르려면 `{0, 0, width, height}`를 지정하고, 해제할 때는
+`ClearClipRect`를 호출한다. 중첩 clip은 Core에서 Canvas 좌표 교집합으로 합쳐진 뒤
+`DrawPacket::clipBounds`로 backend에 전달된다. Hit-test도 같은 clip을 사용하므로
+스크롤 viewport 밖에 있는 버튼은 입력을 받지 않는다.
+
+화면과 render texture D3D12 경로는 clip rect를 인스턴스별 픽셀 범위로 변환해
+rectangle, image와 glyph shader에서 잘라낸다. clip은 axis-aligned screen Canvas
+viewport 용도이며 회전된 node clip은 Canvas AABB로 정규화한다.
+
+ComboBox는 `SetTextColor`, `SetSelectedTextColor`,
+`SetPopupBackgroundColor`로 밝거나 어두운 화면 테마에 맞출 수 있다.
+
 ## 화면과 곡면
 
 화면 입력은 다음 경로를 사용한다. 첫 좌표는 좌상단 원점의 Win32 픽셀이고,

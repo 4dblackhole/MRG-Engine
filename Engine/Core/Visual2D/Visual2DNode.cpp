@@ -24,6 +24,66 @@ namespace mrg::visual2d
             return std::isfinite(size.width) && std::isfinite(size.height) &&
                 size.width >= 0.0F && size.height >= 0.0F;
         }
+
+        [[nodiscard]] Rect TransformRect(
+            const Rect rect,
+            const XMMATRIX& transform) noexcept
+        {
+            const XMVECTOR corners[] = {
+                XMVectorSet(rect.x, rect.y, 0.0F, 1.0F),
+                XMVectorSet(rect.x + rect.width, rect.y, 0.0F, 1.0F),
+                XMVectorSet(rect.x, rect.y + rect.height, 0.0F, 1.0F),
+                XMVectorSet(
+                    rect.x + rect.width,
+                    rect.y + rect.height,
+                    0.0F,
+                    1.0F)};
+            float minimumX = std::numeric_limits<float>::max();
+            float minimumY = std::numeric_limits<float>::max();
+            float maximumX = std::numeric_limits<float>::lowest();
+            float maximumY = std::numeric_limits<float>::lowest();
+            for (const XMVECTOR corner : corners)
+            {
+                const XMVECTOR transformed =
+                    XMVector3TransformCoord(corner, transform);
+                minimumX = std::min(minimumX, XMVectorGetX(transformed));
+                minimumY = std::min(minimumY, XMVectorGetY(transformed));
+                maximumX = std::max(maximumX, XMVectorGetX(transformed));
+                maximumY = std::max(maximumY, XMVectorGetY(transformed));
+            }
+            return {
+                minimumX,
+                minimumY,
+                maximumX - minimumX,
+                maximumY - minimumY};
+        }
+
+        [[nodiscard]] std::optional<Rect> IntersectRects(
+            const std::optional<Rect>& first,
+            const std::optional<Rect>& second) noexcept
+        {
+            if (!first.has_value())
+            {
+                return second;
+            }
+            if (!second.has_value())
+            {
+                return first;
+            }
+            const float left = std::max(first->x, second->x);
+            const float bottom = std::max(first->y, second->y);
+            const float right = std::min(
+                first->x + first->width,
+                second->x + second->width);
+            const float top = std::min(
+                first->y + first->height,
+                second->y + second->height);
+            return Rect{
+                left,
+                bottom,
+                std::max(right - left, 0.0F),
+                std::max(top - bottom, 0.0F)};
+        }
     }
 
     bool Rect::Contains(const Point point) const noexcept
@@ -181,25 +241,9 @@ namespace mrg::visual2d
 
     Rect Visual2DNode::BoundsInCanvas() const
     {
-        const XMMATRIX world = XMLoadFloat4x4(&transform_.WorldMatrix());
-        const XMVECTOR corners[] = {
-            XMVectorSet(0.0F, 0.0F, 0.0F, 1.0F),
-            XMVectorSet(size_.width, 0.0F, 0.0F, 1.0F),
-            XMVectorSet(0.0F, size_.height, 0.0F, 1.0F),
-            XMVectorSet(size_.width, size_.height, 0.0F, 1.0F)};
-        float minimumX = std::numeric_limits<float>::max();
-        float minimumY = std::numeric_limits<float>::max();
-        float maximumX = std::numeric_limits<float>::lowest();
-        float maximumY = std::numeric_limits<float>::lowest();
-        for (const XMVECTOR corner : corners)
-        {
-            const XMVECTOR transformed = XMVector3TransformCoord(corner, world);
-            minimumX = std::min(minimumX, XMVectorGetX(transformed));
-            minimumY = std::min(minimumY, XMVectorGetY(transformed));
-            maximumX = std::max(maximumX, XMVectorGetX(transformed));
-            maximumY = std::max(maximumY, XMVectorGetY(transformed));
-        }
-        return {minimumX, minimumY, maximumX - minimumX, maximumY - minimumY};
+        return TransformRect(
+            {0.0F, 0.0F, size_.width, size_.height},
+            XMLoadFloat4x4(&transform_.WorldMatrix()));
     }
 
     std::int32_t Visual2DNode::ZIndex() const noexcept
@@ -248,6 +292,27 @@ namespace mrg::visual2d
             hovered_ = false;
             pressed_ = false;
         }
+    }
+
+    const std::optional<Rect>& Visual2DNode::ClipRect() const noexcept
+    {
+        return clipRect_;
+    }
+
+    void Visual2DNode::SetClipRect(const Rect localRect)
+    {
+        if (!IsFinite({localRect.x, localRect.y}) ||
+            !IsValidSize({localRect.width, localRect.height}))
+        {
+            throw std::invalid_argument(
+                "Visual2D clip bounds must be finite and non-negative.");
+        }
+        clipRect_ = localRect;
+    }
+
+    void Visual2DNode::ClearClipRect() noexcept
+    {
+        clipRect_.reset();
     }
 
     bool Visual2DNode::IsHovered() const noexcept
@@ -317,9 +382,24 @@ namespace mrg::visual2d
     }
 
     Visual2DNode::HitResult Visual2DNode::HitTest(
-        const Point canvasPosition) noexcept
+        const Point canvasPosition,
+        const std::optional<Rect>& inheritedClip) noexcept
     {
         if (!visible_ || !enabled_)
+        {
+            return {};
+        }
+
+        std::optional<Rect> activeClip = inheritedClip;
+        if (clipRect_.has_value())
+        {
+            activeClip = IntersectRects(
+                activeClip,
+                TransformRect(
+                    *clipRect_,
+                    XMLoadFloat4x4(&transform_.WorldMatrix())));
+        }
+        if (activeClip.has_value() && !activeClip->Contains(canvasPosition))
         {
             return {};
         }
@@ -328,7 +408,9 @@ namespace mrg::visual2d
         for (auto iterator = paintOrder_.rbegin();
             iterator != paintOrder_.rend(); ++iterator)
         {
-            HitResult childHit = (*iterator)->HitTest(canvasPosition);
+            HitResult childHit = (*iterator)->HitTest(
+                canvasPosition,
+                activeClip);
             if (childHit.node != nullptr)
             {
                 return childHit;
@@ -424,9 +506,24 @@ namespace mrg::visual2d
     }
 
     void Visual2DNode::CollectDrawPackets(
-        std::vector<DrawPacket>& packets) const
+        std::vector<DrawPacket>& packets,
+        const std::optional<Rect>& inheritedClip) const
     {
         if (!visible_)
+        {
+            return;
+        }
+        std::optional<Rect> activeClip = inheritedClip;
+        if (clipRect_.has_value())
+        {
+            activeClip = IntersectRects(
+                activeClip,
+                TransformRect(
+                    *clipRect_,
+                    XMLoadFloat4x4(&transform_.WorldMatrix())));
+        }
+        if (activeClip.has_value() &&
+            (activeClip->width <= 0.0F || activeClip->height <= 0.0F))
         {
             return;
         }
@@ -439,12 +536,13 @@ namespace mrg::visual2d
         for (std::size_t index = firstPacket; index < packets.size(); ++index)
         {
             packets[index].nodeTransform = world;
+            packets[index].clipBounds = activeClip;
         }
 
         EnsurePaintOrder();
         for (const Visual2DNode* child : paintOrder_)
         {
-            child->CollectDrawPackets(packets);
+            child->CollectDrawPackets(packets, activeClip);
         }
     }
 

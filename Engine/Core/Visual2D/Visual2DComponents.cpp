@@ -78,6 +78,21 @@ namespace mrg::visual2d
         style_.disabled = tint;
     }
 
+    float SpriteVisualComponent::CornerRadius() const noexcept
+    {
+        return cornerRadius_;
+    }
+
+    void SpriteVisualComponent::SetCornerRadius(const float radius)
+    {
+        if (!std::isfinite(radius) || radius < 0.0F)
+        {
+            throw std::invalid_argument(
+                "A Sprite corner radius must be finite and non-negative.");
+        }
+        cornerRadius_ = radius;
+    }
+
     DirectX::XMFLOAT2 SpriteVisualComponent::UvScale() const noexcept
     {
         return uvScale_;
@@ -114,11 +129,14 @@ namespace mrg::visual2d
             packet.image = image;
             packet.uvScale = uvScale_;
             packet.uvOffset = uvOffset_;
+            packet.cornerRadius = cornerRadius_;
             packets.push_back(std::move(packet));
         }
         else if (color.alpha > 0.0F)
         {
-            packets.push_back(MakeRectangle(bounds, color));
+            DrawPacket packet = MakeRectangle(bounds, color);
+            packet.cornerRadius = cornerRadius_;
+            packets.push_back(std::move(packet));
         }
     }
 
@@ -629,6 +647,38 @@ namespace mrg::visual2d
         fontSize_ = fontSize;
     }
 
+    Color ComboBoxBehaviorComponent::TextColor() const noexcept
+    {
+        return textColor_;
+    }
+
+    void ComboBoxBehaviorComponent::SetTextColor(const Color color) noexcept
+    {
+        textColor_ = color;
+    }
+
+    Color ComboBoxBehaviorComponent::SelectedTextColor() const noexcept
+    {
+        return selectedTextColor_;
+    }
+
+    void ComboBoxBehaviorComponent::SetSelectedTextColor(
+        const Color color) noexcept
+    {
+        selectedTextColor_ = color;
+    }
+
+    Color ComboBoxBehaviorComponent::PopupBackgroundColor() const noexcept
+    {
+        return popupBackgroundColor_;
+    }
+
+    void ComboBoxBehaviorComponent::SetPopupBackgroundColor(
+        const Color color) noexcept
+    {
+        popupBackgroundColor_ = color;
+    }
+
     bool ComboBoxBehaviorComponent::IsExpanded() const noexcept
     {
         return expanded_;
@@ -652,7 +702,11 @@ namespace mrg::visual2d
             packets.push_back(MakeText(
                 {12.0F, 0.0F, std::max(size.width - arrowWidth - 18.0F, 0.0F),
                     size.height},
-                {1.0F, 1.0F, 1.0F, Owner().IsEnabled() ? 1.0F : 0.55F},
+                {textColor_.red,
+                 textColor_.green,
+                 textColor_.blue,
+                 Owner().IsEnabled() ? textColor_.alpha :
+                     textColor_.alpha * 0.55F},
                 items_[selectedIndex_],
                 fontSize_,
                 TextAlignment::Leading));
@@ -674,7 +728,7 @@ namespace mrg::visual2d
         const Rect popup = PopupBounds();
         packets.push_back(MakeRectangle(
             popup,
-            {0.055F, 0.070F, 0.105F, 0.98F}));
+            popupBackgroundColor_));
         const std::size_t visibleCount = VisibleItemCount();
         for (std::size_t row = 0; row < visibleCount; ++row)
         {
@@ -695,7 +749,9 @@ namespace mrg::visual2d
                     itemBounds.y,
                     std::max(itemBounds.width - 20.0F, 0.0F),
                     itemBounds.height},
-                {1.0F, 1.0F, 1.0F, 1.0F},
+                itemIndex == selectedIndex_
+                    ? selectedTextColor_
+                    : textColor_,
                 items_[itemIndex],
                 fontSize_,
                 TextAlignment::Leading));

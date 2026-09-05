@@ -15,6 +15,10 @@ namespace mrg::visual2d
         void SetStyle(const VisualStyle& style) noexcept;
         void SetImage(ImageHandle image) noexcept;
         void SetTint(Color tint) noexcept;
+        [[nodiscard]] float CornerRadius() const noexcept;
+        // Radius is measured in the node's local Canvas units. It applies to
+        // both solid fills and images without changing layout or batching.
+        void SetCornerRadius(float radius);
         [[nodiscard]] DirectX::XMFLOAT2 UvScale() const noexcept;
         [[nodiscard]] DirectX::XMFLOAT2 UvOffset() const noexcept;
         void SetUvTransform(
@@ -31,6 +35,7 @@ namespace mrg::visual2d
         VisualStyle style_{};
         DirectX::XMFLOAT2 uvScale_{1.0F, 1.0F};
         DirectX::XMFLOAT2 uvOffset_{};
+        float cornerRadius_{};
     };
 
     class TextVisualComponent final : public Visual2DComponent
@@ -209,6 +214,12 @@ namespace mrg::visual2d
         void SetItemHeight(float itemHeight);
         [[nodiscard]] float ItemHeight() const noexcept;
         void SetFontSize(float fontSize);
+        [[nodiscard]] Color TextColor() const noexcept;
+        void SetTextColor(Color color) noexcept;
+        [[nodiscard]] Color SelectedTextColor() const noexcept;
+        void SetSelectedTextColor(Color color) noexcept;
+        [[nodiscard]] Color PopupBackgroundColor() const noexcept;
+        void SetPopupBackgroundColor(Color color) noexcept;
         [[nodiscard]] bool IsExpanded() const noexcept;
         void Collapse() noexcept;
 
@@ -236,6 +247,9 @@ namespace mrg::visual2d
         std::size_t hoveredItemIndex_{static_cast<std::size_t>(-1)};
         float itemHeight_{36.0F};
         float fontSize_{17.0F};
+        Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
+        Color selectedTextColor_{1.0F, 1.0F, 1.0F, 1.0F};
+        Color popupBackgroundColor_{0.055F, 0.070F, 0.105F, 0.98F};
         float dragStartY_{};
         std::size_t dragStartFirstVisibleIndex_{};
         bool expanded_{};

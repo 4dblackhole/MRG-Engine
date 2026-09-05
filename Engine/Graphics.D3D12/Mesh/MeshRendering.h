@@ -219,7 +219,11 @@ namespace mrg::graphics
             const DirectX::XMFLOAT4& color,
             const DirectX::XMFLOAT2& uvScale,
             const DirectX::XMFLOAT2& uvOffset,
-            std::uint32_t textureIndex);
+            std::uint32_t textureIndex,
+            DirectX::XMFLOAT4 clipRectPixels = {
+                -1.0e9F, -1.0e9F, 1.0e9F, 1.0e9F},
+            DirectX::XMFLOAT4 roundedRectLocal = {},
+            float cornerRadiusLocal = 0.0F);
 
         void Flush(ID3D12GraphicsCommandList& commandList);
 
@@ -229,8 +233,12 @@ namespace mrg::graphics
             DirectX::XMFLOAT4X4 worldViewProjection{};
             DirectX::XMFLOAT4 color{1.0F, 1.0F, 1.0F, 1.0F};
             DirectX::XMFLOAT4 uvTransform{1.0F, 1.0F, 0.0F, 0.0F};
+            DirectX::XMFLOAT4 clipRectPixels{
+                -1.0e9F, -1.0e9F, 1.0e9F, 1.0e9F};
+            DirectX::XMFLOAT4 roundedRectLocal{};
+            float cornerRadiusLocal{};
             std::uint32_t textureIndex{NoTextureIndex};
-            std::array<std::uint32_t, 3> padding{};
+            std::array<std::uint32_t, 2> padding{};
         };
 
         struct PendingItem

@@ -68,6 +68,10 @@ Rectangle, 같은 이미지 Descriptor 페이지, Text를 각각 배치한다.
 렌더 타깃 핸들은 해당 frame-resource fence가 완료될 때까지 렌더러가
 보관하므로 동적 Scene이 프레임 직후 삭제되어도 GPU 참조가 유효하다.
 
+Node-local clip은 Core가 중첩 교집합을 계산하고 renderer가 현재 화면 또는 렌더
+타깃의 픽셀 좌표로 바꾼다. clip과 둥근 모서리는 인스턴스 데이터이므로 서로 다른
+viewport와 radius를 사용하는 Sprite도 기존 mesh/material batch에 함께 남는다.
+
 ## 이미지 캐시
 
 이미지는 정규화된 경로를 키로 엔진 수명 동안 공유한다. 한 Descriptor

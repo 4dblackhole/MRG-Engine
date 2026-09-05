@@ -332,7 +332,10 @@ namespace mrg::graphics
         const XMFLOAT4& color,
         const XMFLOAT2& uvScale,
         const XMFLOAT2& uvOffset,
-        const std::uint32_t textureIndex)
+        const std::uint32_t textureIndex,
+        const XMFLOAT4 clipRectPixels,
+        const XMFLOAT4 roundedRectLocal,
+        const float cornerRadiusLocal)
     {
         if (!frameOpen_)
         {
@@ -382,6 +385,9 @@ namespace mrg::graphics
             uvScale.y,
             uvOffset.x,
             uvOffset.y};
+        instance.clipRectPixels = clipRectPixels;
+        instance.roundedRectLocal = roundedRectLocal;
+        instance.cornerRadiusLocal = cornerRadiusLocal;
         instance.textureIndex = textureIndex;
 
         pendingItems_.push_back(PendingItem{
@@ -794,7 +800,22 @@ namespace mrg::graphics
                 1,
                 static_cast<UINT>(offsetof(InstanceData, color)),
                 D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA,
-                1}};
+                1},
+            D3D12_INPUT_ELEMENT_DESC{
+                "INSTANCE_CLIP_RECT", 0,
+                DXGI_FORMAT_R32G32B32A32_FLOAT, 1,
+                static_cast<UINT>(offsetof(InstanceData, clipRectPixels)),
+                D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
+            D3D12_INPUT_ELEMENT_DESC{
+                "INSTANCE_ROUNDED_RECT", 0,
+                DXGI_FORMAT_R32G32B32A32_FLOAT, 1,
+                static_cast<UINT>(offsetof(InstanceData, roundedRectLocal)),
+                D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
+            D3D12_INPUT_ELEMENT_DESC{
+                "INSTANCE_CORNER_RADIUS", 0,
+                DXGI_FORMAT_R32_FLOAT, 1,
+                static_cast<UINT>(offsetof(InstanceData, cornerRadiusLocal)),
+                D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1}};
 
         // The remaining state is the shared opaque, depth-tested triangle
         // pipeline used by every vertex-color material instance.
@@ -1009,6 +1030,21 @@ namespace mrg::graphics
                 "INSTANCE_UV_TRANSFORM", 0,
                 DXGI_FORMAT_R32G32B32A32_FLOAT, 1,
                 static_cast<UINT>(offsetof(InstanceData, uvTransform)),
+                D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
+            D3D12_INPUT_ELEMENT_DESC{
+                "INSTANCE_CLIP_RECT", 0,
+                DXGI_FORMAT_R32G32B32A32_FLOAT, 1,
+                static_cast<UINT>(offsetof(InstanceData, clipRectPixels)),
+                D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
+            D3D12_INPUT_ELEMENT_DESC{
+                "INSTANCE_ROUNDED_RECT", 0,
+                DXGI_FORMAT_R32G32B32A32_FLOAT, 1,
+                static_cast<UINT>(offsetof(InstanceData, roundedRectLocal)),
+                D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
+            D3D12_INPUT_ELEMENT_DESC{
+                "INSTANCE_CORNER_RADIUS", 0,
+                DXGI_FORMAT_R32_FLOAT, 1,
+                static_cast<UINT>(offsetof(InstanceData, cornerRadiusLocal)),
                 D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
             D3D12_INPUT_ELEMENT_DESC{
                 "INSTANCE_TEXTURE_INDEX", 0,

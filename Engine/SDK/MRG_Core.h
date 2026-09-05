@@ -1210,6 +1210,7 @@ namespace mrg::scene
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -1313,6 +1314,10 @@ namespace mrg::visual2d
         ImageHandle image{};
         DirectX::XMFLOAT2 uvScale{1.0F, 1.0F};
         DirectX::XMFLOAT2 uvOffset{};
+        float cornerRadius{};
+        // Optional axis-aligned clip rectangle in Canvas coordinates. Core
+        // resolves nested node-local clips before packets reach a backend.
+        std::optional<Rect> clipBounds;
     };
 
     enum class PointerEventType : std::uint8_t
@@ -1424,6 +1429,11 @@ namespace mrg::visual2d
         void SetVisible(bool visible) noexcept;
         [[nodiscard]] bool IsEnabled() const noexcept;
         void SetEnabled(bool enabled) noexcept;
+        [[nodiscard]] const std::optional<Rect>& ClipRect() const noexcept;
+        // Clips this node's complete subtree to a node-local rectangle.
+        // Set {0, 0, width, height} to clip children to the node bounds.
+        void SetClipRect(Rect localRect);
+        void ClearClipRect() noexcept;
         [[nodiscard]] bool IsHovered() const noexcept;
         [[nodiscard]] bool IsPressed() const noexcept;
 
@@ -1500,14 +1510,18 @@ namespace mrg::visual2d
             Point localPosition{};
         };
 
-        [[nodiscard]] HitResult HitTest(Point canvasPosition) noexcept;
+        [[nodiscard]] HitResult HitTest(
+            Point canvasPosition,
+            const std::optional<Rect>& inheritedClip = std::nullopt) noexcept;
         [[nodiscard]] bool MapCanvasPointToLocal(
             Point canvasPosition,
             Point& localPosition) noexcept;
         [[nodiscard]] Visual2DNode* Find(NodeId id) noexcept;
         [[nodiscard]] const Visual2DNode* Find(NodeId id) const noexcept;
         void UpdateRecursive(double elapsedSeconds);
-        void CollectDrawPackets(std::vector<DrawPacket>& packets) const;
+        void CollectDrawPackets(
+            std::vector<DrawPacket>& packets,
+            const std::optional<Rect>& inheritedClip = std::nullopt) const;
         void DispatchPointerEvent(
             const PointerEvent& event,
             std::vector<Action>& actions);
@@ -1529,6 +1543,7 @@ namespace mrg::visual2d
         mutable std::vector<Visual2DNode*> paintOrder_;
         mutable bool paintOrderDirty_{true};
         std::vector<std::unique_ptr<Visual2DComponent>> components_;
+        std::optional<Rect> clipRect_;
         bool visible_{true};
         bool enabled_{true};
         bool hovered_{};
@@ -1633,6 +1648,10 @@ namespace mrg::visual2d
         void SetStyle(const VisualStyle& style) noexcept;
         void SetImage(ImageHandle image) noexcept;
         void SetTint(Color tint) noexcept;
+        [[nodiscard]] float CornerRadius() const noexcept;
+        // Radius is measured in the node's local Canvas units. It applies to
+        // both solid fills and images without changing layout or batching.
+        void SetCornerRadius(float radius);
         [[nodiscard]] DirectX::XMFLOAT2 UvScale() const noexcept;
         [[nodiscard]] DirectX::XMFLOAT2 UvOffset() const noexcept;
         void SetUvTransform(
@@ -1649,6 +1668,7 @@ namespace mrg::visual2d
         VisualStyle style_{};
         DirectX::XMFLOAT2 uvScale_{1.0F, 1.0F};
         DirectX::XMFLOAT2 uvOffset_{};
+        float cornerRadius_{};
     };
 
     class TextVisualComponent final : public Visual2DComponent
@@ -1827,6 +1847,12 @@ namespace mrg::visual2d
         void SetItemHeight(float itemHeight);
         [[nodiscard]] float ItemHeight() const noexcept;
         void SetFontSize(float fontSize);
+        [[nodiscard]] Color TextColor() const noexcept;
+        void SetTextColor(Color color) noexcept;
+        [[nodiscard]] Color SelectedTextColor() const noexcept;
+        void SetSelectedTextColor(Color color) noexcept;
+        [[nodiscard]] Color PopupBackgroundColor() const noexcept;
+        void SetPopupBackgroundColor(Color color) noexcept;
         [[nodiscard]] bool IsExpanded() const noexcept;
         void Collapse() noexcept;
 
@@ -1854,6 +1880,9 @@ namespace mrg::visual2d
         std::size_t hoveredItemIndex_{static_cast<std::size_t>(-1)};
         float itemHeight_{36.0F};
         float fontSize_{17.0F};
+        Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
+        Color selectedTextColor_{1.0F, 1.0F, 1.0F, 1.0F};
+        Color popupBackgroundColor_{0.055F, 0.070F, 0.105F, 0.98F};
         float dragStartY_{};
         std::size_t dragStartFirstVisibleIndex_{};
         bool expanded_{};
@@ -2179,6 +2208,10 @@ namespace mrg::graphics
             TextHorizontalAlignment::Leading};
         TextVerticalAlignment verticalAlignment{
             TextVerticalAlignment::Near};
+        // Pixel-space {left, top, right, bottom}. The default leaves text
+        // unclipped inside the current render target.
+        DirectX::XMFLOAT4 clipRectPixels{
+            -1.0e9F, -1.0e9F, 1.0e9F, 1.0e9F};
         TextStyle style{};
     };
 
@@ -2611,7 +2644,11 @@ namespace mrg::graphics
             const DirectX::XMFLOAT4& color,
             const DirectX::XMFLOAT2& uvScale,
             const DirectX::XMFLOAT2& uvOffset,
-            std::uint32_t textureIndex);
+            std::uint32_t textureIndex,
+            DirectX::XMFLOAT4 clipRectPixels = {
+                -1.0e9F, -1.0e9F, 1.0e9F, 1.0e9F},
+            DirectX::XMFLOAT4 roundedRectLocal = {},
+            float cornerRadiusLocal = 0.0F);
 
         void Flush(ID3D12GraphicsCommandList& commandList);
 
@@ -2621,8 +2658,12 @@ namespace mrg::graphics
             DirectX::XMFLOAT4X4 worldViewProjection{};
             DirectX::XMFLOAT4 color{1.0F, 1.0F, 1.0F, 1.0F};
             DirectX::XMFLOAT4 uvTransform{1.0F, 1.0F, 0.0F, 0.0F};
+            DirectX::XMFLOAT4 clipRectPixels{
+                -1.0e9F, -1.0e9F, 1.0e9F, 1.0e9F};
+            DirectX::XMFLOAT4 roundedRectLocal{};
+            float cornerRadiusLocal{};
             std::uint32_t textureIndex{NoTextureIndex};
-            std::array<std::uint32_t, 3> padding{};
+            std::array<std::uint32_t, 2> padding{};
         };
 
         struct PendingItem

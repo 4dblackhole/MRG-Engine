@@ -60,6 +60,37 @@ namespace mrg::graphics
             }
         }
 
+        [[nodiscard]] DirectX::XMFLOAT4 ToPixelClipRect(
+            const std::optional<visual2d::Rect>& clipBounds,
+            const visual2d::Size canvasSize,
+            const float scaleX,
+            const float scaleY,
+            const visual2d::Point screenOrigin,
+            const float targetWidth,
+            const float targetHeight) noexcept
+        {
+            if (!clipBounds.has_value())
+            {
+                return {0.0F, 0.0F, targetWidth, targetHeight};
+            }
+            const visual2d::Rect& clip = *clipBounds;
+            const float left = screenOrigin.x +
+                (canvasSize.width * 0.5F + clip.x) * scaleX;
+            const float top = screenOrigin.y +
+                (canvasSize.height * 0.5F - clip.y - clip.height) * scaleY;
+            return {
+                std::clamp(left, 0.0F, targetWidth),
+                std::clamp(top, 0.0F, targetHeight),
+                std::clamp(
+                    left + clip.width * scaleX,
+                    0.0F,
+                    targetWidth),
+                std::clamp(
+                    top + clip.height * scaleY,
+                    0.0F,
+                    targetHeight)};
+        }
+
         [[nodiscard]] D3D12_RESOURCE_DESC BufferDescription(
             const std::size_t byteCount) noexcept
         {
@@ -82,6 +113,10 @@ namespace mrg::graphics
             DirectX::XMFLOAT4 bounds{};
             DirectX::XMFLOAT4 color{};
             DirectX::XMFLOAT4X4 transform{};
+            DirectX::XMFLOAT4 clipRectPixels{};
+            DirectX::XMFLOAT4 roundedRectLocal{};
+            float cornerRadiusLocal{};
+            std::uint32_t padding[3]{};
         };
 
         struct VisualInstance
@@ -90,12 +125,15 @@ namespace mrg::graphics
             DirectX::XMFLOAT4 color{};
             DirectX::XMFLOAT4X4 transform{};
             DirectX::XMFLOAT4 uvTransform{};
+            DirectX::XMFLOAT4 clipRectPixels{};
+            DirectX::XMFLOAT4 roundedRectLocal{};
+            float cornerRadiusLocal{};
             std::uint32_t textureIndex{NoTextureIndex};
-            std::uint32_t padding[3]{};
+            std::uint32_t padding[2]{};
         };
 
-        static_assert(sizeof(RectangleInstance) == 96);
-        static_assert(sizeof(VisualInstance) == 128);
+        static_assert(sizeof(RectangleInstance) == 144);
+        static_assert(sizeof(VisualInstance) == 160);
 
         struct FrameBufferPage
         {
@@ -817,6 +855,22 @@ namespace mrg::graphics
                      logicalBounds.height) * pixelScale,
                 logicalBounds.width * pixelScale,
                 logicalBounds.height * pixelScale};
+            const DirectX::XMFLOAT4 clipRectPixels = ToPixelClipRect(
+                command.clipBounds,
+                canvasSize,
+                pixelScale,
+                pixelScale,
+                screenOrigin,
+                static_cast<float>(context.width),
+                static_cast<float>(context.height));
+            const DirectX::XMFLOAT4 roundedRectLocal{
+                0.0F,
+                0.0F,
+                command.bounds.width,
+                command.bounds.height};
+            const float cornerRadiusLocal = std::min(
+                command.cornerRadius,
+                std::min(command.bounds.width, command.bounds.height) * 0.5F);
             if (command.type == visual2d::DrawPacketType::Text)
             {
                 TextDrawCommand text{};
@@ -848,6 +902,7 @@ namespace mrg::graphics
                 text.style.font = state.screenFont;
                 text.style.fontSizePixels = command.fontSize * pixelScale;
                 text.style.color = ToFloat4(command.color);
+                text.clipRectPixels = clipRectPixels;
                 state.screenTextRendering->Submit(command.text, text);
                 continue;
             }
@@ -883,7 +938,10 @@ namespace mrg::graphics
                     ToFloat4(command.color),
                     command.uvScale,
                     command.uvOffset,
-                    image->second.textureIndex);
+                    image->second.textureIndex,
+                    clipRectPixels,
+                    roundedRectLocal,
+                    cornerRadiusLocal);
                 continue;
             }
             if (bounds.width <= 0.0F || bounds.height <= 0.0F)
@@ -912,7 +970,10 @@ namespace mrg::graphics
                 ToFloat4(command.color),
                 {1.0F, 1.0F},
                 {0.0F, 0.0F},
-                NoTextureIndex);
+                NoTextureIndex,
+                clipRectPixels,
+                roundedRectLocal,
+                cornerRadiusLocal);
         }
     }
 
@@ -1165,6 +1226,22 @@ namespace mrg::graphics
                     static_cast<float>(targetWidth) * 0.5F,
                     static_cast<float>(targetHeight) * 0.5F,
                     0.0F));
+            const DirectX::XMFLOAT4 clipRectPixels = ToPixelClipRect(
+                command.clipBounds,
+                canvasSize,
+                scaleX,
+                scaleY,
+                {},
+                static_cast<float>(targetWidth),
+                static_cast<float>(targetHeight));
+            const DirectX::XMFLOAT4 roundedRectLocal{
+                0.0F,
+                0.0F,
+                command.bounds.width,
+                command.bounds.height};
+            const float cornerRadiusLocal = std::min(
+                command.cornerRadius,
+                std::min(command.bounds.width, command.bounds.height) * 0.5F);
             if (command.type == visual2d::DrawPacketType::Rectangle)
             {
                 selectBatch(BatchType::Rectangles);
@@ -1174,7 +1251,10 @@ namespace mrg::graphics
                      command.bounds.width,
                      command.bounds.height},
                     ToFloat4(command.color),
-                    primitiveTransform});
+                    primitiveTransform,
+                    clipRectPixels,
+                    roundedRectLocal,
+                    cornerRadiusLocal});
                 continue;
             }
 
@@ -1200,6 +1280,9 @@ namespace mrg::graphics
                      -command.uvScale.y,
                      command.uvOffset.x,
                      command.uvOffset.y + command.uvScale.y},
+                    clipRectPixels,
+                    roundedRectLocal,
+                    cornerRadiusLocal,
                     image->second.textureIndex});
                 continue;
             }
@@ -1230,6 +1313,7 @@ namespace mrg::graphics
             text.style.fontSizePixels = command.fontSize *
                 std::min(scaleX, scaleY);
             text.style.color = ToFloat4(command.color);
+            text.clipRectPixels = clipRectPixels;
             selectBatch(BatchType::Text);
             textCommands.push_back({command.text, std::move(text)});
         }

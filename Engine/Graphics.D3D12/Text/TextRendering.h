@@ -74,6 +74,10 @@ namespace mrg::graphics
             TextHorizontalAlignment::Leading};
         TextVerticalAlignment verticalAlignment{
             TextVerticalAlignment::Near};
+        // Pixel-space {left, top, right, bottom}. The default leaves text
+        // unclipped inside the current render target.
+        DirectX::XMFLOAT4 clipRectPixels{
+            -1.0e9F, -1.0e9F, 1.0e9F, 1.0e9F};
         TextStyle style{};
     };
 

@@ -5,6 +5,7 @@ struct GlyphInstance
     float2 SizePixels;
     float4 UvRectangle;
     float4 Color;
+    float4 ClipRectPixels;
     float Depth;
 };
 
@@ -23,6 +24,7 @@ struct PixelInput
     float4 Position : SV_POSITION;
     float2 Uv : TEXCOORD0;
     float4 Color : COLOR0;
+    nointerpolation float4 ClipRectPixels : TEXCOORD1;
 };
 
 PixelInput VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
@@ -58,11 +60,16 @@ PixelInput VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
         glyph.UvRectangle.zw,
         corner);
     output.Color = glyph.Color;
+    output.ClipRectPixels = glyph.ClipRectPixels;
     return output;
 }
 
 float4 PSMain(PixelInput input) : SV_TARGET
 {
+    clip(input.Position.x - input.ClipRectPixels.x);
+    clip(input.Position.y - input.ClipRectPixels.y);
+    clip(input.ClipRectPixels.z - input.Position.x);
+    clip(input.ClipRectPixels.w - input.Position.y);
     float coverage = GlyphAtlas.Sample(GlyphSampler, input.Uv);
     return float4(
         input.Color.rgb,

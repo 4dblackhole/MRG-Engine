@@ -186,6 +186,8 @@ namespace mrg::graphics
             DirectX::XMFLOAT2 sizePixels{};
             DirectX::XMFLOAT4 uvRectangle{};
             DirectX::XMFLOAT4 color{1.0F, 1.0F, 1.0F, 1.0F};
+            DirectX::XMFLOAT4 clipRectPixels{
+                -1.0e9F, -1.0e9F, 1.0e9F, 1.0e9F};
             float depth{};
             std::uint32_t pageIndex{};
         };
@@ -197,10 +199,12 @@ namespace mrg::graphics
             DirectX::XMFLOAT2 sizePixels{};
             DirectX::XMFLOAT4 uvRectangle{};
             DirectX::XMFLOAT4 color{1.0F, 1.0F, 1.0F, 1.0F};
+            DirectX::XMFLOAT4 clipRectPixels{
+                -1.0e9F, -1.0e9F, 1.0e9F, 1.0e9F};
             float depth{};
         };
 
-        static_assert(sizeof(GpuGlyphInstance) == 116);
+        static_assert(sizeof(GpuGlyphInstance) == 132);
 
         struct FrameInstancePage final
         {
@@ -327,11 +331,13 @@ namespace mrg::graphics
                 Impl& owner,
                 const DirectX::XMFLOAT4& color,
                 const float depth,
-                const DirectX::XMFLOAT4X4& transform) noexcept
+                const DirectX::XMFLOAT4X4& transform,
+                const DirectX::XMFLOAT4& clipRectPixels) noexcept
                 : owner_(owner),
                   color_(color),
                   depth_(depth),
-                  transform_(transform)
+                  transform_(transform),
+                  clipRectPixels_(clipRectPixels)
             {
             }
 
@@ -435,7 +441,8 @@ namespace mrg::graphics
                         *glyphRun,
                         color_,
                         depth_,
-                        transform_);
+                        transform_,
+                        clipRectPixels_);
                     return S_OK;
                 }
                 catch (...)
@@ -488,6 +495,7 @@ namespace mrg::graphics
             DirectX::XMFLOAT4 color_{};
             float depth_{};
             DirectX::XMFLOAT4X4 transform_{};
+            DirectX::XMFLOAT4 clipRectPixels_{};
             std::exception_ptr error_;
         };
 
@@ -723,7 +731,8 @@ namespace mrg::graphics
                     *this,
                     command.style.color,
                     command.depth,
-                    command.transform));
+                    command.transform,
+                    command.clipRectPixels));
             const HRESULT drawResult = layout->Draw(
                 nullptr,
                 collector.Get(),
@@ -785,6 +794,7 @@ namespace mrg::graphics
                         source.sizePixels,
                         source.uvRectangle,
                         source.color,
+                        source.clipRectPixels,
                         source.depth};
                 }
 
@@ -857,7 +867,8 @@ namespace mrg::graphics
             const DWRITE_GLYPH_RUN& glyphRun,
             const DirectX::XMFLOAT4& color,
             const float depth,
-            const DirectX::XMFLOAT4X4& transform)
+            const DirectX::XMFLOAT4X4& transform,
+            const DirectX::XMFLOAT4& clipRectPixels)
         {
             float penX = baselineOriginX;
             const bool rightToLeft = (glyphRun.bidiLevel & 1U) != 0;
@@ -885,6 +896,7 @@ namespace mrg::graphics
                         glyph.sizePixels,
                         glyph.uvRectangle,
                         color,
+                        clipRectPixels,
                         depth,
                         glyph.pageIndex});
                 }

@@ -729,6 +729,73 @@ namespace
             "combo box drag scrolling selects the shifted visible item");
     }
 
+    void TestVisual2DClipping()
+    {
+        mrg::visual2d::Visual2DCanvas canvas(
+            {200.0F, 100.0F},
+            mrg::visual2d::CanvasScaleMode::Fixed);
+        auto& viewport = canvas.CreateNode(
+            mrg::visual2d::Anchor::Center,
+            "Viewport");
+        viewport.SetPivot({0.0F, 0.0F});
+        viewport.SetBounds({-40.0F, -20.0F, 80.0F, 40.0F});
+        viewport.SetClipRect({0.0F, 0.0F, 80.0F, 40.0F});
+        auto& child = mrg::visual2d::CreateButton(
+            viewport,
+            {60.0F, 0.0F, 40.0F, 40.0F},
+            L"Clipped");
+        child.GetComponent<mrg::visual2d::SpriteVisualComponent>()->
+            SetCornerRadius(6.0F);
+
+        const std::vector<mrg::visual2d::DrawPacket> packets =
+            canvas.BuildDrawList();
+        Check(
+            !packets.empty() && std::ranges::all_of(
+                packets,
+                [](const mrg::visual2d::DrawPacket& packet)
+                {
+                    return packet.clipBounds.has_value() &&
+                        NearlyEqual(packet.clipBounds->x, -40.0F) &&
+                        NearlyEqual(packet.clipBounds->y, -20.0F) &&
+                        NearlyEqual(packet.clipBounds->width, 80.0F) &&
+                        NearlyEqual(packet.clipBounds->height, 40.0F);
+                }),
+            "Visual2D draw packets inherit a parent-local clip rectangle");
+        Check(
+            std::ranges::any_of(
+                packets,
+                [](const mrg::visual2d::DrawPacket& packet)
+                {
+                    return packet.type ==
+                            mrg::visual2d::DrawPacketType::Rectangle &&
+                        NearlyEqual(packet.cornerRadius, 6.0F);
+                }),
+            "Visual2D Sprite packets retain their local corner radius");
+
+        mrg::visual2d::Visual2DInputRouter router;
+        router.Process(
+            canvas,
+            {{50.0F, 0.0F}, true, true, true, false, 0.0F, 10});
+        Check(
+            router.CapturedNode() != child.Id(),
+            "Visual2D clipping rejects pointer hits outside the viewport");
+        router.Process(
+            canvas,
+            {{50.0F, 0.0F}, true, false, false, true, 0.0F, 15});
+        router.Process(
+            canvas,
+            {{30.0F, 0.0F}, true, true, true, false, 0.0F, 20});
+        Check(
+            router.CapturedNode() == child.Id(),
+            "Visual2D clipping preserves pointer hits inside the viewport");
+        router.Reset(canvas);
+
+        viewport.ClearClipRect();
+        Check(
+            !viewport.ClipRect().has_value(),
+            "Visual2D clip rectangles can be cleared at runtime");
+    }
+
     void TestVisual2DTreeZOrder()
     {
         mrg::visual2d::Visual2DCanvas canvas(
@@ -923,6 +990,7 @@ int main()
     TestThreeDimensionalVolumes();
     TestTriangleAndUvSurfaces();
     TestVisual2DRouting();
+    TestVisual2DClipping();
     TestVisual2DTreeZOrder();
     TestVisual2DAnchorsAndComponents();
 

@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 $publicHeaders = @(
     'Engine\Audio\System\AudioPlayback.h',
     'Engine\Audio\System\AudioSystem.h',
+    'Engine\Audio\System\AudioPlaybackManager.h',
     'Engine\Platform.Win32\System\RuntimePaths.h',
     'Engine\Platform.Win32\Input\Input.h',
     'Engine\Collision\Query\Collision.h',

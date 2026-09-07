@@ -467,6 +467,55 @@ namespace mrg::audio
 }
 // ===== END Engine\Audio\System\AudioSystem.h =====
 
+// ===== BEGIN Engine\Audio\System\AudioPlaybackManager.h =====
+
+
+#include <map>
+
+namespace mrg::audio
+{
+    using AudioPlaybackId = std::uint64_t;
+    inline constexpr AudioPlaybackId InvalidAudioPlaybackId = 0;
+
+    // Game-wide playback ownership. Call on the Client thread. IDs belong to
+    // this manager and are never reused, including after StopAll().
+    class AudioPlaybackManager final
+    {
+    public:
+        AudioPlaybackManager() = default;
+        ~AudioPlaybackManager();
+        AudioPlaybackManager(const AudioPlaybackManager&) = delete;
+        AudioPlaybackManager& operator=(const AudioPlaybackManager&) = delete;
+
+        // Retains the clip and optional bus until playback ends or is stopped.
+        // The caller must keep any parent buses and attached effects alive.
+        [[nodiscard]] AudioPlaybackId Play(
+            std::shared_ptr<AudioClip> clip,
+            const AudioPlaybackSettings& settings,
+            std::shared_ptr<AudioBus> bus,
+            std::string& errorMessage);
+        // Borrowed pointer, invalidated by Stop, StopAll or a later Update.
+        [[nodiscard]] AudioVoice* FindVoice(AudioPlaybackId id) noexcept;
+        [[nodiscard]] const AudioVoice* FindVoice(AudioPlaybackId id) const noexcept;
+        [[nodiscard]] bool Stop(AudioPlaybackId id, std::string& errorMessage);
+        // Best-effort stop of every voice; also used during Client shutdown.
+        void StopAll() noexcept;
+        void Update();
+        [[nodiscard]] std::size_t PlaybackCount() const noexcept;
+
+    private:
+        struct Playback
+        {
+            std::shared_ptr<AudioClip> clip;
+            std::shared_ptr<AudioBus> bus;
+            std::unique_ptr<AudioVoice> voice;
+        };
+        std::map<AudioPlaybackId, Playback> playbacks_;
+        AudioPlaybackId nextId_{1};
+    };
+}
+// ===== END Engine\Audio\System\AudioPlaybackManager.h =====
+
 // ===== BEGIN Engine\Platform.Win32\System\RuntimePaths.h =====
 
 // Process-relative path helpers owned by the Win32 platform layer. Client
@@ -3445,6 +3494,11 @@ namespace mrg::scene
         void OnResize(std::uint32_t width, std::uint32_t height) final;
         void Shutdown() noexcept final;
 
+        // Shared by all Scenes in this Client; Scene transitions do not stop it.
+        // Pass this service to Scene factories that need managed playback.
+        [[nodiscard]] audio::AudioPlaybackManager& AudioPlayback() noexcept;
+        [[nodiscard]] const audio::AudioPlaybackManager& AudioPlayback() const noexcept;
+
     protected:
         virtual void RegisterScenes(SceneManager& scenes) = 0;
         [[nodiscard]] virtual std::string_view InitialSceneId() const noexcept = 0;
@@ -3461,6 +3515,8 @@ namespace mrg::scene
         virtual void OnClientShuttingDown() noexcept;
 
     private:
+        // Declared before scenes_ so it also outlives Scene destructors.
+        audio::AudioPlaybackManager audioPlayback_;
         SceneManager scenes_;
         bool initialized_{};
     };

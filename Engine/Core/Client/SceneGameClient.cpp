@@ -31,6 +31,7 @@ namespace mrg::scene
             // initialization hook before a later step throws.
             OnClientShuttingDown();
             scenes_.Shutdown();
+            audioPlayback_.StopAll();
             throw;
         }
     }
@@ -44,6 +45,7 @@ namespace mrg::scene
 
         const bool keepRunning = scenes_.Update(context);
         OnClientUpdated(context);
+        audioPlayback_.Update();
         return keepRunning;
     }
 
@@ -71,7 +73,18 @@ namespace mrg::scene
     {
         OnClientShuttingDown();
         scenes_.Shutdown();
+        audioPlayback_.StopAll();
         initialized_ = false;
+    }
+
+    audio::AudioPlaybackManager& SceneGameClient::AudioPlayback() noexcept
+    {
+        return audioPlayback_;
+    }
+
+    const audio::AudioPlaybackManager& SceneGameClient::AudioPlayback() const noexcept
+    {
+        return audioPlayback_;
     }
 
     SceneManager& SceneGameClient::Scenes() noexcept

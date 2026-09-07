@@ -29,6 +29,41 @@ std::unique_ptr<mrg::audio::AudioVoice> voice =
 정지한다. 긴 음악은 `AudioLoadMode::Stream`, 짧은 히트사운드는
 `AudioLoadMode::Sample`로 로드한다.
 
+## SceneGameClient 공통 재생 관리
+
+`SceneGameClient::AudioPlayback()`은 Client 전체 수명의 `AudioPlaybackManager`를
+제공한다. Scene factory에는 `std::ref(AudioPlayback())`로 같은 관리자를 전달할 수
+있다. Scene 전환은 이 관리자의 재생을 자동으로 중단하지 않는다.
+
+```cpp
+// A SceneGameClient hook: registration/loading remains Client policy.
+std::string error;
+std::shared_ptr<mrg::audio::AudioClip> clip = services.audio.LoadSound(
+    path, mrg::audio::AudioLoadMode::Stream, error);
+const auto id = AudioPlayback().Play(clip, {}, nullptr, error);
+if (auto* voice = AudioPlayback().FindVoice(id))
+{
+    static_cast<void>(voice->SetPaused(true, error));
+}
+static_cast<void>(AudioPlayback().Stop(id, error));
+```
+
+- `Play`는 Voice와 재생에 필요한 Clip/선택적 Bus를 보관하고 재사용되지 않는 ID를
+  반환한다. 실패 시 ID는 0이며 오류 문자열을 제공한다.
+- `FindVoice`의 포인터는 빌린 참조다. `Stop`, `StopAll`, 이후 `Update`가 자원을
+  정리할 수 있으므로 오래 저장하지 말고 ID로 다시 조회한다.
+- `SceneGameClient::Update`는 Scene과 Client hook 갱신 후 끝난 재생을 정리한다.
+  일시정지 중이거나 DSP 시각에 예약된 Voice도 재생이 유효한 동안 유지한다.
+- `Stop`은 native stop을 명시적으로 호출한다. 실패하면 해당 재생은 계속 관리한다.
+  `StopAll`은 종료용 best-effort 정지 후 자원을 해제한다. Client 종료와 초기화 실패
+  시 Scene 정리를 마친 뒤 `StopAll`을 호출하며 그 다음 엔진이 AudioSystem을 종료한다.
+- 관리자는 Client 스레드에서 사용한다. Bus의 부모와 별도로 생성한 DSP Effect는
+  호출자가 필요한 기간 동안 유지해야 한다.
+
+파일 경로/SoundId 목록, 음악·효과음 bus 이름, 리듬 시간의 DSP 변환은 Client 정책이다.
+관리자는 파일을 자동 검색하거나 모든 음악을 캐시하지 않는다. Scene이 재생 종료를
+원하면 자신의 ID만 `Stop`한다. 다른 Scene까지 이어질 BGM은 전역 관리자가 유지한다.
+
 ## Mixer bus
 
 `AudioSystem::CreateBus`는 Client 소유 `AudioBus`를 만든다. Parent를 생략하면

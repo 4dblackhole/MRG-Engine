@@ -2,6 +2,7 @@
 
 #include "Client/IGameClient.h"
 #include "Scene/SceneManager.h"
+#include "System/AudioPlaybackManager.h"
 
 #include <string_view>
 
@@ -21,6 +22,11 @@ namespace mrg::scene
         void OnResize(std::uint32_t width, std::uint32_t height) final;
         void Shutdown() noexcept final;
 
+        // Shared by all Scenes in this Client; Scene transitions do not stop it.
+        // Pass this service to Scene factories that need managed playback.
+        [[nodiscard]] audio::AudioPlaybackManager& AudioPlayback() noexcept;
+        [[nodiscard]] const audio::AudioPlaybackManager& AudioPlayback() const noexcept;
+
     protected:
         virtual void RegisterScenes(SceneManager& scenes) = 0;
         [[nodiscard]] virtual std::string_view InitialSceneId() const noexcept = 0;
@@ -37,6 +43,8 @@ namespace mrg::scene
         virtual void OnClientShuttingDown() noexcept;
 
     private:
+        // Declared before scenes_ so it also outlives Scene destructors.
+        audio::AudioPlaybackManager audioPlayback_;
         SceneManager scenes_;
         bool initialized_{};
     };

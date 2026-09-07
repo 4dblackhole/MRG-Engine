@@ -28,6 +28,147 @@ namespace
         return std::abs(first - second) <= epsilon;
     }
 
+    struct PlaybackProbe
+    {
+        bool playing{true};
+        bool paused{};
+        bool failStop{};
+        int stops{};
+        std::uint64_t startDspClock{};
+    };
+    std::vector<std::shared_ptr<PlaybackProbe>> playbackProbes;
+    bool failTestPlayback{};
+
+    class TestVoice final : public mrg::audio::IAudioVoiceBackend
+    {
+    public:
+        explicit TestVoice(std::shared_ptr<PlaybackProbe> probe)
+            : probe_(std::move(probe)) {}
+        bool IsPlaying() const noexcept override { return probe_->playing; }
+        bool Stop(std::string& error) override
+        {
+            if (probe_->failStop)
+            {
+                error = "test stop failure";
+                return false;
+            }
+            ++probe_->stops;
+            probe_->playing = false;
+            return true;
+        }
+        bool SetPaused(bool paused, std::string&) override
+        {
+            probe_->paused = paused;
+            return true;
+        }
+        bool SetVolume(float, std::string&) override { return true; }
+        bool SetPitch(float, std::string&) override { return true; }
+    private:
+        std::shared_ptr<PlaybackProbe> probe_;
+    };
+
+    class TestClip final : public mrg::audio::IAudioClipBackend
+    {
+    public:
+        std::unique_ptr<mrg::audio::IAudioVoiceBackend> Play(
+            const mrg::audio::AudioPlaybackSettings& settings,
+            mrg::audio::IAudioBusBackend*, std::string& error) override
+        {
+            if (failTestPlayback)
+            {
+                error = "test playback failure";
+                return nullptr;
+            }
+            auto probe = std::make_shared<PlaybackProbe>();
+            probe->paused = settings.startPaused;
+            probe->startDspClock = settings.startDspClock;
+            playbackProbes.push_back(probe);
+            return std::make_unique<TestVoice>(std::move(probe));
+        }
+    };
+
+    std::unique_ptr<mrg::audio::IAudioClipBackend> CreateTestClip(
+        mrg::audio::IAudioBackend&, const std::filesystem::path&,
+        mrg::audio::AudioLoadMode, std::string&)
+    {
+        return std::make_unique<TestClip>();
+    }
+
+    void TestManagedAudioPlayback()
+    {
+        using namespace mrg::audio;
+        AudioSystem audio;
+        AudioConfig config;
+        config.preferredBackend = AudioOutputBackend::NoSound;
+        std::string error;
+        const bool initialized = audio.Initialize(
+            config, nullptr, &CreateTestClip, error);
+        Check(initialized, "audio test initializes without an output device");
+        if (!initialized) { return; }
+
+        AudioPlaybackManager manager;
+        Check(manager.Play(nullptr, {}, nullptr, error) == InvalidAudioPlaybackId,
+            "managed playback rejects null clips");
+        std::shared_ptr<AudioClip> clip = audio.LoadSound("probe", error);
+        std::shared_ptr<AudioBus> bus = audio.CreateBus("probe", nullptr, error);
+        Check(clip != nullptr && bus != nullptr, "audio test creates resources");
+        if (clip == nullptr || bus == nullptr) { return; }
+        const std::weak_ptr<AudioClip> weakClip = clip;
+        const std::weak_ptr<AudioBus> weakBus = bus;
+        AudioPlaybackSettings settings;
+        settings.startPaused = true;
+        settings.startDspClock = 123456;
+        const auto first = manager.Play(clip, settings, bus, error);
+        const auto second = manager.Play(clip, {}, bus, error);
+        Check(first != 0 && second != 0 && first != second,
+            "overlapping playback has independent IDs");
+        if (first == 0 || second == 0) { return; }
+        clip.reset();
+        bus.reset();
+        manager.Update();
+        Check(!weakClip.expired() && !weakBus.expired() &&
+            manager.PlaybackCount() == 2 && playbackProbes[0]->paused &&
+            playbackProbes[0]->startDspClock == 123456,
+            "manager retains assets and paused/scheduled voices after owner releases them");
+        Check(manager.FindVoice(first)->SetPaused(false, error) &&
+            !playbackProbes[0]->paused, "managed voice supports resume");
+        playbackProbes[0]->failStop = true;
+        Check(!manager.Stop(first, error) && manager.FindVoice(first) != nullptr,
+            "failed stop keeps the voice controllable");
+        playbackProbes[0]->failStop = false;
+        Check(manager.Stop(first, error) && playbackProbes[0]->stops == 1 &&
+            playbackProbes[1]->playing && manager.FindVoice(first) == nullptr,
+            "stopping one playback explicitly stops only that voice");
+        Check(!manager.Stop(first, error), "stale playback IDs cannot stop another voice");
+        playbackProbes[1]->playing = false;
+        manager.Update();
+        Check(manager.PlaybackCount() == 0 && weakClip.expired() && weakBus.expired(),
+            "natural completion releases manager resources");
+
+        clip = audio.LoadSound("probe", error);
+        failTestPlayback = true;
+        Check(manager.Play(clip, {}, nullptr, error) == 0 &&
+            manager.PlaybackCount() == 0 && error == "test playback failure",
+            "failed playback leaves no entry and preserves the backend error");
+        failTestPlayback = false;
+        const auto third = manager.Play(clip, {}, nullptr, error);
+        manager.StopAll();
+        const auto fourth = manager.Play(clip, {}, nullptr, error);
+        Check(third > second && fourth > third && playbackProbes[2]->stops == 1,
+            "StopAll explicitly stops voices without reusing IDs");
+        manager.StopAll();
+        Check(manager.PlaybackCount() == 0 && playbackProbes[3]->stops == 1,
+            "shutdown clears remaining managed playback");
+        {
+            AudioPlaybackManager temporary;
+            Check(temporary.Play(clip, {}, nullptr, error) != 0,
+                "temporary manager starts playback");
+        }
+        Check(playbackProbes.back()->stops == 1,
+            "manager destructor explicitly stops playback");
+        playbackProbes.clear();
+    }
+
     [[nodiscard]] bool MatricesNearlyEqual(
         const DirectX::XMMATRIX first,
         const DirectX::XMMATRIX second,
@@ -981,6 +1122,7 @@ namespace
 
 int main()
 {
+    TestManagedAudioPlayback();
     TestCameraMatrices();
     TestPerspectiveFrustum();
     TestOrthographicFrustum();
@@ -1000,6 +1142,6 @@ int main()
         return 1;
     }
 
-    std::cout << "All Camera, collision, and Visual2D tests passed.\n";
+    std::cout << "All audio, Camera, collision, and Visual2D tests passed.\n";
     return 0;
 }

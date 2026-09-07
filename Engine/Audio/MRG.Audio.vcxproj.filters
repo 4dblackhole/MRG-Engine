@@ -18,6 +18,9 @@
     <ClInclude Include="System\AudioSystem.h">
       <Filter>System</Filter>
     </ClInclude>
+    <ClInclude Include="System\AudioPlaybackManager.h">
+      <Filter>System</Filter>
+    </ClInclude>
     <ClInclude Include="Backend\Fmod\FmodAudioBackend.h">
       <Filter>Backend\Fmod</Filter>
     </ClInclude>
@@ -33,6 +36,9 @@
       <Filter>System</Filter>
     </ClCompile>
     <ClCompile Include="System\AudioSystem.cpp">
+      <Filter>System</Filter>
+    </ClCompile>
+    <ClCompile Include="System\AudioPlaybackManager.cpp">
       <Filter>System</Filter>
     </ClCompile>
     <ClCompile Include="Backend\Fmod\FmodAudioBackend.cpp">

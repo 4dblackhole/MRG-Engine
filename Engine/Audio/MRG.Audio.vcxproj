@@ -59,6 +59,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="System\AudioPlayback.h" />
+    <ClInclude Include="System\AudioPlaybackManager.h" />
     <ClInclude Include="System\AudioSystem.h" />
     <ClInclude Include="Backend\Fmod\FmodAudioBackend.h" />
     <ClInclude Include="Backend\Fmod\FmodAudioBus.h" />
@@ -66,6 +67,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="System\AudioPlayback.cpp" />
+    <ClCompile Include="System\AudioPlaybackManager.cpp" />
     <ClCompile Include="System\AudioSystem.cpp" />
     <ClCompile Include="Backend\Fmod\FmodAudioBackend.cpp" />
     <ClCompile Include="Backend\Fmod\FmodAudioBus.cpp" />

@@ -64,6 +64,7 @@
     <ClInclude Include="..\Platform.Win32\System\RuntimePaths.h" />
     <ClInclude Include="..\Platform.Win32\Window\Win32Window.h" />
     <ClInclude Include="..\Audio\System\AudioPlayback.h" />
+    <ClInclude Include="..\Audio\System\AudioPlaybackManager.h" />
     <ClInclude Include="..\Audio\System\AudioSystem.h" />
     <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBackend.h" />
     <ClInclude Include="..\Audio\Backend\Fmod\FmodAudioBus.h" />
@@ -105,6 +106,7 @@
     <ClCompile Include="..\Platform.Win32\System\RuntimePaths.cpp" />
     <ClCompile Include="..\Platform.Win32\Window\Win32Window.cpp" />
     <ClCompile Include="..\Audio\System\AudioPlayback.cpp" />
+    <ClCompile Include="..\Audio\System\AudioPlaybackManager.cpp" />
     <ClCompile Include="..\Audio\System\AudioSystem.cpp" />
     <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBackend.cpp" />
     <ClCompile Include="..\Audio\Backend\Fmod\FmodAudioBus.cpp" />
@@ -148,6 +150,7 @@
   <ItemGroup>
     <CorePublicHeader Include="$(ProjectDir)..\Audio\System\AudioPlayback.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Audio\System\AudioSystem.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Audio\System\AudioPlaybackManager.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Platform.Win32\System\RuntimePaths.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Platform.Win32\Input\Input.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Collision\Query\Collision.h" />

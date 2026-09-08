@@ -91,8 +91,9 @@ Client wWinMain
 - Client와 Scene이 받는 `EngineServices` 및 Render/Update context의 시스템 참조는
   빌린 참조다. 저장하거나 해제하지 않는다.
 - `SceneManager`가 Scene factory와 생성된 Scene 객체를 소유한다.
-- Scene은 `MeshInstance`, Canvas, 오디오 clip과 공유 GPU handle 같은 게임 객체를
-  소유한다.
+- `SceneGameClient::ScreenVisuals()`는 화면 Canvas와 이미지 등록을 소유하며,
+  Scene은 Canvas ID와 빌린 node 포인터만 보관한다. 월드·곡면 Canvas와
+  `MeshInstance`는 해당 Scene이 소유한다.
 - Graphics의 frame resource는 제출된 mesh/material/texture handle을 fence 완료까지
   추가 보관하므로 동적 Scene 삭제 직후에도 GPU 참조가 안전하다.
 - raw pointer는 명시적으로 다르게 문서화되지 않는 한 비소유 참조다.
@@ -190,6 +191,12 @@ Canvas 논리 좌표는 정중앙 원점이며 3D Transform과 마찬가지로 `
 Win32 화면 픽셀은 입력·제출 경계에서 이 좌표로 변환된다.
 단색·이미지 Sprite는 둥근 모서리를 지정할 수 있으며 node-local clip rect는
 자식 draw packet과 hit-test에 함께 적용된다.
+
+`SceneGameClient::ScreenVisuals()`는 화면 Canvas 생성, 경로별 이미지 등록,
+활성화, Update, viewport resize와 최종 제출을 한곳에서 관리한다. Scene은
+`RenderContext::visual2DRendering`을 호출하지 않고 이 관리자에 표시 상태만
+기록한다. 화면과 수명 계약이 다른 평면·곡면·render texture pass는 이 자동
+관리 범위에 포함하지 않는다.
 
 곡면 UI는 Canvas를 render texture에 그린 뒤 UV가 있는 mesh에 샘플링한다.
 `MeshUvVisual2DSurface`는 로컬 공간 BVH로 pointer ray를 가속하고 barycentric UV를

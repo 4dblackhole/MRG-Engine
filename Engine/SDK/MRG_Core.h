@@ -1681,6 +1681,93 @@ namespace mrg::visual2d
 }
 // ===== END Engine\Core\Visual2D\Visual2DCanvas.h =====
 
+// ===== BEGIN Engine\Core\Visual2D\ScreenVisual2DManager.h =====
+
+
+#include <cstdint>
+#include <filesystem>
+#include <map>
+#include <memory>
+
+namespace mrg::graphics
+{
+    struct RenderContext;
+    class Visual2DRenderSystem;
+}
+
+namespace mrg::visual2d
+{
+    using ScreenCanvasId = std::uint64_t;
+    inline constexpr ScreenCanvasId InvalidScreenCanvasId = 0;
+
+    struct ScreenCanvasSettings
+    {
+        Size referenceSize{1280.0F, 720.0F};
+        CanvasScaleMode scaleMode{CanvasScaleMode::FixedHeight};
+        Point screenOrigin{};
+        std::uint32_t zOrder{};
+        bool visible{};
+    };
+
+    // Owns game-wide screen Canvas trees and their image registrations.
+    // SceneGameClient drives this service, so Scenes only mutate presentation
+    // state and never submit a Canvas through a render backend themselves.
+    class ScreenVisual2DManager final
+    {
+    public:
+        ScreenVisual2DManager() = default;
+        ~ScreenVisual2DManager();
+        ScreenVisual2DManager(const ScreenVisual2DManager&) = delete;
+        ScreenVisual2DManager& operator=(const ScreenVisual2DManager&) = delete;
+
+        void Initialize(
+            graphics::Visual2DRenderSystem& rendering,
+            Size viewportSize);
+        void Shutdown() noexcept;
+
+        [[nodiscard]] ScreenCanvasId CreateCanvas(
+            const ScreenCanvasSettings& settings = {});
+        [[nodiscard]] Visual2DCanvas* FindCanvas(ScreenCanvasId id) noexcept;
+        [[nodiscard]] const Visual2DCanvas* FindCanvas(
+            ScreenCanvasId id) const noexcept;
+        [[nodiscard]] bool RemoveCanvas(ScreenCanvasId id) noexcept;
+        [[nodiscard]] bool SetCanvasVisible(
+            ScreenCanvasId id,
+            bool visible) noexcept;
+        [[nodiscard]] bool SetCanvasPlacement(
+            ScreenCanvasId id,
+            Point screenOrigin,
+            std::uint32_t zOrder) noexcept;
+
+        // Paths are cached for this Client lifetime. The backend still owns
+        // the GPU texture while this manager owns the game-facing registry.
+        [[nodiscard]] ImageHandle RegisterImage(const std::filesystem::path& path);
+        [[nodiscard]] Size GetImageSize(ImageHandle image) const noexcept;
+
+        void Update(double elapsedSeconds);
+        void Render(const graphics::RenderContext& context);
+        void OnResize(std::uint32_t width, std::uint32_t height);
+        [[nodiscard]] std::size_t CanvasCount() const noexcept;
+        [[nodiscard]] std::size_t ImageCount() const noexcept;
+
+    private:
+        struct ScreenCanvas
+        {
+            std::unique_ptr<Visual2DCanvas> canvas;
+            Point screenOrigin{};
+            std::uint32_t zOrder{};
+            bool visible{};
+        };
+
+        graphics::Visual2DRenderSystem* rendering_{};
+        Size viewportSize_{};
+        std::map<ScreenCanvasId, ScreenCanvas> canvases_;
+        std::map<std::filesystem::path, ImageHandle> images_;
+        ScreenCanvasId nextCanvasId_{1};
+    };
+}
+// ===== END Engine\Core\Visual2D\ScreenVisual2DManager.h =====
+
 // ===== BEGIN Engine\Core\Visual2D\Visual2DComponents.h =====
 
 
@@ -3499,6 +3586,12 @@ namespace mrg::scene
         [[nodiscard]] audio::AudioPlaybackManager& AudioPlayback() noexcept;
         [[nodiscard]] const audio::AudioPlaybackManager& AudioPlayback() const noexcept;
 
+        // Owns screen Canvas trees and image registrations for this Client.
+        // Pass it to Scene factories instead of submitting Canvas trees there.
+        [[nodiscard]] visual2d::ScreenVisual2DManager& ScreenVisuals() noexcept;
+        [[nodiscard]] const visual2d::ScreenVisual2DManager&
+            ScreenVisuals() const noexcept;
+
     protected:
         virtual void RegisterScenes(SceneManager& scenes) = 0;
         [[nodiscard]] virtual std::string_view InitialSceneId() const noexcept = 0;
@@ -3517,6 +3610,7 @@ namespace mrg::scene
     private:
         // Declared before scenes_ so it also outlives Scene destructors.
         audio::AudioPlaybackManager audioPlayback_;
+        visual2d::ScreenVisual2DManager screenVisuals_;
         SceneManager scenes_;
         bool initialized_{};
     };

@@ -3,6 +3,7 @@
 #include "Client/IGameClient.h"
 #include "Scene/SceneManager.h"
 #include "System/AudioPlaybackManager.h"
+#include "Visual2D/ScreenVisual2DManager.h"
 
 #include <string_view>
 
@@ -27,6 +28,12 @@ namespace mrg::scene
         [[nodiscard]] audio::AudioPlaybackManager& AudioPlayback() noexcept;
         [[nodiscard]] const audio::AudioPlaybackManager& AudioPlayback() const noexcept;
 
+        // Owns screen Canvas trees and image registrations for this Client.
+        // Pass it to Scene factories instead of submitting Canvas trees there.
+        [[nodiscard]] visual2d::ScreenVisual2DManager& ScreenVisuals() noexcept;
+        [[nodiscard]] const visual2d::ScreenVisual2DManager&
+            ScreenVisuals() const noexcept;
+
     protected:
         virtual void RegisterScenes(SceneManager& scenes) = 0;
         [[nodiscard]] virtual std::string_view InitialSceneId() const noexcept = 0;
@@ -45,6 +52,7 @@ namespace mrg::scene
     private:
         // Declared before scenes_ so it also outlives Scene destructors.
         audio::AudioPlaybackManager audioPlayback_;
+        visual2d::ScreenVisual2DManager screenVisuals_;
         SceneManager scenes_;
         bool initialized_{};
     };

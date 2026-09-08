@@ -104,6 +104,7 @@
     <ClInclude Include="..\Geometry\Primitive\SphereShape.h"><Filter>Geometry\Primitive</Filter></ClInclude>
     <ClInclude Include="..\Core\Visual2D\Visual2DNode.h"><Filter>Core\Visual2D</Filter></ClInclude>
     <ClInclude Include="..\Core\Visual2D\Visual2DCanvas.h"><Filter>Core\Visual2D</Filter></ClInclude>
+    <ClInclude Include="..\Core\Visual2D\ScreenVisual2DManager.h"><Filter>Core\Visual2D</Filter></ClInclude>
     <ClInclude Include="..\Core\Visual2D\Visual2DComponents.h"><Filter>Core\Visual2D</Filter></ClInclude>
     <ClInclude Include="..\Core\Visual2D\Visual2DInputRouter.h"><Filter>Core\Visual2D</Filter></ClInclude>
     <ClInclude Include="..\Core\Visual2D\Visual2DSurface.h"><Filter>Core\Visual2D</Filter></ClInclude>
@@ -145,6 +146,7 @@
     <ClCompile Include="..\Geometry\Primitive\SphereShape.cpp"><Filter>Geometry\Primitive</Filter></ClCompile>
     <ClCompile Include="..\Core\Visual2D\Visual2DNode.cpp"><Filter>Core\Visual2D</Filter></ClCompile>
     <ClCompile Include="..\Core\Visual2D\Visual2DCanvas.cpp"><Filter>Core\Visual2D</Filter></ClCompile>
+    <ClCompile Include="..\Core\Visual2D\ScreenVisual2DManager.cpp"><Filter>Core\Visual2D</Filter></ClCompile>
     <ClCompile Include="..\Core\Visual2D\Visual2DComponents.cpp"><Filter>Core\Visual2D</Filter></ClCompile>
     <ClCompile Include="..\Core\Visual2D\Visual2DInputRouter.cpp"><Filter>Core\Visual2D</Filter></ClCompile>
     <ClCompile Include="..\Core\Visual2D\Visual2DSurface.cpp"><Filter>Core\Visual2D</Filter></ClCompile>

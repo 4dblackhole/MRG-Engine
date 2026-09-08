@@ -78,6 +78,7 @@
     <ClInclude Include="..\Geometry\Primitive\SphereShape.h" />
     <ClInclude Include="..\Core\Visual2D\Visual2DNode.h" />
     <ClInclude Include="..\Core\Visual2D\Visual2DCanvas.h" />
+    <ClInclude Include="..\Core\Visual2D\ScreenVisual2DManager.h" />
     <ClInclude Include="..\Core\Visual2D\Visual2DComponents.h" />
     <ClInclude Include="..\Core\Visual2D\Visual2DInputRouter.h" />
     <ClInclude Include="..\Core\Visual2D\Visual2DSurface.h" />
@@ -119,6 +120,7 @@
     <ClCompile Include="..\Geometry\Primitive\SphereShape.cpp" />
     <ClCompile Include="..\Core\Visual2D\Visual2DNode.cpp" />
     <ClCompile Include="..\Core\Visual2D\Visual2DCanvas.cpp" />
+    <ClCompile Include="..\Core\Visual2D\ScreenVisual2DManager.cpp" />
     <ClCompile Include="..\Core\Visual2D\Visual2DComponents.cpp" />
     <ClCompile Include="..\Core\Visual2D\Visual2DInputRouter.cpp" />
     <ClCompile Include="..\Core\Visual2D\Visual2DSurface.cpp" />
@@ -162,6 +164,7 @@
     <CorePublicHeader Include="$(ProjectDir)..\Geometry\Primitive\SphereShape.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Visual2D\Visual2DNode.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Visual2D\Visual2DCanvas.h" />
+    <CorePublicHeader Include="$(ProjectDir)..\Core\Visual2D\ScreenVisual2DManager.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Visual2D\Visual2DComponents.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Visual2D\Visual2DInputRouter.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Visual2D\Visual2DSurface.h" />

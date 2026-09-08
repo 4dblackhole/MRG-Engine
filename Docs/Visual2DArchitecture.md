@@ -19,8 +19,10 @@ MRG.Graphics.D3D12/Visual2D
 생명주기 함수가 없는 `Visual2DRenderSystem` 계약만 공개된다. Client는
 `EngineServices::visual2DRendering`으로 이미지와
 렌더 타깃을 만들고, Render 중에는
-`RenderContext::visual2DRendering`으로 Canvas를 제출한다. Scene은
-Canvas, 입력 라우터, 리소스 핸들만 소유한다.
+`SceneGameClient`를 쓰는 화면은 `ScreenVisuals()`에 Canvas와 이미지를 등록한다.
+관리자는 Update·resize·화면 제출과 자원 레지스트리를 소유하며 Scene은 Canvas ID,
+입력 라우터와 빌린 node 포인터만 가진다. 직접 `IGameClient`를 구현하거나
+월드·곡면 pass를 구성할 때에만 RenderContext의 저수준 제출 API를 사용한다.
 
 `Visual2DNode`는 상속용 인터페이스가 아니라 구체적인 컴포넌트 컨테이너다.
 

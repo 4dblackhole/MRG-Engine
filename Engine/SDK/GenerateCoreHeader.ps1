@@ -24,6 +24,7 @@ $publicHeaders = @(
     'Engine\Core\System\TransformNode.h',
     'Engine\Core\Visual2D\Visual2DNode.h',
     'Engine\Core\Visual2D\Visual2DCanvas.h',
+    'Engine\Core\Visual2D\ScreenVisual2DManager.h',
     'Engine\Core\Visual2D\Visual2DComponents.h',
     'Engine\Core\Visual2D\Visual2DInputRouter.h',
     'Engine\Core\Visual2D\Visual2DSurface.h',

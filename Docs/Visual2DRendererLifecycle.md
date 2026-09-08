@@ -15,20 +15,66 @@ Run
    ├─ TextRenderSystem
    └─ D3D12Visual2DRenderer (내부 구현)
 
-Scene → Visual2DRenderSystem (비소유 계약)
-├─ Visual2DCanvas
-├─ Visual2DInputRouter
-├─ ImageHandle
-└─ RenderTargetTextureHandle
+SceneGameClient
+└─ ScreenVisual2DManager
+   ├─ screen Visual2DCanvas
+   ├─ path별 ImageHandle 등록
+   └─ Update / resize / SubmitScreen
+
+Scene
+├─ ScreenCanvasId와 빌린 node 포인터
+├─ Canvas별 Visual2DInputRouter
+└─ world/off-screen Canvas와 RenderTargetTextureHandle
 ```
 
 초기화 순서는 D3D12 장치, Mesh, Text, Visual2D 순서이고 종료는 그 반대다.
 따라서 Visual2D가 공유 Mesh, Material, Texture, Font 핸들을 정리하는 동안
 하위 렌더 시스템과 D3D12 장치는 항상 유효하다.
 
-## Client 사용법
+## SceneGameClient 화면 사용법
 
-Scene 초기화에서는 엔진 서비스를 통해 이미지와 Canvas 렌더 타깃을 만든다.
+`SceneGameClient` 파생 클래스는 Scene factory에 관리자를 주입한다.
+
+```cpp
+scenes.RegisterScene<MyScene>(
+    "Main", SceneRetention::KeepAlive, std::ref(ScreenVisuals()));
+```
+
+Scene은 관리자가 소유할 Canvas와 이미지를 등록한다. `BeginScene`과 `EndScene`은
+KeepAlive Canvas의 표시 상태만 전환하며, `Render`에서 제출하지 않는다.
+
+```cpp
+void MyScene::Initialize(const mrg::EngineServices&)
+{
+    canvasId_ = visuals_.CreateCanvas();
+    canvas_ = visuals_.FindCanvas(canvasId_);
+    const auto image = visuals_.RegisterImage("assets/images/player.png");
+    mrg::visual2d::CreateSprite(
+        canvas_->Root(), {-64.0F, -64.0F, 128.0F, 128.0F}, image);
+}
+
+void MyScene::BeginScene()
+{
+    visuals_.SetCanvasVisible(canvasId_, true);
+}
+
+void MyScene::EndScene() noexcept
+{
+    visuals_.SetCanvasVisible(canvasId_, false);
+}
+
+void MyScene::Render(const mrg::graphics::RenderContext&)
+{
+}
+```
+
+`Shutdown`에서는 InputRouter를 먼저 Reset한 뒤 Canvas를 제거한다. 관리자는
+Client 종료 시 남은 Canvas와 이미지 등록도 모두 정리한다.
+
+## 저수준·월드 Canvas 사용법
+
+직접 `IGameClient`를 구현하거나 월드·곡면 UI를 만들 때는 엔진 서비스를 통해
+이미지와 Canvas 렌더 타깃을 만든다.
 
 ```cpp
 void ExampleScene::Initialize(const mrg::EngineServices& services)

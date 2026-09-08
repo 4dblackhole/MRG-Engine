@@ -39,6 +39,120 @@ namespace
     std::vector<std::shared_ptr<PlaybackProbe>> playbackProbes;
     bool failTestPlayback{};
 
+    class TestVisual2DRenderer final :
+        public mrg::graphics::Visual2DRenderSystem
+    {
+    public:
+        [[nodiscard]] mrg::visual2d::ImageHandle LoadImage(
+            const std::filesystem::path&) override
+        {
+            ++imageLoads;
+            return {static_cast<std::uint64_t>(imageLoads)};
+        }
+
+        [[nodiscard]] mrg::visual2d::Size GetImageSize(
+            const mrg::visual2d::ImageHandle image) const noexcept override
+        {
+            return image ? mrg::visual2d::Size{64.0F, 32.0F}
+                         : mrg::visual2d::Size{};
+        }
+
+        void SubmitScreen(
+            const mrg::visual2d::Visual2DCanvas& canvas,
+            const mrg::graphics::RenderContext&,
+            const mrg::visual2d::Point screenOrigin,
+            const std::uint32_t canvasZOrder) override
+        {
+            ++screenSubmissions;
+            lastCanvas = &canvas;
+            lastOrigin = screenOrigin;
+            lastZOrder = canvasZOrder;
+        }
+
+        void SubmitPlane(
+            const mrg::visual2d::Visual2DCanvas&,
+            const mrg::graphics::RenderContext&,
+            const DirectX::XMFLOAT4X4&,
+            mrg::visual2d::Size,
+            const DirectX::XMFLOAT4X4&) override
+        {
+        }
+
+        [[nodiscard]] mrg::graphics::RenderTargetTextureHandle
+            CreateCanvasRenderTarget(std::uint32_t, std::uint32_t) override
+        {
+            return {};
+        }
+
+        void RenderToTexture(
+            const mrg::visual2d::Visual2DCanvas&,
+            const mrg::graphics::RenderTargetTextureHandle&,
+            const mrg::graphics::RenderContext&) override
+        {
+        }
+
+        int imageLoads{};
+        int screenSubmissions{};
+        const mrg::visual2d::Visual2DCanvas* lastCanvas{};
+        mrg::visual2d::Point lastOrigin{};
+        std::uint32_t lastZOrder{};
+    };
+
+    void TestManagedScreenVisual2D()
+    {
+        using namespace mrg::visual2d;
+
+        TestVisual2DRenderer renderer;
+        ScreenVisual2DManager manager;
+        manager.Initialize(renderer, {1280.0F, 720.0F});
+        const ScreenCanvasId canvasId = manager.CreateCanvas({
+            {1280.0F, 720.0F},
+            CanvasScaleMode::FixedHeight,
+            {12.0F, 24.0F},
+            3,
+            false});
+        Visual2DCanvas* const canvas = manager.FindCanvas(canvasId);
+        Check(canvas != nullptr && manager.CanvasCount() == 1,
+            "screen presentation manager owns created Canvas trees");
+        if (canvas == nullptr)
+        {
+            return;
+        }
+
+        const ImageHandle first = manager.RegisterImage("images/test.png");
+        const ImageHandle duplicate = manager.RegisterImage(
+            "images/folder/../test.png");
+        Check(first.value == duplicate.value && renderer.imageLoads == 1 &&
+            manager.ImageCount() == 1,
+            "screen presentation manager caches normalized image paths");
+        Check(NearlyEqual(manager.GetImageSize(first).width, 64.0F),
+            "screen presentation manager exposes registered image metadata");
+
+        mrg::graphics::RenderContext context;
+        manager.Render(context);
+        Check(renderer.screenSubmissions == 0,
+            "hidden managed Canvas is not submitted");
+        Check(manager.SetCanvasVisible(canvasId, true),
+            "managed Canvas visibility can be enabled");
+        manager.Render(context);
+        Check(renderer.screenSubmissions == 1 &&
+            renderer.lastCanvas == canvas &&
+            NearlyEqual(renderer.lastOrigin.x, 12.0F) &&
+            renderer.lastZOrder == 3,
+            "manager submits visible Canvas with its placement and Z-order");
+
+        manager.OnResize(1920, 1080);
+        Check(NearlyEqual(canvas->ViewportSize().width, 1920.0F) &&
+            NearlyEqual(canvas->PixelScale(), 1.5F),
+            "manager resizes owned Canvas trees with the Client viewport");
+        Check(manager.RemoveCanvas(canvasId) && manager.CanvasCount() == 0 &&
+            manager.FindCanvas(canvasId) == nullptr,
+            "removed Canvas IDs cannot access another presentation");
+        manager.Shutdown();
+        Check(manager.ImageCount() == 0,
+            "manager shutdown clears game-facing image registrations");
+    }
+
     class TestVoice final : public mrg::audio::IAudioVoiceBackend
     {
     public:
@@ -1123,6 +1237,7 @@ namespace
 int main()
 {
     TestManagedAudioPlayback();
+    TestManagedScreenVisual2D();
     TestCameraMatrices();
     TestPerspectiveFrustum();
     TestOrthographicFrustum();

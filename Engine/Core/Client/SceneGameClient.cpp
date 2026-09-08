@@ -13,6 +13,10 @@ namespace mrg::scene
             throw std::logic_error("SceneGameClient is already initialized.");
         }
 
+        screenVisuals_.Initialize(
+            services.visual2DRendering,
+            {static_cast<float>(services.windowWidth),
+                static_cast<float>(services.windowHeight)});
         scenes_.Initialize(services);
         try
         {
@@ -31,6 +35,7 @@ namespace mrg::scene
             // initialization hook before a later step throws.
             OnClientShuttingDown();
             scenes_.Shutdown();
+            screenVisuals_.Shutdown();
             audioPlayback_.StopAll();
             throw;
         }
@@ -43,6 +48,7 @@ namespace mrg::scene
             return false;
         }
 
+        screenVisuals_.Update(context.deltaSeconds);
         const bool keepRunning = scenes_.Update(context);
         OnClientUpdated(context);
         audioPlayback_.Update();
@@ -55,6 +61,7 @@ namespace mrg::scene
         if (initialized_)
         {
             scenes_.Render(context);
+            screenVisuals_.Render(context);
             OnClientRendered(context);
         }
     }
@@ -65,6 +72,7 @@ namespace mrg::scene
     {
         if (initialized_)
         {
+            screenVisuals_.OnResize(width, height);
             scenes_.OnResize(width, height);
         }
     }
@@ -73,6 +81,7 @@ namespace mrg::scene
     {
         OnClientShuttingDown();
         scenes_.Shutdown();
+        screenVisuals_.Shutdown();
         audioPlayback_.StopAll();
         initialized_ = false;
     }
@@ -85,6 +94,17 @@ namespace mrg::scene
     const audio::AudioPlaybackManager& SceneGameClient::AudioPlayback() const noexcept
     {
         return audioPlayback_;
+    }
+
+    visual2d::ScreenVisual2DManager& SceneGameClient::ScreenVisuals() noexcept
+    {
+        return screenVisuals_;
+    }
+
+    const visual2d::ScreenVisual2DManager&
+        SceneGameClient::ScreenVisuals() const noexcept
+    {
+        return screenVisuals_;
     }
 
     SceneManager& SceneGameClient::Scenes() noexcept

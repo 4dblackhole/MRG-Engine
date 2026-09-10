@@ -35,7 +35,9 @@ namespace
         bool paused{};
         bool failStop{};
         int stops{};
+        int restarts{};
         std::uint64_t startDspClock{};
+        mrg::audio::IAudioBusBackend* restartBus{};
     };
     std::vector<std::shared_ptr<PlaybackProbe>> playbackProbes;
     bool failTestPlayback{};
@@ -172,6 +174,18 @@ namespace
         explicit TestVoice(std::shared_ptr<PlaybackProbe> probe)
             : probe_(std::move(probe)) {}
         bool IsPlaying() const noexcept override { return probe_->playing; }
+        bool Restart(
+            const mrg::audio::AudioPlaybackSettings& settings,
+            mrg::audio::IAudioBusBackend* bus,
+            std::string&) override
+        {
+            ++probe_->restarts;
+            probe_->playing = true;
+            probe_->paused = settings.startPaused;
+            probe_->startDspClock = settings.startDspClock;
+            probe_->restartBus = bus;
+            return true;
+        }
         bool Stop(std::string& error) override
         {
             if (probe_->failStop)
@@ -259,6 +273,24 @@ namespace
             "manager retains assets and paused/scheduled voices after owner releases them");
         Check(manager.FindVoice(first)->SetPaused(false, error) &&
             !playbackProbes[0]->paused, "managed voice supports resume");
+        std::shared_ptr<AudioBus> restartBus =
+            audio.CreateBus("restart", nullptr, error);
+        const std::weak_ptr<AudioBus> weakRestartBus = restartBus;
+        AudioPlaybackSettings restartSettings;
+        restartSettings.startPaused = true;
+        restartSettings.startDspClock = 654321;
+        Check(manager.Restart(
+                first, restartSettings, restartBus, error) &&
+            manager.PlaybackCount() == 2 &&
+            playbackProbes.size() == 2 &&
+            playbackProbes[0]->restarts == 1 &&
+            playbackProbes[0]->paused &&
+            playbackProbes[0]->startDspClock == 654321 &&
+            playbackProbes[0]->restartBus != nullptr,
+            "managed playback restarts its existing voice without allocating another one");
+        restartBus.reset();
+        Check(!weakRestartBus.expired(),
+            "restarted playback retains its replacement bus");
         playbackProbes[0]->failStop = true;
         Check(!manager.Stop(first, error) && manager.FindVoice(first) != nullptr,
             "failed stop keeps the voice controllable");
@@ -266,6 +298,10 @@ namespace
         Check(manager.Stop(first, error) && playbackProbes[0]->stops == 1 &&
             playbackProbes[1]->playing && manager.FindVoice(first) == nullptr,
             "stopping one playback explicitly stops only that voice");
+        Check(weakRestartBus.expired(),
+            "stopping restarted playback releases its replacement bus");
+        Check(!manager.Restart(first, {}, nullptr, error),
+            "stale playback IDs cannot restart another voice");
         Check(!manager.Stop(first, error), "stale playback IDs cannot stop another voice");
         playbackProbes[1]->playing = false;
         manager.Update();

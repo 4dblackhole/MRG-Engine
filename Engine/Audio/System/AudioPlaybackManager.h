@@ -29,6 +29,12 @@ namespace mrg::audio
         // Borrowed pointer, invalidated by Stop, StopAll or a later Update.
         [[nodiscard]] AudioVoice* FindVoice(AudioPlaybackId id) noexcept;
         [[nodiscard]] const AudioVoice* FindVoice(AudioPlaybackId id) const noexcept;
+        // Reuses the existing native voice/channel and retains its new bus.
+        [[nodiscard]] bool Restart(
+            AudioPlaybackId id,
+            const AudioPlaybackSettings& settings,
+            std::shared_ptr<AudioBus> bus,
+            std::string& errorMessage);
         [[nodiscard]] bool Stop(AudioPlaybackId id, std::string& errorMessage);
         // Best-effort stop of every voice; also used during Client shutdown.
         void StopAll() noexcept;

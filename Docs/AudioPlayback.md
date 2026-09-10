@@ -25,8 +25,10 @@ std::unique_ptr<mrg::audio::AudioVoice> voice =
 ```
 
 `startDspClock == 0`은 즉시 재생이다. `AudioVoice`는 pause, stop, volume과 pitch를
-제어한다. Voice 객체를 버려도 재생은 계속되며 명시적으로 `Stop()`한 경우에만
-정지한다. 긴 음악은 `AudioLoadMode::Stream`, 짧은 히트사운드는
+제어한다. `Restart()`는 기존 native Voice/Channel의 재생 위치를 처음으로 되돌리고
+새 설정과 Bus를 적용하므로, 같은 짧은 효과음을 겹치지 않고 다시 시작할 때 별도
+Channel을 만들지 않는다. Voice 객체를 버려도 재생은 계속되며 명시적으로
+`Stop()`한 경우에만 정지한다. 긴 음악은 `AudioLoadMode::Stream`, 짧은 히트사운드는
 `AudioLoadMode::Sample`로 로드한다.
 
 ## SceneGameClient 공통 재생 관리
@@ -52,6 +54,9 @@ static_cast<void>(AudioPlayback().Stop(id, error));
   반환한다. 실패 시 ID는 0이며 오류 문자열을 제공한다.
 - `FindVoice`의 포인터는 빌린 참조다. `Stop`, `StopAll`, 이후 `Update`가 자원을
   정리할 수 있으므로 오래 저장하지 말고 ID로 다시 조회한다.
+- `Restart`는 기존 ID와 native Voice/Channel을 유지하면서 처음부터 재생하고,
+  성공한 경우 새 Bus를 관리자가 대신 보관한다. 이미 끝나 native handle이 만료된
+  Voice는 새 `Play`로 시작해야 한다.
 - `SceneGameClient::Update`는 Scene과 Client hook 갱신 후 끝난 재생을 정리한다.
   일시정지 중이거나 DSP 시각에 예약된 Voice도 재생이 유효한 동안 유지한다.
 - `Stop`은 native stop을 명시적으로 호출한다. 실패하면 해당 재생은 계속 관리한다.

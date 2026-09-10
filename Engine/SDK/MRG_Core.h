@@ -84,11 +84,20 @@ namespace mrg::audio
         std::int64_t performanceCounterFrequency{};
     };
 
+    class IAudioBusBackend;
+    class AudioBus;
+
     class IAudioVoiceBackend
     {
     public:
         virtual ~IAudioVoiceBackend() = default;
         [[nodiscard]] virtual bool IsPlaying() const noexcept = 0;
+        // Restarts this voice from the beginning without allocating another
+        // native playback channel. The voice must still be controllable.
+        [[nodiscard]] virtual bool Restart(
+            const AudioPlaybackSettings& settings,
+            IAudioBusBackend* bus,
+            std::string& errorMessage) = 0;
         [[nodiscard]] virtual bool Stop(std::string& errorMessage) = 0;
         [[nodiscard]] virtual bool SetPaused(
             bool paused,
@@ -154,6 +163,10 @@ namespace mrg::audio
         AudioVoice& operator=(AudioVoice&&) = delete;
 
         [[nodiscard]] bool IsPlaying() const noexcept;
+        [[nodiscard]] bool Restart(
+            const AudioPlaybackSettings& settings,
+            AudioBus* bus,
+            std::string& errorMessage);
         [[nodiscard]] bool Stop(std::string& errorMessage);
         [[nodiscard]] bool SetPaused(bool paused, std::string& errorMessage);
         [[nodiscard]] bool SetVolume(float volume, std::string& errorMessage);
@@ -225,6 +238,7 @@ namespace mrg::audio
 
     private:
         friend class AudioClip;
+        friend class AudioVoice;
         friend class AudioSystem;
 
         AudioBus(
@@ -497,6 +511,12 @@ namespace mrg::audio
         // Borrowed pointer, invalidated by Stop, StopAll or a later Update.
         [[nodiscard]] AudioVoice* FindVoice(AudioPlaybackId id) noexcept;
         [[nodiscard]] const AudioVoice* FindVoice(AudioPlaybackId id) const noexcept;
+        // Reuses the existing native voice/channel and retains its new bus.
+        [[nodiscard]] bool Restart(
+            AudioPlaybackId id,
+            const AudioPlaybackSettings& settings,
+            std::shared_ptr<AudioBus> bus,
+            std::string& errorMessage);
         [[nodiscard]] bool Stop(AudioPlaybackId id, std::string& errorMessage);
         // Best-effort stop of every voice; also used during Client shutdown.
         void StopAll() noexcept;

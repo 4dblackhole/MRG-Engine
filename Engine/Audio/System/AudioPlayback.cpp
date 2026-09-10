@@ -45,6 +45,22 @@ namespace mrg::audio
         return implementation_ != nullptr && implementation_->IsPlaying();
     }
 
+    bool AudioVoice::Restart(
+        const AudioPlaybackSettings& settings,
+        AudioBus* const bus,
+        std::string& errorMessage)
+    {
+        if (implementation_ == nullptr)
+        {
+            errorMessage = "The audio voice is not initialized.";
+            return false;
+        }
+        return implementation_->Restart(
+            settings,
+            bus != nullptr ? bus->implementation_.get() : nullptr,
+            errorMessage);
+    }
+
     bool AudioVoice::Stop(std::string& errorMessage)
     {
         if (implementation_ == nullptr)

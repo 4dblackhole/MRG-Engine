@@ -22,7 +22,7 @@ SceneGameClient
    └─ Update / resize / SubmitScreen
 
 Scene
-├─ ScreenCanvasId와 빌린 node 포인터
+├─ ScreenCanvasHandle과 빌린 node 포인터
 ├─ Canvas별 Visual2DInputRouter
 └─ world/off-screen Canvas와 RenderTargetTextureHandle
 ```
@@ -46,8 +46,8 @@ KeepAlive Canvas의 표시 상태만 전환하며, `Render`에서 제출하지 �
 ```cpp
 void MyScene::Initialize(const mrg::EngineServices&)
 {
-    canvasId_ = visuals_.CreateCanvas();
-    canvas_ = visuals_.FindCanvas(canvasId_);
+    canvasHandle_ = visuals_.CreateOwnedCanvas();
+    canvas_ = canvasHandle_.Get();
     const auto image = visuals_.RegisterImage("assets/images/player.png");
     mrg::visual2d::CreateSprite(
         canvas_->Root(), {-64.0F, -64.0F, 128.0F, 128.0F}, image);
@@ -55,12 +55,12 @@ void MyScene::Initialize(const mrg::EngineServices&)
 
 void MyScene::BeginScene()
 {
-    visuals_.SetCanvasVisible(canvasId_, true);
+    canvasHandle_.SetVisible(true);
 }
 
 void MyScene::EndScene() noexcept
 {
-    visuals_.SetCanvasVisible(canvasId_, false);
+    canvasHandle_.SetVisible(false);
 }
 
 void MyScene::Render(const mrg::graphics::RenderContext&)
@@ -68,8 +68,10 @@ void MyScene::Render(const mrg::graphics::RenderContext&)
 }
 ```
 
-`Shutdown`에서는 InputRouter를 먼저 Reset한 뒤 Canvas를 제거한다. 관리자는
-Client 종료 시 남은 Canvas와 이미지 등록도 모두 정리한다.
+`Shutdown`에서는 InputRouter를 먼저 Reset한 뒤 `canvasHandle_.Reset()`을 호출한다.
+초기화 도중 예외가 발생하거나 명시적 Reset을 빠뜨려도 이동 전용 handle의 소멸자가
+Canvas를 제거한다. handle은 관리자를 빌려 쓰므로 `ScreenVisual2DManager`보다 오래
+살아서는 안 된다. 관리자는 Client 종료 시 남은 Canvas와 이미지 등록도 모두 정리한다.
 
 ## 저수준·월드 Canvas 사용법
 
@@ -120,7 +122,8 @@ viewport와 radius를 사용하는 Sprite도 기존 mesh/material batch에 함�
 
 ## 이미지 캐시
 
-이미지는 정규화된 경로를 키로 엔진 수명 동안 공유한다. 한 Descriptor
+이미지는 Windows 경로 규칙에 맞게 정규화하고 대소문자를 구분하지 않은 경로를
+키로 엔진 수명 동안 공유한다. 한 Descriptor
 Table에는 서로 크기가 다른 Texture2D를 최대 64개 넣고, 64개를 넘으면
 새 페이지를 만든다. 같은 페이지에 이미지를 추가할 때는 기존 64칸
 Descriptor 블록의 빈 슬롯만 채우므로 이미지마다 새 블록을 만들지 않는다.

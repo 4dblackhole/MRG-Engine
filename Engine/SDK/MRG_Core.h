@@ -1688,6 +1688,7 @@ namespace mrg::visual2d
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <string>
 
 namespace mrg::graphics
 {
@@ -1700,6 +1701,8 @@ namespace mrg::visual2d
     using ScreenCanvasId = std::uint64_t;
     inline constexpr ScreenCanvasId InvalidScreenCanvasId = 0;
 
+    class ScreenVisual2DManager;
+
     struct ScreenCanvasSettings
     {
         Size referenceSize{1280.0F, 720.0F};
@@ -1707,6 +1710,40 @@ namespace mrg::visual2d
         Point screenOrigin{};
         std::uint32_t zOrder{};
         bool visible{};
+    };
+
+    // Move-only ownership token for a Canvas stored by
+    // ScreenVisual2DManager. Resetting or destroying the token removes the
+    // Canvas, so Scene cleanup cannot accidentally leave it registered.
+    // The token must not outlive its manager.
+    class ScreenCanvasHandle final
+    {
+    public:
+        ScreenCanvasHandle() = default;
+        ~ScreenCanvasHandle();
+        ScreenCanvasHandle(const ScreenCanvasHandle&) = delete;
+        ScreenCanvasHandle& operator=(const ScreenCanvasHandle&) = delete;
+        ScreenCanvasHandle(ScreenCanvasHandle&& other) noexcept;
+        ScreenCanvasHandle& operator=(ScreenCanvasHandle&& other) noexcept;
+
+        [[nodiscard]] Visual2DCanvas* Get() noexcept;
+        [[nodiscard]] const Visual2DCanvas* Get() const noexcept;
+        [[nodiscard]] ScreenCanvasId Id() const noexcept;
+        [[nodiscard]] explicit operator bool() const noexcept;
+        [[nodiscard]] bool SetVisible(bool visible) noexcept;
+        [[nodiscard]] bool SetPlacement(
+            Point screenOrigin,
+            std::uint32_t zOrder) noexcept;
+        void Reset() noexcept;
+
+    private:
+        friend class ScreenVisual2DManager;
+        ScreenCanvasHandle(
+            ScreenVisual2DManager& manager,
+            ScreenCanvasId id) noexcept;
+
+        ScreenVisual2DManager* manager_{};
+        ScreenCanvasId id_{InvalidScreenCanvasId};
     };
 
     // Owns game-wide screen Canvas trees and their image registrations.
@@ -1726,6 +1763,8 @@ namespace mrg::visual2d
         void Shutdown() noexcept;
 
         [[nodiscard]] ScreenCanvasId CreateCanvas(
+            const ScreenCanvasSettings& settings = {});
+        [[nodiscard]] ScreenCanvasHandle CreateOwnedCanvas(
             const ScreenCanvasSettings& settings = {});
         [[nodiscard]] Visual2DCanvas* FindCanvas(ScreenCanvasId id) noexcept;
         [[nodiscard]] const Visual2DCanvas* FindCanvas(
@@ -1762,7 +1801,7 @@ namespace mrg::visual2d
         graphics::Visual2DRenderSystem* rendering_{};
         Size viewportSize_{};
         std::map<ScreenCanvasId, ScreenCanvas> canvases_;
-        std::map<std::filesystem::path, ImageHandle> images_;
+        std::map<std::wstring, ImageHandle, std::less<>> images_;
         ScreenCanvasId nextCanvasId_{1};
     };
 }

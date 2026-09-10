@@ -231,8 +231,6 @@ namespace mrg
             return EXIT_FAILURE;
         }
 
-        bool clientInitialized = false;
-
         try
         {
             // The Win32 main thread owns the message pump and must remain an
@@ -243,72 +241,94 @@ namespace mrg
 
             // Stack order is intentional.  The Client is initialized only
             // after the native window, renderer, and audio service exist.
+            graphics::D3D12Renderer renderer;
+            audio::AudioSystem audioSystem;
             platform::InputState input;
             platform::Win32Window window;
-            window.Initialize(
-                platform::WindowConfig{
-                    config.windowTitle,
-                    config.windowWidth,
-                    config.windowHeight,
-                    config.showWindow},
-                input);
+            bool clientInitialized = false;
 
-            graphics::D3D12Renderer renderer;
-            renderer.Initialize(
-                window.Handle(),
-                window.ClientWidth(),
-                window.ClientHeight());
-
-            audio::AudioSystem audioSystem;
-            config.audio.nativeWindowHandle = window.Handle();
-            std::string audioError;
-            if (!audioSystem.Initialize(
-                    config.audio,
-                    config.audioBackendFactory,
-                    config.audioClipBackendFactory,
-                    audioError))
+            // Keep failure cleanup inside the subsystem scope. Entering the
+            // outer handler unwinds these local services, so a Client cleanup
+            // performed there would use renderer and audio references after
+            // their owners had already been destroyed.
+            try
             {
-                throw std::runtime_error(
-                    "Audio initialization failed: " + audioError);
+                window.Initialize(
+                    platform::WindowConfig{
+                        config.windowTitle,
+                        config.windowWidth,
+                        config.windowHeight,
+                        config.showWindow},
+                    input);
+
+                renderer.Initialize(
+                    window.Handle(),
+                    window.ClientWidth(),
+                    window.ClientHeight());
+
+                config.audio.nativeWindowHandle = window.Handle();
+                std::string audioError;
+                if (!audioSystem.Initialize(
+                        config.audio,
+                        config.audioBackendFactory,
+                        config.audioClipBackendFactory,
+                        audioError))
+                {
+                    throw std::runtime_error(
+                        "Audio initialization failed: " + audioError);
+                }
+
+                const EngineServices services{
+                    renderer.MeshRendering(),
+                    renderer.TextRendering(),
+                    renderer.Visual2DRendering(),
+                    audioSystem,
+                    window.ClientWidth(),
+                    window.ClientHeight()};
+                // Client resource creation uses the high-level mesh/material
+                // service; root signatures and PSOs remain owned by Graphics.
+                client->Initialize(services);
+                clientInitialized = true;
+
+                RunMainLoop(
+                    *client,
+                    input,
+                    window,
+                    renderer,
+                    audioSystem,
+                    config);
+
+                // Client scenes own D3D12 resources. First ensure no submitted
+                // frame refers to them, then release Client resources while
+                // the renderer/device and audio backend are still alive.
+                renderer.WaitForGpu();
+                client->Shutdown();
+                clientInitialized = false;
+                audioSystem.Shutdown();
+                return EXIT_SUCCESS;
             }
-
-            const EngineServices services{
-                renderer.MeshRendering(),
-                renderer.TextRendering(),
-                renderer.Visual2DRendering(),
-                audioSystem,
-                window.ClientWidth(),
-                window.ClientHeight()};
-            // Client resource creation uses the high-level mesh/material
-            // service; root signatures and PSOs remain owned by Graphics.
-            client->Initialize(services);
-            clientInitialized = true;
-
-            RunMainLoop(
-                *client,
-                input,
-                window,
-                renderer,
-                audioSystem,
-                config);
-
-            // Client scenes own D3D12 resources.  First ensure no submitted
-            // frame refers to them, then release Client resources while the
-            // renderer/device are still alive.
-            renderer.WaitForGpu();
-            client->Shutdown();
-            clientInitialized = false;
-            audioSystem.Shutdown();
-            return EXIT_SUCCESS;
+            catch (...)
+            {
+                if (clientInitialized)
+                {
+                    // Preserve the original failure if the device cannot wait.
+                    // Client cleanup must still happen before service teardown.
+                    try
+                    {
+                        renderer.WaitForGpu();
+                    }
+                    catch (...)
+                    {
+                    }
+                    client->Shutdown();
+                    clientInitialized = false;
+                }
+                audioSystem.Shutdown();
+                throw;
+            }
         }
         catch (const std::exception& exception)
         {
-            if (clientInitialized)
-            {
-                // Keep the same Client-before-renderer destruction order on
-                // failure.  Stack RAII then shuts down the remaining systems.
-                client->Shutdown();
-            }
             MessageBoxA(
                 nullptr,
                 exception.what(),

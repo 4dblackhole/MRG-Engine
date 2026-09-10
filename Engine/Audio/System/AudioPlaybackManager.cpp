@@ -65,6 +65,32 @@ namespace mrg::audio
         return entry == playbacks_.end() ? nullptr : entry->second.voice.get();
     }
 
+    bool AudioPlaybackManager::Restart(
+        const AudioPlaybackId id,
+        const AudioPlaybackSettings& settings,
+        std::shared_ptr<AudioBus> bus,
+        std::string& errorMessage)
+    {
+        const auto entry = playbacks_.find(id);
+        if (entry == playbacks_.end())
+        {
+            errorMessage = "The audio playback ID is no longer active.";
+            return false;
+        }
+        if (bus != nullptr && !bus->IsValid())
+        {
+            errorMessage = "Playback restart requires a valid optional bus.";
+            return false;
+        }
+        if (!entry->second.voice->Restart(settings, bus.get(), errorMessage))
+        {
+            return false;
+        }
+        entry->second.bus = std::move(bus);
+        errorMessage.clear();
+        return true;
+    }
+
     bool AudioPlaybackManager::Stop(
         const AudioPlaybackId id, std::string& errorMessage)
     {

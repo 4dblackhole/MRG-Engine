@@ -219,6 +219,7 @@ Canvas 좌표로 변환한다.
 - 현재 output의 driver snapshot 조회와 driver index 선택
 - DSP buffer length와 buffer count 조회·변경
 - Client 소유 `AudioClip`과 예약 재생 `AudioVoice` 생성
+- 기존 native Channel을 유지한 `AudioVoice`/관리 재생 ID 재시작
 - `SceneGameClient::AudioPlayback()`의 공통 재생 관리: Voice ID 제어, 재생 중 Clip/Bus
   유지, Scene 전환 중 재생 유지와 Client 종료 시 정지
 - 계층적 `AudioBus`, DSP effect, sample-accurate volume fade point

@@ -53,6 +53,89 @@ namespace mrg::audio
                 return channel_->isPlaying(&isPlaying) == FMOD_OK && isPlaying;
             }
 
+            [[nodiscard]] bool Restart(
+                const AudioPlaybackSettings& settings,
+                IAudioBusBackend* const bus,
+                std::string& errorMessage) override
+            {
+                if (!HasLiveSystem())
+                {
+                    return Apply(
+                        "FMOD::Channel::setPosition",
+                        FMOD_ERR_INVALID_HANDLE,
+                        errorMessage);
+                }
+
+                FMOD::ChannelGroup* nativeBus = nullptr;
+                if (bus != nullptr)
+                {
+                    auto* const fmodBus = dynamic_cast<FmodAudioBus*>(bus);
+                    if (fmodBus == nullptr || !fmodBus->HasLiveSystem())
+                    {
+                        errorMessage =
+                            "The audio bus belongs to another backend or is invalid.";
+                        return false;
+                    }
+                    nativeBus = fmodBus->NativeGroup();
+                }
+                else
+                {
+                    const FMOD_RESULT masterResult =
+                        lifetime_->system->getMasterChannelGroup(&nativeBus);
+                    if (masterResult != FMOD_OK)
+                    {
+                        return Apply(
+                            "FMOD::System::getMasterChannelGroup",
+                            masterResult,
+                            errorMessage);
+                    }
+                    if (nativeBus == nullptr)
+                    {
+                        errorMessage =
+                            "FMOD::System::getMasterChannelGroup returned no bus.";
+                        return false;
+                    }
+                }
+
+                if (!Apply(
+                        "FMOD::Channel::setPaused",
+                        channel_->setPaused(true),
+                        errorMessage) ||
+                    !Apply(
+                        "FMOD::Channel::setChannelGroup",
+                        channel_->setChannelGroup(nativeBus),
+                        errorMessage) ||
+                    !Apply(
+                        "FMOD::Channel::setPosition",
+                        channel_->setPosition(0, FMOD_TIMEUNIT_PCM),
+                        errorMessage) ||
+                    !Apply(
+                        "FMOD::Channel::setVolume",
+                        channel_->setVolume(settings.volume),
+                        errorMessage) ||
+                    !Apply(
+                        "FMOD::Channel::setPitch",
+                        channel_->setPitch(settings.pitch),
+                        errorMessage) ||
+                    !Apply(
+                        "FMOD::Channel::setDelay",
+                        channel_->setDelay(
+                            settings.startDspClock,
+                            settings.endDspClock,
+                            settings.endDspClock != 0),
+                        errorMessage) ||
+                    !Apply(
+                        "FMOD::Channel::setPaused",
+                        channel_->setPaused(settings.startPaused),
+                        errorMessage))
+                {
+                    return false;
+                }
+
+                errorMessage.clear();
+                return true;
+            }
+
             [[nodiscard]] bool Stop(
                 std::string& errorMessage) override
             {

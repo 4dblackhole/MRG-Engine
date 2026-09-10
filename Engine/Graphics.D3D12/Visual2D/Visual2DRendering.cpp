@@ -10,6 +10,7 @@
 #include <array>
 #include <bit>
 #include <cstring>
+#include <cwctype>
 #include <filesystem>
 #include <limits>
 #include <stdexcept>
@@ -29,6 +30,20 @@ namespace mrg::graphics
         constexpr float ScreenVisual2DCanvasDepthBand =
             ScreenUiDepthRange /
             static_cast<float>(MaximumScreenCanvasZOrder + 1);
+
+        [[nodiscard]] std::wstring ImageCacheKey(
+            const std::filesystem::path& path)
+        {
+            std::wstring key = path.lexically_normal().generic_wstring();
+            std::ranges::transform(
+                key,
+                key.begin(),
+                [](const wchar_t character)
+                {
+                    return static_cast<wchar_t>(std::towlower(character));
+                });
+            return key;
+        }
 
         void ThrowIfFailed(const HRESULT result, const char* operation)
         {
@@ -313,7 +328,7 @@ namespace mrg::graphics
             }
 
             const std::filesystem::path normalized = path.lexically_normal();
-            const std::wstring cacheKey = normalized.wstring();
+            const std::wstring cacheKey = ImageCacheKey(normalized);
             if (const auto existing = imageHandlesByPath.find(cacheKey);
                 existing != imageHandlesByPath.end())
             {

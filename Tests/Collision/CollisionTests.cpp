@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <string_view>
+#include <utility>
 
 namespace
 {
@@ -105,13 +106,14 @@ namespace
         TestVisual2DRenderer renderer;
         ScreenVisual2DManager manager;
         manager.Initialize(renderer, {1280.0F, 720.0F});
-        const ScreenCanvasId canvasId = manager.CreateCanvas({
+        ScreenCanvasHandle canvasHandle = manager.CreateOwnedCanvas({
             {1280.0F, 720.0F},
             CanvasScaleMode::FixedHeight,
             {12.0F, 24.0F},
             3,
             false});
-        Visual2DCanvas* const canvas = manager.FindCanvas(canvasId);
+        const ScreenCanvasId canvasId = canvasHandle.Id();
+        Visual2DCanvas* const canvas = canvasHandle.Get();
         Check(canvas != nullptr && manager.CanvasCount() == 1,
             "screen presentation manager owns created Canvas trees");
         if (canvas == nullptr)
@@ -121,7 +123,7 @@ namespace
 
         const ImageHandle first = manager.RegisterImage("images/test.png");
         const ImageHandle duplicate = manager.RegisterImage(
-            "images/folder/../test.png");
+            "IMAGES/folder/../TEST.PNG");
         Check(first.value == duplicate.value && renderer.imageLoads == 1 &&
             manager.ImageCount() == 1,
             "screen presentation manager caches normalized image paths");
@@ -132,7 +134,7 @@ namespace
         manager.Render(context);
         Check(renderer.screenSubmissions == 0,
             "hidden managed Canvas is not submitted");
-        Check(manager.SetCanvasVisible(canvasId, true),
+        Check(canvasHandle.SetVisible(true),
             "managed Canvas visibility can be enabled");
         manager.Render(context);
         Check(renderer.screenSubmissions == 1 &&
@@ -145,9 +147,20 @@ namespace
         Check(NearlyEqual(canvas->ViewportSize().width, 1920.0F) &&
             NearlyEqual(canvas->PixelScale(), 1.5F),
             "manager resizes owned Canvas trees with the Client viewport");
-        Check(manager.RemoveCanvas(canvasId) && manager.CanvasCount() == 0 &&
+        ScreenCanvasHandle movedHandle = std::move(canvasHandle);
+        Check(!canvasHandle && movedHandle.Get() == canvas,
+            "moving a Canvas handle transfers ownership without removing it");
+        movedHandle.Reset();
+        Check(manager.CanvasCount() == 0 &&
             manager.FindCanvas(canvasId) == nullptr,
-            "removed Canvas IDs cannot access another presentation");
+            "resetting an owned Canvas handle removes its presentation");
+        {
+            ScreenCanvasHandle automatic = manager.CreateOwnedCanvas();
+            Check(automatic && manager.CanvasCount() == 1,
+                "an owned Canvas remains registered for its handle lifetime");
+        }
+        Check(manager.CanvasCount() == 0,
+            "destroying an owned Canvas handle removes its presentation");
         manager.Shutdown();
         Check(manager.ImageCount() == 0,
             "manager shutdown clears game-facing image registrations");

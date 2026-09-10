@@ -54,6 +54,11 @@ Scene의 Canvas dispatcher가 결정한다.
 Scene은 renderer 수명에 관여하지 않고 Canvas, InputRouter, 이미지/렌더 타깃의
 공유 핸들만 소유한다.
 
+화면 Canvas는 `ScreenVisual2DManager::CreateOwnedCanvas`가 반환하는 이동 전용
+`ScreenCanvasHandle`로 소유한다. handle을 Reset하거나 Scene이 소멸하면 등록도
+자동 해제되므로 예외 경로와 `DestroyOnExit` 전환에서 Canvas가 남지 않는다.
+Node 포인터는 여전히 Canvas가 소유하는 비소유 관찰자이며 handle보다 먼저 버린다.
+
 `TextureSet`과 `RenderTargetTexture`의 공개 계약은 읽기 전용 메타데이터와 수명만
 노출한다. 실제 `ID3D12Resource`, descriptor handle, RTV heap, resource state는
 `TextureManager.cpp` 내부의 D3D12 구현 객체가 소유한다. `TextureManager`는

@@ -2,10 +2,105 @@
 
 #include "Visual2D/Visual2DRendering.h"
 
+#include <algorithm>
+#include <cwctype>
 #include <stdexcept>
+#include <utility>
 
 namespace mrg::visual2d
 {
+    namespace
+    {
+        [[nodiscard]] std::wstring ImageCacheKey(
+            const std::filesystem::path& path)
+        {
+            std::wstring key = path.lexically_normal().generic_wstring();
+            std::ranges::transform(
+                key,
+                key.begin(),
+                [](const wchar_t character)
+                {
+                    return static_cast<wchar_t>(std::towlower(character));
+                });
+            return key;
+        }
+    }
+
+    ScreenCanvasHandle::ScreenCanvasHandle(
+        ScreenVisual2DManager& manager,
+        const ScreenCanvasId id) noexcept
+        : manager_(&manager), id_(id)
+    {
+    }
+
+    ScreenCanvasHandle::~ScreenCanvasHandle()
+    {
+        Reset();
+    }
+
+    ScreenCanvasHandle::ScreenCanvasHandle(
+        ScreenCanvasHandle&& other) noexcept
+        : manager_(std::exchange(other.manager_, nullptr)),
+          id_(std::exchange(other.id_, InvalidScreenCanvasId))
+    {
+    }
+
+    ScreenCanvasHandle& ScreenCanvasHandle::operator=(
+        ScreenCanvasHandle&& other) noexcept
+    {
+        if (this != &other)
+        {
+            Reset();
+            manager_ = std::exchange(other.manager_, nullptr);
+            id_ = std::exchange(other.id_, InvalidScreenCanvasId);
+        }
+        return *this;
+    }
+
+    Visual2DCanvas* ScreenCanvasHandle::Get() noexcept
+    {
+        return manager_ == nullptr ? nullptr : manager_->FindCanvas(id_);
+    }
+
+    const Visual2DCanvas* ScreenCanvasHandle::Get() const noexcept
+    {
+        return manager_ == nullptr ? nullptr : manager_->FindCanvas(id_);
+    }
+
+    ScreenCanvasId ScreenCanvasHandle::Id() const noexcept
+    {
+        return id_;
+    }
+
+    ScreenCanvasHandle::operator bool() const noexcept
+    {
+        return Get() != nullptr;
+    }
+
+    bool ScreenCanvasHandle::SetVisible(const bool visible) noexcept
+    {
+        return manager_ != nullptr &&
+            manager_->SetCanvasVisible(id_, visible);
+    }
+
+    bool ScreenCanvasHandle::SetPlacement(
+        const Point screenOrigin,
+        const std::uint32_t zOrder) noexcept
+    {
+        return manager_ != nullptr &&
+            manager_->SetCanvasPlacement(id_, screenOrigin, zOrder);
+    }
+
+    void ScreenCanvasHandle::Reset() noexcept
+    {
+        if (manager_ != nullptr)
+        {
+            static_cast<void>(manager_->RemoveCanvas(id_));
+        }
+        manager_ = nullptr;
+        id_ = InvalidScreenCanvasId;
+    }
+
     ScreenVisual2DManager::~ScreenVisual2DManager()
     {
         Shutdown();
@@ -58,6 +153,12 @@ namespace mrg::visual2d
                 settings.zOrder,
                 settings.visible});
         return id;
+    }
+
+    ScreenCanvasHandle ScreenVisual2DManager::CreateOwnedCanvas(
+        const ScreenCanvasSettings& settings)
+    {
+        return ScreenCanvasHandle(*this, CreateCanvas(settings));
     }
 
     Visual2DCanvas* ScreenVisual2DManager::FindCanvas(
@@ -114,14 +215,15 @@ namespace mrg::visual2d
             throw std::logic_error(
                 "ScreenVisual2DManager must be initialized before use.");
         }
-        const std::filesystem::path key = path.lexically_normal();
+        const std::filesystem::path normalized = path.lexically_normal();
+        const std::wstring key = ImageCacheKey(normalized);
         const auto cached = images_.find(key);
         if (cached != images_.end())
         {
             return cached->second;
         }
-        const ImageHandle image = rendering_->LoadImage(key);
-        images_.emplace(key, image);
+        const ImageHandle image = rendering_->LoadImage(normalized);
+        images_.emplace(std::move(key), image);
         return image;
     }
 

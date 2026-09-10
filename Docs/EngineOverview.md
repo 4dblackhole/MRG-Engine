@@ -92,7 +92,8 @@ Client wWinMain
   빌린 참조다. 저장하거나 해제하지 않는다.
 - `SceneManager`가 Scene factory와 생성된 Scene 객체를 소유한다.
 - `SceneGameClient::ScreenVisuals()`는 화면 Canvas와 이미지 등록을 소유하며,
-  Scene은 Canvas ID와 빌린 node 포인터만 보관한다. 월드·곡면 Canvas와
+  `CreateOwnedCanvas()`의 이동 전용 handle로 Scene Canvas를 자동 해제할 수 있고,
+  Scene은 handle과 빌린 node 포인터만 보관한다. 월드·곡면 Canvas와
   `MeshInstance`는 해당 Scene이 소유한다.
 - Graphics의 frame resource는 제출된 mesh/material/texture handle을 fence 완료까지
   추가 보관하므로 동적 Scene 삭제 직후에도 GPU 참조가 안전하다.

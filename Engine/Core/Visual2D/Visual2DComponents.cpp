@@ -740,9 +740,9 @@ namespace mrg::visual2d
                 popup.width,
                 itemHeight_};
             const VisualStyle& style = OwnerStyle();
-            const Color itemColor = itemIndex == hoveredItemIndex_
-                ? style.hovered
-                : itemIndex == selectedIndex_ ? style.pressed : style.normal;
+            const Color itemColor = itemIndex == selectedIndex_
+                ? style.pressed
+                : itemIndex == hoveredItemIndex_ ? style.hovered : style.normal;
             packets.push_back(MakeRectangle(itemBounds, itemColor));
             packets.push_back(MakeText(
                 {itemBounds.x + 10.0F,

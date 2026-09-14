@@ -98,7 +98,17 @@ if (-not (Test-Path -LiteralPath $outputDirectory -PathType Container))
 }
 
 $encoding = [System.Text.UTF8Encoding]::new($false)
-[System.IO.File]::WriteAllText(
-    [System.IO.Path]::GetFullPath($OutputPath),
-    $builder.ToString(),
-    $encoding)
+$resolvedOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+$generatedContent = $builder.ToString()
+$currentContent = if (Test-Path -LiteralPath $resolvedOutputPath -PathType Leaf)
+{
+    [System.IO.File]::ReadAllText($resolvedOutputPath)
+}
+
+if ($currentContent -cne $generatedContent)
+{
+    [System.IO.File]::WriteAllText(
+        $resolvedOutputPath,
+        $generatedContent,
+        $encoding)
+}

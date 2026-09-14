@@ -84,6 +84,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Pch.h" />
     <ClInclude Include="MRG_Core.h" />
     <ClInclude Include="..\Platform.Win32\Input\Input.h"><Filter>Platform.Win32\Input</Filter></ClInclude>
     <ClInclude Include="..\Platform.Win32\System\ComApartment.h"><Filter>Platform.Win32\System</Filter></ClInclude>
@@ -128,6 +129,7 @@
     <ClInclude Include="..\Core\Scene\SceneManager.h"><Filter>Core\Scene</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Pch.cpp" />
     <ClCompile Include="..\Platform.Win32\Input\Input.cpp"><Filter>Platform.Win32\Input</Filter></ClCompile>
     <ClCompile Include="..\Platform.Win32\System\ComApartment.cpp"><Filter>Platform.Win32\System</Filter></ClCompile>
     <ClCompile Include="..\Platform.Win32\System\RuntimePaths.cpp"><Filter>Platform.Win32\System</Filter></ClCompile>

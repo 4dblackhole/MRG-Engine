@@ -54,10 +54,14 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>Pch.h</PrecompiledHeaderFile>
+      <ForcedIncludeFiles>Pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Pch.h" />
     <ClInclude Include="MRG_Core.h" />
     <ClInclude Include="..\Platform.Win32\Input\Input.h" />
     <ClInclude Include="..\Platform.Win32\System\ComApartment.h" />
@@ -102,6 +106,9 @@
     <ClInclude Include="..\Core\Scene\SceneManager.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\Platform.Win32\Input\Input.cpp" />
     <ClCompile Include="..\Platform.Win32\System\ComApartment.cpp" />
     <ClCompile Include="..\Platform.Win32\System\RuntimePaths.cpp" />

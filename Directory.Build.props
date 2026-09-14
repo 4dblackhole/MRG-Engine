@@ -11,4 +11,10 @@
     <FmodIncludeDir>$(FmodRoot)\api\core\inc</FmodIncludeDir>
     <FmodLibraryDir>$(FmodRoot)\api\core\lib\x64</FmodLibraryDir>
   </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+  </ItemDefinitionGroup>
 </Project>

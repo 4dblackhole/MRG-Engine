@@ -54,6 +54,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <DebugInformationFormat Condition="'$(Configuration)'=='Release'">OldStyle</DebugInformationFormat>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>Pch.h</PrecompiledHeaderFile>
       <ForcedIncludeFiles>Pch.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
@@ -191,8 +192,16 @@
     <CorePublicHeader Include="$(ProjectDir)..\Core\Scene\GameScene.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Scene\SceneManager.h" />
   </ItemGroup>
-  <Target Name="GenerateCoreHeader" BeforeTargets="PrepareForBuild" Inputs="$(ProjectDir)GenerateCoreHeader.ps1;@(CorePublicHeader)" Outputs="$(ProjectDir)MRG_Core.h">
+  <Target Name="InvalidateMissingCoreHeaderStamp" BeforeTargets="GenerateCoreHeader" Condition="!Exists('$(ProjectDir)MRG_Core.h')">
+    <Delete Files="$(IntDir)GenerateCoreHeader.stamp" />
+  </Target>
+  <Target Name="GenerateCoreHeader" BeforeTargets="PrepareForBuild" Inputs="$(ProjectDir)GenerateCoreHeader.ps1;@(CorePublicHeader)" Outputs="$(IntDir)GenerateCoreHeader.stamp">
+    <MakeDir Directories="$(IntDir)" />
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)GenerateCoreHeader.ps1&quot; -RepositoryRoot &quot;$(ProjectDir)..\..&quot; -OutputPath &quot;$(ProjectDir)MRG_Core.h&quot;" />
+    <Touch Files="$(IntDir)GenerateCoreHeader.stamp" AlwaysCreate="true" />
+    <ItemGroup>
+      <FileWrites Include="$(IntDir)GenerateCoreHeader.stamp" />
+    </ItemGroup>
   </Target>
   <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile" Inputs="$(ProjectDir)..\Graphics.D3D12\Shader\GenerateEmbeddedShaders.ps1;$(ProjectDir)..\Graphics.D3D12\Shader\UnlitVertexColorInstanced.hlsl;$(ProjectDir)..\Graphics.D3D12\Shader\UnlitVertexColorTextureArrayInstanced.hlsl;$(ProjectDir)..\Graphics.D3D12\Shader\Text.hlsl;$(ProjectDir)..\Graphics.D3D12\Shader\Visual2DRectangle.hlsl" Outputs="$(ProjectDir)..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\Graphics.D3D12\Shader\GenerateEmbeddedShaders.ps1&quot; -ShaderDirectory &quot;$(ProjectDir)..\Graphics.D3D12\Shader&quot; -OutputPath &quot;$(ProjectDir)..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl&quot;" />

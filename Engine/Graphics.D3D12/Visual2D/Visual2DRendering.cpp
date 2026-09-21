@@ -187,6 +187,43 @@ namespace mrg::graphics
             Shutdown();
         }
 
+        [[nodiscard]] FontHandle ResolveFont(
+            TextRenderSystem& rendering,
+            const FontHandle& defaultFont,
+            std::unordered_map<std::wstring, FontHandle>& cache,
+            const visual2d::TextFont& font)
+        {
+            if (font.source == visual2d::TextFontSource::Default ||
+                font.value.empty())
+            {
+                return defaultFont;
+            }
+
+            std::wstring key = font.source == visual2d::TextFontSource::System
+                ? L"system:"
+                : L"file:";
+            key += font.source == visual2d::TextFontSource::File
+                ? std::filesystem::path(font.value).lexically_normal().generic_wstring()
+                : font.value;
+            std::ranges::transform(
+                key,
+                key.begin(),
+                [](const wchar_t character)
+                {
+                    return static_cast<wchar_t>(std::towlower(character));
+                });
+            if (const auto found = cache.find(key); found != cache.end())
+            {
+                return found->second;
+            }
+
+            FontHandle loaded = font.source == visual2d::TextFontSource::System
+                ? rendering.LoadSystemFont(font.value)
+                : rendering.LoadFontFile(std::filesystem::path(font.value));
+            cache.emplace(std::move(key), loaded);
+            return loaded;
+        }
+
         void Initialize(
             MeshRenderSystem& meshes,
             TextRenderSystem& text)
@@ -255,8 +292,10 @@ namespace mrg::graphics
             rectangleRootSignature.Reset();
             visualPipeline.Reset();
             visualRootSignature.Reset();
+            textureFonts.clear();
             textureFont.reset();
             textureTextRendering.Shutdown();
+            screenFonts.clear();
             screenFont.reset();
             rectangleMaterial.reset();
             imagesByHandle.clear();
@@ -763,8 +802,10 @@ namespace mrg::graphics
         std::vector<ImagePage> imagePages;
         std::uint64_t nextImageHandle{1};
         FontHandle screenFont;
+        std::unordered_map<std::wstring, FontHandle> screenFonts;
         TextRenderSystem textureTextRendering;
         FontHandle textureFont;
+        std::unordered_map<std::wstring, FontHandle> textureFonts;
         ComPtr<ID3D12RootSignature> rectangleRootSignature;
         ComPtr<ID3D12PipelineState> rectanglePipeline;
         std::array<FrameUploadArena, D3D12Renderer::FrameCount>
@@ -914,7 +955,11 @@ namespace mrg::graphics
                 text.horizontalAlignment = ToTextAlignment(
                     command.horizontalAlignment);
                 text.verticalAlignment = TextVerticalAlignment::Center;
-                text.style.font = state.screenFont;
+                text.style.font = state.ResolveFont(
+                    *state.screenTextRendering,
+                    state.screenFont,
+                    state.screenFonts,
+                    command.font);
                 text.style.fontSizePixels = command.fontSize * pixelScale;
                 text.style.color = ToFloat4(command.color);
                 text.clipRectPixels = clipRectPixels;
@@ -1324,7 +1369,11 @@ namespace mrg::graphics
             text.horizontalAlignment = ToTextAlignment(
                 command.horizontalAlignment);
             text.verticalAlignment = TextVerticalAlignment::Center;
-            text.style.font = state.textureFont;
+            text.style.font = state.ResolveFont(
+                state.textureTextRendering,
+                state.textureFont,
+                state.textureFonts,
+                command.font);
             text.style.fontSizePixels = command.fontSize *
                 std::min(scaleX, scaleY);
             text.style.color = ToFloat4(command.color);

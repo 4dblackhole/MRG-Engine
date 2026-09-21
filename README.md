@@ -6,6 +6,8 @@ MRG-Engine은 Visual Studio 2022, C++20, DirectX 12 기반의 Windows 게임 엔
 3D `MeshInstance`는 Camera의 Perspective/Orthographic 절두체와 로컬 Bounding
 Sphere를 사용해 화면 밖 인스턴스를 제출 전에 제외한다.
 Visual2D Canvas는 화면과 월드 표면 모두 정중앙 원점과 Y-up 논리 좌표를 사용한다.
+Visual2D 텍스트와 ComboBox는 renderer 기본 글꼴, 시스템 family 또는 배포 글꼴
+파일을 backend-neutral `TextFont`로 선택할 수 있다.
 `SceneGameClient::AudioPlayback()`은 Scene 사이에서 공유하는 재생 관리자를 제공한다.
 사용법과 Clip·Voice 수명은 [AudioPlayback.md](Docs/AudioPlayback.md)에 있다.
 화면 Sprite는 `SceneGameClient::ScreenVisuals()`가 Canvas와 이미지 등록을 소유하고

@@ -40,6 +40,24 @@ mrg::graphics::FontHandle systemFont =
 `FontHandle`을 해제하면 되며 DirectWrite COM 타입은 공개 API에 노출되지
 않는다.
 
+Visual2D는 직접 `FontHandle`을 보관하지 않고 backend-neutral descriptor를
+draw packet에 싣습니다.
+
+```cpp
+auto& label = mrg::visual2d::CreateLabel(parent, bounds, L"Text", "Label");
+label.GetComponent<mrg::visual2d::TextVisualComponent>()->SetFont(
+    {mrg::visual2d::TextFontSource::System, L"Segoe UI"});
+
+combo.GetComponent<mrg::visual2d::ComboBoxBehaviorComponent>()->SetFont(
+    {mrg::visual2d::TextFontSource::File,
+     L"assets/fonts/MyFont-Regular.ttf"});
+```
+
+`Default`는 Visual2D renderer의 기본 글꼴을 사용합니다. `System`의 value는
+시스템 family 이름, `File`의 value는 실행 파일 기준 경로입니다. D3D12
+Visual2D renderer는 화면용·texture용 `TextRenderSystem`마다 descriptor를
+`FontHandle`로 한 번 해석해 캐시하고 종료할 때 해제합니다.
+
 ## 문자열 제출
 
 ```cpp

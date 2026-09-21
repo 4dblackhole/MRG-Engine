@@ -99,6 +99,21 @@ namespace mrg::visual2d
         Trailing,
     };
 
+    enum class TextFontSource : std::uint8_t
+    {
+        Default,
+        System,
+        File,
+    };
+
+    // Keeps font selection backend-neutral. Render backends resolve a system
+    // family or font file into their native font handle and cache the result.
+    struct TextFont
+    {
+        TextFontSource source{TextFontSource::Default};
+        std::wstring value;
+    };
+
     // Bounds are local to the node. nodeTransform maps those local coordinates
     // into the Canvas; render backends never traverse or own the node tree.
     struct DrawPacket
@@ -108,6 +123,7 @@ namespace mrg::visual2d
         DirectX::XMFLOAT4X4 nodeTransform{};
         Color color{};
         std::wstring text;
+        TextFont font;
         float fontSize{18.0F};
         TextAlignment horizontalAlignment{TextAlignment::Leading};
         ImageHandle image{};

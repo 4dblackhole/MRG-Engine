@@ -24,6 +24,7 @@ namespace mrg::visual2d
             const Rect bounds,
             const Color color,
             const std::wstring_view text,
+            const TextFont& font,
             const float fontSize,
             const TextAlignment alignment)
         {
@@ -32,6 +33,7 @@ namespace mrg::visual2d
             packet.bounds = bounds;
             packet.color = color;
             packet.text = text;
+            packet.font = font;
             packet.fontSize = fontSize;
             packet.horizontalAlignment = alignment;
             return packet;
@@ -181,6 +183,21 @@ namespace mrg::visual2d
         text_ = std::move(text);
     }
 
+    const TextFont& TextVisualComponent::Font() const noexcept
+    {
+        return font_;
+    }
+
+    void TextVisualComponent::SetFont(TextFont font)
+    {
+        if (font.source != TextFontSource::Default && font.value.empty())
+        {
+            throw std::invalid_argument(
+                "Visual2D system and file fonts require a name or path.");
+        }
+        font_ = std::move(font);
+    }
+
     float TextVisualComponent::FontSize() const noexcept
     {
         return fontSize_;
@@ -243,6 +260,7 @@ namespace mrg::visual2d
                     Owner().IsEnabled() ? textColor_.alpha :
                         textColor_.alpha * 0.55F},
                 text_,
+                font_,
                 fontSize_,
                 alignment_));
         }
@@ -641,6 +659,21 @@ namespace mrg::visual2d
         return itemHeight_;
     }
 
+    const TextFont& ComboBoxBehaviorComponent::Font() const noexcept
+    {
+        return font_;
+    }
+
+    void ComboBoxBehaviorComponent::SetFont(TextFont font)
+    {
+        if (font.source != TextFontSource::Default && font.value.empty())
+        {
+            throw std::invalid_argument(
+                "Visual2D system and file fonts require a name or path.");
+        }
+        font_ = std::move(font);
+    }
+
     void ComboBoxBehaviorComponent::SetFontSize(const float fontSize)
     {
         ValidatePositive(fontSize, "Visual2D font size must be positive.");
@@ -708,6 +741,7 @@ namespace mrg::visual2d
                  Owner().IsEnabled() ? textColor_.alpha :
                      textColor_.alpha * 0.55F},
                 items_[selectedIndex_],
+                font_,
                 fontSize_,
                 TextAlignment::Leading));
         }
@@ -718,6 +752,7 @@ namespace mrg::visual2d
             {size.width - arrowWidth, 0.0F, arrowWidth, size.height},
             {0.72F, 0.84F, 1.0F, Owner().IsEnabled() ? 1.0F : 0.55F},
             expanded_ ? L"▲" : L"▼",
+            font_,
             std::min(fontSize_, 14.0F),
             TextAlignment::Center));
 
@@ -753,6 +788,7 @@ namespace mrg::visual2d
                     ? selectedTextColor_
                     : textColor_,
                 items_[itemIndex],
+                font_,
                 fontSize_,
                 TextAlignment::Leading));
         }

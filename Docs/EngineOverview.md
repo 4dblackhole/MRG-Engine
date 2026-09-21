@@ -249,6 +249,10 @@ sphere-ray/OBB, OBB-OBB, triangle-ray와 ViewFrustum-sphere 3단계 분류가 �
 내부 구현은 DirectWrite 레이아웃과 D3D12 glyph atlas를 사용한다. Client 배포
 글꼴은 라이선스 파일을 함께 보관해야 한다.
 
+Visual2D의 `TextVisualComponent`와 `ComboBoxBehaviorComponent`는 `TextFont`로
+renderer 기본 글꼴, 시스템 family 또는 글꼴 파일을 선택한다. D3D12 backend는
+화면/texture 렌더러별로 해석한 글꼴 handle을 캐시한다.
+
 사용 예제와 자원 수명은 [TextRendering.md](TextRendering.md)를 참고한다.
 
 ## 12. 작업 위치 결정표

@@ -1369,6 +1369,21 @@ namespace mrg::visual2d
         Trailing,
     };
 
+    enum class TextFontSource : std::uint8_t
+    {
+        Default,
+        System,
+        File,
+    };
+
+    // Keeps font selection backend-neutral. Render backends resolve a system
+    // family or font file into their native font handle and cache the result.
+    struct TextFont
+    {
+        TextFontSource source{TextFontSource::Default};
+        std::wstring value;
+    };
+
     // Bounds are local to the node. nodeTransform maps those local coordinates
     // into the Canvas; render backends never traverse or own the node tree.
     struct DrawPacket
@@ -1378,6 +1393,7 @@ namespace mrg::visual2d
         DirectX::XMFLOAT4X4 nodeTransform{};
         Color color{};
         std::wstring text;
+        TextFont font;
         float fontSize{18.0F};
         TextAlignment horizontalAlignment{TextAlignment::Leading};
         ImageHandle image{};
@@ -1873,6 +1889,8 @@ namespace mrg::visual2d
 
         [[nodiscard]] std::wstring_view Text() const noexcept;
         void SetText(std::wstring text);
+        [[nodiscard]] const TextFont& Font() const noexcept;
+        void SetFont(TextFont font);
         [[nodiscard]] float FontSize() const noexcept;
         void SetFontSize(float fontSize);
         [[nodiscard]] Color TextColor() const noexcept;
@@ -1887,6 +1905,7 @@ namespace mrg::visual2d
 
     private:
         std::wstring text_;
+        TextFont font_;
         float fontSize_{18.0F};
         Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
         TextAlignment alignment_{TextAlignment::Leading};
@@ -2041,6 +2060,8 @@ namespace mrg::visual2d
         [[nodiscard]] std::size_t MaxVisibleItems() const noexcept;
         void SetItemHeight(float itemHeight);
         [[nodiscard]] float ItemHeight() const noexcept;
+        [[nodiscard]] const TextFont& Font() const noexcept;
+        void SetFont(TextFont font);
         void SetFontSize(float fontSize);
         [[nodiscard]] Color TextColor() const noexcept;
         void SetTextColor(Color color) noexcept;
@@ -2074,6 +2095,7 @@ namespace mrg::visual2d
         std::size_t maxVisibleItems_{4};
         std::size_t hoveredItemIndex_{static_cast<std::size_t>(-1)};
         float itemHeight_{36.0F};
+        TextFont font_;
         float fontSize_{17.0F};
         Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
         Color selectedTextColor_{1.0F, 1.0F, 1.0F, 1.0F};

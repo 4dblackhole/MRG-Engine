@@ -1285,6 +1285,41 @@ namespace
 
 int main()
 {
+    {
+        namespace v = mrg::visual2d;
+        struct BatchVisual final : v::Visual2DComponent
+        {
+            std::vector<v::DrawPacket> commands;
+            void AppendDrawPackets(std::vector<v::DrawPacket> &output) const override
+            { output.insert(output.end(), commands.begin(), commands.end()); }
+        };
+        v::Visual2DCanvas canvas;
+        auto &node = canvas.CreateNode(v::Anchor::TopLeft, "Immutable batch");
+        node.SetBounds({20, 30, 200, 100});
+        node.SetClipRect(v::Rect{0, 0, 150, 80});
+        auto &visual = node.AddComponent<BatchVisual>();
+        auto geometry = std::make_shared<const std::vector<v::RectanglePrimitive>>(
+            std::vector<v::RectanglePrimitive>{{{1, 2, 3, 4}, {1, 0, 0, .5F}, 2},
+                                               {{5, 6, 7, 8}, {0, 1, 0, 1}, 0}});
+        v::DrawPacket batch;
+        batch.type = v::DrawPacketType::RectangleBatch;
+        batch.rectangles = geometry;
+        v::DrawPacket text;
+        text.type = v::DrawPacketType::Text;
+        text.text = L"after geometry";
+        visual.commands = {batch, text};
+        auto retained = canvas.BuildDrawList();
+        visual.commands.clear();
+        geometry.reset();
+        std::vector<v::DrawPacket> expanded;
+        v::ForEachDrawPrimitive(retained, [&](const auto &primitive) { expanded.push_back(primitive); });
+        Check(retained.size() == 2 && v::DrawPrimitiveCount(retained) == 3 && expanded.size() == 3 &&
+                  expanded[0].bounds.x == 1 && expanded[1].color.green == 1 && expanded[2].text == L"after geometry" &&
+                  expanded[0].cornerRadius == 2 && expanded[0].clipBounds && retained[0].clipBounds &&
+                  expanded[0].clipBounds->x == retained[0].clipBounds->x &&
+                  expanded[0].nodeTransform._41 == retained[0].nodeTransform._41,
+              "Immutable rectangle batches retain lifetime, primitive order, transform and clipping.");
+    }
     TestManagedAudioPlayback();
     TestManagedScreenVisual2D();
     TestCameraMatrices();

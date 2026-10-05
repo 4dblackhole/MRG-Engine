@@ -306,6 +306,28 @@ namespace mrg::audio
         return std::make_unique<FmodAudioVoice>(lifetime_, channel);
     }
 
+    AudioClipLoadState FmodAudioClip::LoadState(std::string& errorMessage) const
+    {
+        if (!sound_ || !HasLiveSystem())
+        {
+            errorMessage = "The audio clip no longer belongs to a live audio system.";
+            return AudioClipLoadState::Failed;
+        }
+        FMOD_OPENSTATE state{};
+        const auto result = sound_->getOpenState(&state, nullptr, nullptr, nullptr);
+        if (result != FMOD_OK || state == FMOD_OPENSTATE_ERROR)
+        {
+            errorMessage = MakeFmodError("FMOD::Sound::getOpenState", result);
+            return AudioClipLoadState::Failed;
+        }
+        errorMessage.clear();
+        if (state == FMOD_OPENSTATE_READY)
+            return AudioClipLoadState::Ready;
+        if (state == FMOD_OPENSTATE_PLAYING)
+            return AudioClipLoadState::Playing;
+        return AudioClipLoadState::Loading;
+    }
+
     bool FmodAudioClip::HasLiveSystem() const noexcept
     {
         return lifetime_ != nullptr &&
@@ -332,9 +354,10 @@ namespace mrg::audio
         FMOD::Sound* sound = nullptr;
         const std::string utf8Path = Utf8Path(path);
         const FMOD_MODE mode = FMOD_DEFAULT |
-            (loadMode == AudioLoadMode::Stream
+            (loadMode != AudioLoadMode::Sample
                 ? FMOD_CREATESTREAM
-                : FMOD_CREATESAMPLE);
+                : FMOD_CREATESAMPLE) |
+            (loadMode == AudioLoadMode::StreamAsync ? FMOD_NONBLOCKING : 0);
         const FMOD_RESULT result = fmodBackend->NativeSystem()->createSound(
             utf8Path.c_str(),
             mode,

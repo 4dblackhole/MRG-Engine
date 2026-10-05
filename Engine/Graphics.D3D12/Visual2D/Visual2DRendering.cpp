@@ -889,16 +889,17 @@ namespace mrg::graphics
             static_cast<float>(std::min(
                 canvasZOrder,
                 MaximumScreenCanvasZOrder)) * ScreenVisual2DCanvasDepthBand;
-        for (std::size_t index = 0; index < commands.size(); ++index)
+        const auto primitiveCount = visual2d::DrawPrimitiveCount(commands);
+        std::size_t primitiveIndex = 0;
+        visual2d::ForEachDrawPrimitive(commands, [&](const visual2d::DrawPacket &command)
         {
-            const visual2d::DrawPacket& command = commands[index];
             // Visual2DCanvas already returns the tree in paint order. Keep every
             // Canvas inside its own depth band so opening a popup can change
             // its local command count without crossing another Canvas.
-            const float normalizedOrder = commands.empty()
+            const float normalizedOrder = primitiveCount == 0
                 ? 0.0F
-                : static_cast<float>(index + 1) /
-                    static_cast<float>(commands.size() + 1);
+                : static_cast<float>(++primitiveIndex) /
+                    static_cast<float>(primitiveCount + 1);
             const float depth = canvasFarDepth -
                 ScreenVisual2DCanvasDepthBand * normalizedOrder;
             const visual2d::Rect logicalBounds = state.TransformBounds(
@@ -964,7 +965,7 @@ namespace mrg::graphics
                 text.style.color = ToFloat4(command.color);
                 text.clipRectPixels = clipRectPixels;
                 state.screenTextRendering->Submit(command.text, text);
-                continue;
+                return;
             }
             if (command.type == visual2d::DrawPacketType::Image)
             {
@@ -973,7 +974,7 @@ namespace mrg::graphics
                 if (image == state.imagesByHandle.end() ||
                     bounds.width <= 0.0F || bounds.height <= 0.0F)
                 {
-                    continue;
+                    return;
                 }
 
                 DirectX::XMFLOAT4X4 world{};
@@ -1002,11 +1003,11 @@ namespace mrg::graphics
                     clipRectPixels,
                     roundedRectLocal,
                     cornerRadiusLocal);
-                continue;
+                return;
             }
             if (bounds.width <= 0.0F || bounds.height <= 0.0F)
             {
-                continue;
+                return;
             }
 
             DirectX::XMFLOAT4X4 world{};
@@ -1034,7 +1035,7 @@ namespace mrg::graphics
                 clipRectPixels,
                 roundedRectLocal,
                 cornerRadiusLocal);
-        }
+        });
     }
 
     void D3D12Visual2DRenderer::SubmitPlane(
@@ -1060,15 +1061,15 @@ namespace mrg::graphics
         const std::vector<visual2d::DrawPacket> commands = canvas.BuildDrawList();
         const DirectX::XMMATRIX surface =
             DirectX::XMLoadFloat4x4(&surfaceWorld);
-        for (std::size_t index = 0; index < commands.size(); ++index)
+        std::size_t primitiveIndex = 0;
+        visual2d::ForEachDrawPrimitive(commands, [&](const visual2d::DrawPacket &command)
         {
-            const visual2d::DrawPacket& command = commands[index];
             if (command.bounds.width <= 0.0F || command.bounds.height <= 0.0F)
             {
-                continue;
+                return;
             }
 
-            const float layer = -static_cast<float>(index) * 0.0005F;
+            const float layer = -static_cast<float>(primitiveIndex++) * 0.0005F;
             DirectX::XMFLOAT4X4 world{};
             DirectX::XMStoreFloat4x4(
                 &world,
@@ -1090,7 +1091,7 @@ namespace mrg::graphics
                     command.image.value);
                 if (image == state.imagesByHandle.end())
                 {
-                    continue;
+                    return;
                 }
 
                 state.meshRendering->Submit(
@@ -1102,14 +1103,14 @@ namespace mrg::graphics
                     command.uvScale,
                     command.uvOffset,
                     image->second.textureIndex);
-                continue;
+                return;
             }
 
             if (command.type != visual2d::DrawPacketType::Rectangle)
             {
                 // Plane text is intentionally omitted. Curved surfaces use the
                 // render-to-texture path below so glyphs can follow the mesh UVs.
-                continue;
+                return;
             }
 
             state.meshRendering->Submit(
@@ -1121,7 +1122,7 @@ namespace mrg::graphics
                 {1.0F, 1.0F},
                 {0.0F, 0.0F},
                 NoTextureIndex);
-        }
+        });
     }
 
     RenderTargetTextureHandle D3D12Visual2DRenderer::CreateCanvasRenderTarget(
@@ -1269,12 +1270,12 @@ namespace mrg::graphics
             }
         };
 
-        for (const visual2d::DrawPacket& command : commands)
+        visual2d::ForEachDrawPrimitive(commands, [&](const visual2d::DrawPacket &command)
         {
             if (command.bounds.width <= 0.0F ||
                 command.bounds.height <= 0.0F)
             {
-                continue;
+                return;
             }
 
             DirectX::XMFLOAT4X4 primitiveTransform{};
@@ -1315,7 +1316,7 @@ namespace mrg::graphics
                     clipRectPixels,
                     roundedRectLocal,
                     cornerRadiusLocal});
-                continue;
+                return;
             }
 
             if (command.type == visual2d::DrawPacketType::Image)
@@ -1324,7 +1325,7 @@ namespace mrg::graphics
                     command.image.value);
                 if (image == state.imagesByHandle.end())
                 {
-                    continue;
+                    return;
                 }
                 selectBatch(
                     BatchType::Visuals,
@@ -1344,7 +1345,7 @@ namespace mrg::graphics
                     roundedRectLocal,
                     cornerRadiusLocal,
                     image->second.textureIndex});
-                continue;
+                return;
             }
 
             TextDrawCommand text{};
@@ -1380,7 +1381,7 @@ namespace mrg::graphics
             text.clipRectPixels = clipRectPixels;
             selectBatch(BatchType::Text);
             textCommands.push_back({command.text, std::move(text)});
-        }
+        });
         flushBatch();
 
         textureManager.EndRenderTargetPass(commandList, target);

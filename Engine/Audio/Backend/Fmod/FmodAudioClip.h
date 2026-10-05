@@ -17,6 +17,7 @@ namespace mrg::audio
             std::shared_ptr<FmodSystemLifetime> lifetime,
             FMOD::Sound* sound) noexcept;
         ~FmodAudioClip() override;
+        AudioClipLoadState LoadState(std::string& errorMessage) const override;
 
         [[nodiscard]] std::unique_ptr<IAudioVoiceBackend> Play(
             const AudioPlaybackSettings& settings,

@@ -14,6 +14,7 @@ namespace mrg::audio
     {
         Sample,
         Stream,
+        StreamAsync,
     };
 
     enum class AudioEffectType : std::uint8_t

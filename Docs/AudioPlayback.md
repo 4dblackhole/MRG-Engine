@@ -33,6 +33,16 @@ Channel을 만들지 않는다. Voice 객체를 버려도 재생은 계속되며
 
 ## SceneGameClient 공통 재생 관리
 
+`AudioLoadMode::StreamAsync`는 FMOD 비동기 파일 열기를 사용한다. 생성 직후의 clip은
+재생 준비가 끝나지 않았을 수 있으므로 `AudioClip::LoadState(error)`를 polling한다.
+`Ready`에서 재생하고 `Failed`의 오류를 처리한다. `Loading`은 열기/버퍼 작업 중,
+`Playing`은 mixer가 사용 중인 상태다. 기존 Sample/Stream의 동기 로드는 유지한다.
+Clip을 Loading/Playing에서 해제하면 native I/O 또는 mixer를 기다릴 수 있으므로
+UI caller는 준비가 끝날 때까지 소유권을 유지하고, 정지한 clip도 Ready/Failed를 확인한 뒤
+해제한다. 시스템 종료에서는 남은 native 작업을 정리할 수 있다. 이 동작은
+[FMOD Sound::getOpenState/release](https://www.fmod.com/docs/2.03/api/core-api-sound.html)에 따른다.
+
+
 `SceneGameClient::AudioPlayback()`은 Client 전체 수명의 `AudioPlaybackManager`를
 제공한다. Scene factory에는 `std::ref(AudioPlayback())`로 같은 관리자를 전달할 수
 있다. Scene 전환은 이 관리자의 재생을 자동으로 중단하지 않는다.

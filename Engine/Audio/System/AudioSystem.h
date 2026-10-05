@@ -49,10 +49,17 @@ namespace mrg::audio
     // A backend-specific clip owns one native sound object. The Client owns
     // the public AudioClip wrapper, while FMOD and other implementation types
     // remain outside the generated SDK header.
+    enum class AudioClipLoadState { Loading, Ready, Playing, Failed };
+
     class IAudioClipBackend
     {
     public:
         virtual ~IAudioClipBackend() = default;
+        [[nodiscard]] virtual AudioClipLoadState LoadState(std::string& errorMessage) const
+        {
+            errorMessage.clear();
+            return AudioClipLoadState::Ready;
+        }
         [[nodiscard]] virtual std::unique_ptr<IAudioVoiceBackend> Play(
             const AudioPlaybackSettings& settings,
             IAudioBusBackend* bus,
@@ -70,6 +77,9 @@ namespace mrg::audio
         AudioClip& operator=(AudioClip&&) = delete;
 
         [[nodiscard]] bool IsValid() const noexcept;
+        // Async streams may only be played after Ready. Releasing Loading or
+        // Playing streams can wait for native I/O or the mixer to finish.
+        [[nodiscard]] AudioClipLoadState LoadState(std::string& errorMessage) const;
         [[nodiscard]] bool Play(std::string& errorMessage);
         [[nodiscard]] std::unique_ptr<AudioVoice> Play(
             const AudioPlaybackSettings& settings,

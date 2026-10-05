@@ -34,6 +34,7 @@ namespace mrg::audio
     {
         Sample,
         Stream,
+        StreamAsync,
     };
 
     enum class AudioEffectType : std::uint8_t
@@ -301,10 +302,17 @@ namespace mrg::audio
     // A backend-specific clip owns one native sound object. The Client owns
     // the public AudioClip wrapper, while FMOD and other implementation types
     // remain outside the generated SDK header.
+    enum class AudioClipLoadState { Loading, Ready, Playing, Failed };
+
     class IAudioClipBackend
     {
     public:
         virtual ~IAudioClipBackend() = default;
+        [[nodiscard]] virtual AudioClipLoadState LoadState(std::string& errorMessage) const
+        {
+            errorMessage.clear();
+            return AudioClipLoadState::Ready;
+        }
         [[nodiscard]] virtual std::unique_ptr<IAudioVoiceBackend> Play(
             const AudioPlaybackSettings& settings,
             IAudioBusBackend* bus,
@@ -322,6 +330,9 @@ namespace mrg::audio
         AudioClip& operator=(AudioClip&&) = delete;
 
         [[nodiscard]] bool IsValid() const noexcept;
+        // Async streams may only be played after Ready. Releasing Loading or
+        // Playing streams can wait for native I/O or the mixer to finish.
+        [[nodiscard]] AudioClipLoadState LoadState(std::string& errorMessage) const;
         [[nodiscard]] bool Play(std::string& errorMessage);
         [[nodiscard]] std::unique_ptr<AudioVoice> Play(
             const AudioPlaybackSettings& settings,
@@ -1280,6 +1291,7 @@ namespace mrg::scene
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -1360,6 +1372,7 @@ namespace mrg::visual2d
         Rectangle,
         Image,
         Text,
+        RectangleBatch,
     };
 
     enum class TextAlignment : std::uint8_t
@@ -1384,6 +1397,13 @@ namespace mrg::visual2d
         std::wstring value;
     };
 
+    struct RectanglePrimitive
+    {
+        Rect bounds{};
+        Color color{};
+        float cornerRadius{};
+    };
+
     // Bounds are local to the node. nodeTransform maps those local coordinates
     // into the Canvas; render backends never traverse or own the node tree.
     struct DrawPacket
@@ -1403,7 +1423,44 @@ namespace mrg::visual2d
         // Optional axis-aligned clip rectangle in Canvas coordinates. Core
         // resolves nested node-local clips before packets reach a backend.
         std::optional<Rect> clipBounds;
+        // Immutable local geometry is shared across frames; tree collection copies
+        // only this handle. Primitive order, transform and clipping are preserved.
+        std::shared_ptr<const std::vector<RectanglePrimitive>> rectangles;
     };
+
+    inline std::size_t DrawPrimitiveCount(std::span<const DrawPacket> packets) noexcept
+    {
+        std::size_t count = 0;
+        for (const auto &packet : packets)
+            count += packet.type == DrawPacketType::RectangleBatch
+                ? (packet.rectangles ? packet.rectangles->size() : 0) : 1;
+        return count;
+    }
+
+    template<class Visitor>
+    void ForEachDrawPrimitive(std::span<const DrawPacket> packets, Visitor &&visitor)
+    {
+        for (const auto &packet : packets)
+        {
+            if (packet.type != DrawPacketType::RectangleBatch)
+            {
+                visitor(packet);
+                continue;
+            }
+            if (!packet.rectangles)
+                continue;
+            DrawPacket primitive;
+            primitive.nodeTransform = packet.nodeTransform;
+            primitive.clipBounds = packet.clipBounds;
+            for (const auto &rectangle : *packet.rectangles)
+            {
+                primitive.bounds = rectangle.bounds;
+                primitive.color = rectangle.color;
+                primitive.cornerRadius = rectangle.cornerRadius;
+                visitor(primitive);
+            }
+        }
+    }
 
     enum class PointerEventType : std::uint8_t
     {

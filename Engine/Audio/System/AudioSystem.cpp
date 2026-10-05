@@ -41,6 +41,14 @@ namespace mrg::audio
         return implementation_ != nullptr;
     }
 
+    AudioClipLoadState AudioClip::LoadState(std::string& errorMessage) const
+    {
+        if (implementation_)
+            return implementation_->LoadState(errorMessage);
+        errorMessage = "The audio clip is not initialized.";
+        return AudioClipLoadState::Failed;
+    }
+
     bool AudioClip::Play(std::string& errorMessage)
     {
         return Play(AudioPlaybackSettings{}, nullptr, errorMessage) != nullptr;

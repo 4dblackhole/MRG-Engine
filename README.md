@@ -8,8 +8,10 @@ Sphere를 사용해 화면 밖 인스턴스를 제출 전에 제외한다.
 Visual2D Canvas는 화면과 월드 표면 모두 정중앙 원점과 Y-up 논리 좌표를 사용한다.
 Visual2D 텍스트와 ComboBox는 renderer 기본 글꼴, 시스템 family 또는 배포 글꼴
 파일을 backend-neutral `TextFont`로 선택할 수 있다.
+불변 사각형 묶음 `RectangleBatch`는 geometry를 공유하여 매 프레임 명령 복사를 줄인다.
 `SceneGameClient::AudioPlayback()`은 Scene 사이에서 공유하는 재생 관리자를 제공한다.
 사용법과 Clip·Voice 수명은 [AudioPlayback.md](Docs/AudioPlayback.md)에 있다.
+`StreamAsync`는 파일 열기를 비동기로 요청하고 `AudioClip::LoadState`로 준비 상태를 조회한다.
 화면 Sprite는 `SceneGameClient::ScreenVisuals()`가 Canvas와 이미지 등록을 소유하고
 Scene 대신 매 프레임 제출한다. 월드·곡면 Canvas는 명시적 pass로 유지한다.
 

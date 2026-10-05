@@ -50,6 +50,16 @@ Scene의 Canvas dispatcher가 결정한다.
 
 ## GPU 자원 소유권
 
+`DrawPacketType::RectangleBatch`는 불변 사각형 geometry를 공유한다. component는
+`shared_ptr<const vector<RectanglePrimitive>>`를 게시한 후 내용을 변경하지 않는다.
+Canvas 수집은 geometry handle만 복사하며 node transform과 clip을 packet에 적용한다.
+`ForEachDrawPrimitive`는 원래 paint 순서대로 사각형을 빌려 방문하며 별도의 펼친 배열을
+할당하지 않는다. D3D12의 화면/평면/render texture 경로 모두 같은 방문 함수를 사용한다.
+이 경계는 CPU 명령 복사를 줄이지만 GPU primitive 수나 draw call을 줄이는 기능은 아니다.
+많은 사각형과 텍스트를 교차해 사용할 때는 묶음을 나누어 원래 그리기 순서를 유지한다.
+명령을 보관하는 외부 renderer는 `DrawPrimitiveCount`로 실제 primitive 수를 셀 수 있다.
+
+
 엔진 소유 `D3D12Renderer` 하나가 `D3D12Visual2DRenderer` 하나를 소유한다.
 Scene은 renderer 수명에 관여하지 않고 Canvas, InputRouter, 이미지/렌더 타깃의
 공유 핸들만 소유한다.

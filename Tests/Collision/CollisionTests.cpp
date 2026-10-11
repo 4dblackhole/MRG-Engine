@@ -1,3 +1,4 @@
+#include "../App/HeadlessRunTests.h"
 #include "MRG_Core.h"
 
 #include <DirectXMath.h>
@@ -1283,8 +1284,10 @@ namespace
     }
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    if (argc == 2 && std::string_view(argv[1]) == "--headless-error")
+        return TestHeadlessRunError();
     {
         namespace v = mrg::visual2d;
         struct BatchVisual final : v::Visual2DComponent

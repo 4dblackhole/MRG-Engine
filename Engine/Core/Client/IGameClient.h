@@ -42,6 +42,7 @@ namespace mrg
         double renderRateOverrideHz{};
         double maximumUpdateDeltaSeconds{0.1};
 
+        // Hidden runs also suppress modal fatal-error dialogs; errors remain logged.
         bool showWindow{true};
         std::uint64_t autoExitAfterRenderedFrames{};
     };

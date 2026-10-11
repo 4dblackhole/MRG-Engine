@@ -22,6 +22,15 @@ namespace mrg
             return rate > 1.0 ? rate : fallback;
         }
 
+        void ReportFatalError(const std::exception &error, bool showDialog) noexcept
+        {
+            OutputDebugStringA("MyRhythmGame fatal error: ");
+            OutputDebugStringA(error.what());
+            OutputDebugStringA("\n");
+            if (showDialog)
+                MessageBoxA(nullptr, error.what(), "MyRhythmGame fatal error", MB_OK | MB_ICONERROR);
+        }
+
         void AdvanceDeadline(
             double& deadline,
             const double interval,
@@ -231,13 +240,15 @@ namespace mrg
             return EXIT_FAILURE;
         }
 
+        bool showErrorDialog = true;
         try
         {
+            EngineConfig config = client->GetEngineConfig();
+            showErrorDialog = config.showWindow;
             // The Win32 main thread owns the message pump and must remain an
             // STA so COM-based ASIO drivers can be created by FMOD.
             platform::ComApartment comApartment(
                 COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-            EngineConfig config = client->GetEngineConfig();
 
             // Stack order is intentional.  The Client is initialized only
             // after the native window, renderer, and audio service exist.
@@ -329,11 +340,7 @@ namespace mrg
         }
         catch (const std::exception& exception)
         {
-            MessageBoxA(
-                nullptr,
-                exception.what(),
-                "MyRhythmGame fatal error",
-                MB_OK | MB_ICONERROR);
+            ReportFatalError(exception, showErrorDialog);
             return EXIT_FAILURE;
         }
     }

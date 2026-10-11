@@ -45,6 +45,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 }
 ```
 
+`Run`의 치명적 예외는 디버그 출력에 기록하고 실패 종료 코드를 반환합니다.
+`EngineConfig::showWindow=false`인 숨김 실행에서는 오류 대화상자도 표시하지 않습니다.
+초기화된 Client는 renderer/audio 서비스가 살아 있는 동안 `Shutdown`으로 정리합니다.
+SDK 테스트의 `--headless-error`는 실제 D3D12/NoSound 실행 중 Update 예외를 주입해
+이 정리와 비차단 종료를 검증합니다. 기본 SDK 단위 테스트와 별도로 실행합니다.
+
 여러 Scene을 사용하는 게임은 `mrg::scene::SceneGameClient`를 상속하고
 `RegisterScenes`에서 Scene factory와 수명 정책을 등록하는 방식이 권장된다.
 

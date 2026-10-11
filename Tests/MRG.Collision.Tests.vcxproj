@@ -58,11 +58,13 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(FmodLibraryDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>fmod_vc.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;fmod_vc.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Collision\CollisionTests.cpp" />
+    <ClCompile Include="App\HeadlessRunTests.cpp" />
+    <ClInclude Include="App\HeadlessRunTests.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Engine\SDK\MRG.Core.vcxproj">

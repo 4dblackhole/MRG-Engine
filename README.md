@@ -59,3 +59,7 @@ FMOD SDK 헤더, import library와 DLL은 라이선스상 이 저장소에 포�
 `Dependencies/MRG-Engine` Git submodule로 고정한다. Client 프로젝트는
 submodule 내부의 `Engine/SDK/MRG.Core.vcxproj`만 참조하며 엔진의 기능 헤더를
 직접 포함하지 않는다.
+
+Client에 함께 보관했던 기술 예제 Scene은 제거되었다. 엔진의 공개 API 검증은
+현재 `Tests/MRG.Collision.Tests.vcxproj`의 SDK 단위 테스트를 사용한다.
+별도 실행형 검증 프로젝트는 아직 제공하지 않는다.

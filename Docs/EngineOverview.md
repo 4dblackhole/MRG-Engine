@@ -131,8 +131,8 @@ FPS/UPS 통계 데이터의 엔진·Client 경계는
 - 일회성 리소스는 `Initialize`/`Shutdown`, 활성화마다 바뀌는 상태는
   `BeginScene`/`EndScene`에 둔다.
 
-현재 Client의 동적 Scene 예제는 `Docs/EngineFeatureExamples.md`와
-`Client/GameScene/Examples`에서 확인할 수 있다.
+게임의 Scene 구성은 Client 저장소의 `Docs/ExecutionFlow.md`에서 확인한다.
+Client에 포함되었던 기술 예제 Scene은 제거되었으며 별도 검증 프로젝트는 아직 없다.
 
 ## 7. Graphics·Geometry·인스턴싱
 
@@ -209,7 +209,7 @@ Canvas 좌표로 변환한다.
 - [Visual2DArchitecture.md](Visual2DArchitecture.md)
 - [Visual2DRendererLifecycle.md](Visual2DRendererLifecycle.md)
 - [Visual2DPerformanceAndOwnership.md](Visual2DPerformanceAndOwnership.md)
-- Client `Docs/Visual2DGuide.md`와 `Docs/Visual2DExample.md`
+- Client `Docs/Visual2DGuide.md`
 
 ## 9. 오디오
 
@@ -297,10 +297,7 @@ Client 저장소의 추가 문서는 다음과 같다.
 | Client 문서 | 내용 |
 | --- | --- |
 | `Docs/ExecutionFlow.md` | 실제 샘플의 시작, 프레임, 종료와 객체 수명 |
-| `Docs/EngineFeatureExamples.md` | 키 1/2/3으로 진입하는 Mesh·충돌·위젯 예제 |
 | `Docs/Visual2DGuide.md` | Sprite·위젯 생성, 입력, PNG, Canvas와 Z-Order |
-| `Docs/Visual2DExample.md` | 화면·곡면 옵션 Canvas와 오디오 패널 구현 |
-| `Docs/PerformanceOverlay.md` | Client 소유 FPS/UPS 표시 구현 |
 
 ## 14. 새 Codex 세션 체크리스트
 
@@ -318,3 +315,12 @@ Client 저장소의 추가 문서는 다음과 같다.
 
 이 체크리스트는 구현 방법보다 저장소 경계와 검증 누락을 방지하기 위한 것이다.
 세부 동작은 반드시 해당 기능 문서와 현재 코드를 함께 확인한다.
+
+## 2026-10-11 예제 제거 확인
+
+엔진 소스·공개 헤더·SDK 생성 목록과 호출 관계를 확인했으며, 구형 API 별칭이나
+이전 구현을 선택하는 호환 분기는 발견되지 않았다. Client의 ColoredCube 계열
+예제 제거에 따라 이 안내서의 예제 경로를 정리했다. 엔진 API/구현은 변경하지 않았다.
+Debug/Release x64 `MRG-Engine.sln` 전체 Rebuild 및 두 구성의 `MRG.Collision.Tests.exe`
+(audio/Camera/collision/Visual2D 공개 SDK 단위 테스트)가 성공했고 `git diff --check`를 통과했다.
+Client의 제거된 예제 실행 경로를 엔진 검증 명령으로 사용하지 않는다.

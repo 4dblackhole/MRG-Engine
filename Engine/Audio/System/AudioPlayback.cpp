@@ -107,6 +107,17 @@ namespace mrg::audio
         return implementation_->SetPitch(pitch, errorMessage);
     }
 
+    bool AudioVoice::SetDelay(const std::uint64_t startDspClock,
+        const std::uint64_t endDspClock, std::string& errorMessage)
+    {
+        if (!implementation_)
+        {
+            errorMessage = "The audio voice is not initialized.";
+            return false;
+        }
+        return implementation_->SetDelay(startDspClock, endDspClock, errorMessage);
+    }
+
     AudioEffect::AudioEffect(
         std::unique_ptr<IAudioEffectBackend> implementation,
         std::shared_ptr<std::atomic_size_t> liveObjectCount)

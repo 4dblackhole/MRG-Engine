@@ -49,6 +49,15 @@ namespace mrg::audio
         return AudioClipLoadState::Failed;
     }
 
+    bool AudioClip::GetDurationMicroseconds(std::uint64_t& duration, std::string& errorMessage) const
+    {
+        if (implementation_)
+            return implementation_->GetDurationMicroseconds(duration, errorMessage);
+        duration = 0;
+        errorMessage = "The audio clip is not initialized.";
+        return false;
+    }
+
     bool AudioClip::Play(std::string& errorMessage)
     {
         return Play(AudioPlaybackSettings{}, nullptr, errorMessage) != nullptr;
@@ -162,6 +171,17 @@ namespace mrg::audio
         {
             backend_->Update();
         }
+        std::erase_if(retiredClips_, [](const auto& clip) {
+            std::string error;
+            const auto state = clip->LoadState(error);
+            return state == AudioClipLoadState::Ready || state == AudioClipLoadState::Failed;
+        });
+    }
+
+    void AudioSystem::RetireClip(std::shared_ptr<AudioClip> clip)
+    {
+        if (clip)
+            retiredClips_.push_back(std::move(clip));
     }
 
     void AudioSystem::Shutdown() noexcept
@@ -172,6 +192,7 @@ namespace mrg::audio
             backend_.reset();
         }
         initialized_ = false;
+        retiredClips_.clear(); // The backend shutdown has already cancelled its I/O.
         clipFactory_ = nullptr;
         config_ = {};
         liveObjectCount_.reset();

@@ -15,6 +15,8 @@ namespace mrg::audio
         Sample,
         Stream,
         StreamAsync,
+        // Async stream opening with an accurate duration/PCM seek table.
+        StreamAsyncAccurate,
     };
 
     enum class AudioEffectType : std::uint8_t
@@ -55,6 +57,9 @@ namespace mrg::audio
         // clock domain returned by AudioSystem::CaptureClockSnapshot().
         std::uint64_t startDspClock{};
         std::uint64_t endDspClock{};
+        // Source-file position, independent of the output mixer's DSP clock.
+        // Converted to the nearest source PCM frame by the backend.
+        std::uint64_t startPositionMicroseconds{};
     };
 
     struct AudioClockSnapshot
@@ -73,8 +78,8 @@ namespace mrg::audio
     public:
         virtual ~IAudioVoiceBackend() = default;
         [[nodiscard]] virtual bool IsPlaying() const noexcept = 0;
-        // Restarts this voice from the beginning without allocating another
-        // native playback channel. The voice must still be controllable.
+        // Restarts at settings.startPositionMicroseconds without allocating
+        // another native channel. The voice must still be controllable.
         [[nodiscard]] virtual bool Restart(
             const AudioPlaybackSettings& settings,
             IAudioBusBackend* bus,
@@ -89,6 +94,8 @@ namespace mrg::audio
         [[nodiscard]] virtual bool SetPitch(
             float pitch,
             std::string& errorMessage) = 0;
+        [[nodiscard]] virtual bool SetDelay(std::uint64_t startDspClock,
+            std::uint64_t endDspClock, std::string& errorMessage) = 0;
     };
 
     class IAudioEffectBackend
@@ -152,6 +159,8 @@ namespace mrg::audio
         [[nodiscard]] bool SetPaused(bool paused, std::string& errorMessage);
         [[nodiscard]] bool SetVolume(float volume, std::string& errorMessage);
         [[nodiscard]] bool SetPitch(float pitch, std::string& errorMessage);
+        [[nodiscard]] bool SetDelay(std::uint64_t startDspClock,
+            std::uint64_t endDspClock, std::string& errorMessage);
 
     private:
         friend class AudioClip;

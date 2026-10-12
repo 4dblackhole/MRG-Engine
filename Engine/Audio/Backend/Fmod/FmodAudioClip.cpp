@@ -5,6 +5,8 @@
 #include <fmod_errors.h>
 
 #include <filesystem>
+#include <cmath>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -28,6 +30,36 @@ namespace mrg::audio
             return std::string(
                 reinterpret_cast<const char*>(value.data()),
                 value.size());
+        }
+
+        FMOD_RESULT SoundTiming(FMOD::Sound* sound, unsigned int& frames, float& frequency)
+        {
+            auto result = sound->getLength(&frames, FMOD_TIMEUNIT_PCM);
+            if (result == FMOD_OK)
+                result = sound->getDefaults(&frequency, nullptr);
+            if (result == FMOD_OK && (!std::isfinite(frequency) || frequency <= 0 ||
+                                     frames == std::numeric_limits<unsigned int>::max()))
+                result = FMOD_ERR_FORMAT;
+            return result;
+        }
+
+        FMOD_RESULT SetSourcePosition(FMOD::Channel* channel, const std::uint64_t microseconds)
+        {
+            if (microseconds == 0)
+                return channel->setPosition(0, FMOD_TIMEUNIT_PCM);
+            FMOD::Sound* sound = nullptr;
+            auto result = channel->getCurrentSound(&sound);
+            if (result != FMOD_OK || !sound)
+                return result != FMOD_OK ? result : FMOD_ERR_INVALID_HANDLE;
+            unsigned int frames = 0;
+            float frequency = 0;
+            result = SoundTiming(sound, frames, frequency);
+            if (result != FMOD_OK)
+                return result;
+            const long double position = std::round(static_cast<long double>(microseconds) * frequency / 1'000'000);
+            if (position >= frames)
+                return FMOD_ERR_INVALID_POSITION;
+            return channel->setPosition(static_cast<unsigned int>(position), FMOD_TIMEUNIT_PCM);
         }
 
         class FmodAudioVoice final : public IAudioVoiceBackend
@@ -107,7 +139,7 @@ namespace mrg::audio
                         errorMessage) ||
                     !Apply(
                         "FMOD::Channel::setPosition",
-                        channel_->setPosition(0, FMOD_TIMEUNIT_PCM),
+                        SetSourcePosition(channel_, settings.startPositionMicroseconds),
                         errorMessage) ||
                     !Apply(
                         "FMOD::Channel::setVolume",
@@ -179,6 +211,12 @@ namespace mrg::audio
                         ? channel_->setPitch(pitch)
                         : FMOD_ERR_INVALID_HANDLE,
                     errorMessage);
+            }
+
+            bool SetDelay(const std::uint64_t start, const std::uint64_t end, std::string& error) override
+            {
+                return Apply("FMOD::Channel::setDelay", HasLiveSystem()
+                    ? channel_->setDelay(start, end, end != 0) : FMOD_ERR_INVALID_HANDLE, error);
             }
 
         private:
@@ -275,6 +313,14 @@ namespace mrg::audio
             return std::unique_ptr<IAudioVoiceBackend>{};
         };
 
+        // A new voice already starts at zero. Avoid flushing an async stream
+        // unless the caller explicitly requested another source position.
+        if (settings.startPositionMicroseconds != 0)
+        {
+            result = SetSourcePosition(channel, settings.startPositionMicroseconds);
+            if (result != FMOD_OK)
+                return failPlayback("FMOD::Channel::setPosition", result);
+        }
         result = channel->setVolume(settings.volume);
         if (result != FMOD_OK)
         {
@@ -328,6 +374,33 @@ namespace mrg::audio
         return AudioClipLoadState::Loading;
     }
 
+    bool FmodAudioClip::GetDurationMicroseconds(std::uint64_t& duration, std::string& error) const
+    {
+        duration = 0;
+        if (!sound_ || !HasLiveSystem())
+        {
+            error = "The audio clip no longer belongs to a live audio system.";
+            return false;
+        }
+        unsigned int frames = 0;
+        float frequency = 0;
+        const auto result = SoundTiming(sound_, frames, frequency);
+        if (result != FMOD_OK)
+        {
+            error = MakeFmodError("FMOD sound timing", result);
+            return false;
+        }
+        const long double microseconds = std::round(static_cast<long double>(frames) * 1'000'000 / frequency);
+        if (microseconds >= static_cast<long double>(std::numeric_limits<std::uint64_t>::max()))
+        {
+            error = "The audio duration exceeds the microsecond range.";
+            return false;
+        }
+        duration = static_cast<std::uint64_t>(microseconds);
+        error.clear();
+        return true;
+    }
+
     bool FmodAudioClip::HasLiveSystem() const noexcept
     {
         return lifetime_ != nullptr &&
@@ -357,7 +430,9 @@ namespace mrg::audio
             (loadMode != AudioLoadMode::Sample
                 ? FMOD_CREATESTREAM
                 : FMOD_CREATESAMPLE) |
-            (loadMode == AudioLoadMode::StreamAsync ? FMOD_NONBLOCKING : 0);
+            ((loadMode == AudioLoadMode::StreamAsync || loadMode == AudioLoadMode::StreamAsyncAccurate)
+                ? FMOD_NONBLOCKING : 0) |
+            (loadMode == AudioLoadMode::StreamAsyncAccurate ? FMOD_ACCURATETIME : 0);
         const FMOD_RESULT result = fmodBackend->NativeSystem()->createSound(
             utf8Path.c_str(),
             mode,

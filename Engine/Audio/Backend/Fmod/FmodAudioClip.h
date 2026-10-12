@@ -18,6 +18,7 @@ namespace mrg::audio
             FMOD::Sound* sound) noexcept;
         ~FmodAudioClip() override;
         AudioClipLoadState LoadState(std::string& errorMessage) const override;
+        bool GetDurationMicroseconds(std::uint64_t& duration, std::string& errorMessage) const override;
 
         [[nodiscard]] std::unique_ptr<IAudioVoiceBackend> Play(
             const AudioPlaybackSettings& settings,

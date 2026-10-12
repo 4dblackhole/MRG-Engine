@@ -12,6 +12,8 @@ Visual2D 텍스트와 ComboBox는 renderer 기본 글꼴, 시스템 family 또�
 `SceneGameClient::AudioPlayback()`은 Scene 사이에서 공유하는 재생 관리자를 제공한다.
 사용법과 Clip·Voice 수명은 [AudioPlayback.md](Docs/AudioPlayback.md)에 있다.
 `StreamAsync`는 파일 열기를 비동기로 요청하고 `AudioClip::LoadState`로 준비 상태를 조회한다.
+`StreamAsyncAccurate`는 정확한 길이/PCM seek 준비도 비동기로 수행한다. Clip 길이 조회,
+마이크로초 시작 위치와 준비된 Voice의 DSP 예약, 취소 Clip의 지연 해제를 지원한다.
 화면 Sprite는 `SceneGameClient::ScreenVisuals()`가 Canvas와 이미지 등록을 소유하고
 Scene 대신 매 프레임 제출한다. 월드·곡면 Canvas는 명시적 pass로 유지한다.
 

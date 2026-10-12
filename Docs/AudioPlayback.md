@@ -25,13 +25,19 @@ std::unique_ptr<mrg::audio::AudioVoice> voice =
 ```
 
 `startDspClock == 0`은 즉시 재생이다. `AudioVoice`는 pause, stop, volume과 pitch를
-제어한다. `Restart()`는 기존 native Voice/Channel의 재생 위치를 처음으로 되돌리고
+제어한다. `Restart()`는 기존 native Voice/Channel의 재생 위치를 지정한 시작 위치(기본 0)로 되돌리고
 새 설정과 Bus를 적용하므로, 같은 짧은 효과음을 겹치지 않고 다시 시작할 때 별도
 Channel을 만들지 않는다. Voice 객체를 버려도 재생은 계속되며 명시적으로
 `Stop()`한 경우에만 정지한다. 긴 음악은 `AudioLoadMode::Stream`, 짧은 히트사운드는
 `AudioLoadMode::Sample`로 로드한다.
 
 ## SceneGameClient 공통 재생 관리
+
+2026-10-12 source seek/duration/retire 변경은 Debug/Release x64 전체
+`MRG-Engine.sln` Rebuild와 두 구성의 `MRG.Collision.Tests`로 검증했다.
+SDK probe는 원본 us 위치·길이·DSP 예약 전달과 Loading Clip 유지/Ready 후 해제를 검사한다.
+Client의 별도 에디터 회귀는 실제 MP3의 정확한 비동기 열기/끝부분 seek/정상 종료/범위 밖
+위치 거부를 FMOD NoSound로 검사한다. 물리 장치 청취나 수동 UI 검증은 아니다.
 
 `AudioLoadMode::StreamAsync`는 FMOD 비동기 파일 열기를 사용한다. 생성 직후의 clip은
 재생 준비가 끝나지 않았을 수 있으므로 `AudioClip::LoadState(error)`를 polling한다.
@@ -41,6 +47,22 @@ Clip을 Loading/Playing에서 해제하면 native I/O 또는 mixer를 기다릴 
 UI caller는 준비가 끝날 때까지 소유권을 유지하고, 정지한 clip도 Ready/Failed를 확인한 뒤
 해제한다. 시스템 종료에서는 남은 native 작업을 정리할 수 있다. 이 동작은
 [FMOD Sound::getOpenState/release](https://www.fmod.com/docs/2.03/api/core-api-sound.html)에 따른다.
+
+`StreamAsyncAccurate`는 비동기 열기에 `FMOD_ACCURATETIME`을 더한다. VBR 파일의
+전체 길이/PCM seek 테이블 준비도 비동기 작업에 포함되므로 Ready까지 기다린다.
+`AudioClip::GetDurationMicroseconds`는 원본 PCM frame 수와 기본 주파수로 길이를 계산한다.
+`AudioPlaybackSettings::startPositionMicroseconds`는 출력 DSP clock과 독립적인 파일 위치이며
+가장 가까운 원본 PCM frame으로 변환한다. 파일 끝 이상은 오류다.
+원본 sample rate와 정확한 VBR seek 요건은 [FMOD Sound API](https://www.fmod.com/docs/2.03/api/core-api-sound.html)를 따른다.
+비동기 stream seek도 Loading 상태를 거칠 수 있다. paused Voice로 준비하고 LoadState가
+Ready/Playing이 된 후 `AudioVoice::SetDelay(startDspClock, endDspClock, error)`와 SetPaused(false)로
+실제 시작을 예약한다. 기본 시작 위치 0인 새 Voice는 불필요한 seek를 수행하지 않는다.
+
+UI 소유자가 취소/정지한 Clip은 `AudioSystem::RetireClip(shared_ptr)`로 소유권을 넘길 수 있다.
+AudioSystem::Update는 Ready/Failed가 된 Clip을 해제하며 Loading/Playing은 유지한다.
+Voice를 먼저 정지해야 하며 API/Update는 같은 Client thread에서 호출한다.
+시스템 종료에서는 backend 작업을 먼저 종료하고 남은 retire 목록을 해제한다.
+이는 다른 Clip/Voice의 소유권이나 SceneGameClient 공통 재생을 바꾸지 않는다.
 
 
 `SceneGameClient::AudioPlayback()`은 Client 전체 수명의 `AudioPlaybackManager`를

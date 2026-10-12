@@ -55,6 +55,8 @@ namespace mrg::audio
     {
     public:
         virtual ~IAudioClipBackend() = default;
+        [[nodiscard]] virtual bool GetDurationMicroseconds(
+            std::uint64_t& duration, std::string& errorMessage) const = 0;
         [[nodiscard]] virtual AudioClipLoadState LoadState(std::string& errorMessage) const
         {
             errorMessage.clear();
@@ -77,6 +79,8 @@ namespace mrg::audio
         AudioClip& operator=(AudioClip&&) = delete;
 
         [[nodiscard]] bool IsValid() const noexcept;
+        [[nodiscard]] bool GetDurationMicroseconds(
+            std::uint64_t& duration, std::string& errorMessage) const;
         // Async streams may only be played after Ready. Releasing Loading or
         // Playing streams can wait for native I/O or the mixer to finish.
         [[nodiscard]] AudioClipLoadState LoadState(std::string& errorMessage) const;
@@ -162,7 +166,8 @@ namespace mrg::audio
             std::string& errorMessage);
 
     // Public backend-neutral service exposed to the rest of the engine. It
-    // owns the system backend, but not Client AudioClip objects.
+    // owns the backend and temporarily retains clips explicitly retired by
+    // the Client. Other AudioClip objects are owned by their callers.
     class AudioSystem final
     {
     public:
@@ -178,6 +183,9 @@ namespace mrg::audio
             AudioClipBackendFactory clipFactory,
             std::string& errorMessage);
         void Update();
+        // Retain a stopped/cancelled async clip until native I/O has settled.
+        // Call only on the Client thread; Update releases Ready/Failed clips.
+        void RetireClip(std::shared_ptr<AudioClip> clip);
         void Shutdown() noexcept;
 
         [[nodiscard]] bool IsInitialized() const noexcept;
@@ -235,5 +243,6 @@ namespace mrg::audio
         AudioConfig config_{};
         std::shared_ptr<std::atomic_size_t> liveObjectCount_;
         bool initialized_{};
+        std::vector<std::shared_ptr<AudioClip>> retiredClips_;
     };
 }

@@ -38,10 +38,12 @@ namespace
         int stops{};
         int restarts{};
         std::uint64_t startDspClock{};
+        std::uint64_t startPositionMicroseconds{};
         mrg::audio::IAudioBusBackend* restartBus{};
     };
     std::vector<std::shared_ptr<PlaybackProbe>> playbackProbes;
     bool failTestPlayback{};
+    mrg::audio::AudioClipLoadState testClipState{mrg::audio::AudioClipLoadState::Ready};
 
     class TestVisual2DRenderer final :
         public mrg::graphics::Visual2DRenderSystem
@@ -184,6 +186,7 @@ namespace
             probe_->playing = true;
             probe_->paused = settings.startPaused;
             probe_->startDspClock = settings.startDspClock;
+            probe_->startPositionMicroseconds = settings.startPositionMicroseconds;
             probe_->restartBus = bus;
             return true;
         }
@@ -205,6 +208,8 @@ namespace
         }
         bool SetVolume(float, std::string&) override { return true; }
         bool SetPitch(float, std::string&) override { return true; }
+        bool SetDelay(std::uint64_t start, std::uint64_t, std::string&) override
+        { probe_->startDspClock = start; return true; }
     private:
         std::shared_ptr<PlaybackProbe> probe_;
     };
@@ -212,6 +217,9 @@ namespace
     class TestClip final : public mrg::audio::IAudioClipBackend
     {
     public:
+        bool GetDurationMicroseconds(std::uint64_t& duration, std::string&) const override
+        { duration = 1'000'000; return true; }
+        mrg::audio::AudioClipLoadState LoadState(std::string&) const override { return testClipState; }
         std::unique_ptr<mrg::audio::IAudioVoiceBackend> Play(
             const mrg::audio::AudioPlaybackSettings& settings,
             mrg::audio::IAudioBusBackend*, std::string& error) override
@@ -224,6 +232,7 @@ namespace
             auto probe = std::make_shared<PlaybackProbe>();
             probe->paused = settings.startPaused;
             probe->startDspClock = settings.startDspClock;
+            probe->startPositionMicroseconds = settings.startPositionMicroseconds;
             playbackProbes.push_back(probe);
             return std::make_unique<TestVoice>(std::move(probe));
         }
@@ -255,11 +264,15 @@ namespace
         std::shared_ptr<AudioBus> bus = audio.CreateBus("probe", nullptr, error);
         Check(clip != nullptr && bus != nullptr, "audio test creates resources");
         if (clip == nullptr || bus == nullptr) { return; }
+        std::uint64_t duration = 0;
+        Check(clip->GetDurationMicroseconds(duration, error) && duration == 1'000'000,
+            "clip forwards source duration in microseconds");
         const std::weak_ptr<AudioClip> weakClip = clip;
         const std::weak_ptr<AudioBus> weakBus = bus;
         AudioPlaybackSettings settings;
         settings.startPaused = true;
         settings.startDspClock = 123456;
+        settings.startPositionMicroseconds = 456789;
         const auto first = manager.Play(clip, settings, bus, error);
         const auto second = manager.Play(clip, {}, bus, error);
         Check(first != 0 && second != 0 && first != second,
@@ -272,6 +285,10 @@ namespace
             manager.PlaybackCount() == 2 && playbackProbes[0]->paused &&
             playbackProbes[0]->startDspClock == 123456,
             "manager retains assets and paused/scheduled voices after owner releases them");
+        Check(playbackProbes[0]->startPositionMicroseconds == 456789 &&
+            manager.FindVoice(first)->SetDelay(222222, 0, error) &&
+            playbackProbes[0]->startDspClock == 222222,
+            "source seek and prepared-voice DSP start are forwarded independently");
         Check(manager.FindVoice(first)->SetPaused(false, error) &&
             !playbackProbes[0]->paused, "managed voice supports resume");
         std::shared_ptr<AudioBus> restartBus =
@@ -280,6 +297,7 @@ namespace
         AudioPlaybackSettings restartSettings;
         restartSettings.startPaused = true;
         restartSettings.startDspClock = 654321;
+        restartSettings.startPositionMicroseconds = 1234;
         Check(manager.Restart(
                 first, restartSettings, restartBus, error) &&
             manager.PlaybackCount() == 2 &&
@@ -287,6 +305,7 @@ namespace
             playbackProbes[0]->restarts == 1 &&
             playbackProbes[0]->paused &&
             playbackProbes[0]->startDspClock == 654321 &&
+            playbackProbes[0]->startPositionMicroseconds == 1234 &&
             playbackProbes[0]->restartBus != nullptr,
             "managed playback restarts its existing voice without allocating another one");
         restartBus.reset();
@@ -331,6 +350,15 @@ namespace
         Check(playbackProbes.back()->stops == 1,
             "manager destructor explicitly stops playback");
         playbackProbes.clear();
+        std::shared_ptr<AudioClip> retired = audio.LoadSound("retired", error);
+        const std::weak_ptr<AudioClip> weakRetired = retired;
+        testClipState = AudioClipLoadState::Loading;
+        audio.RetireClip(std::move(retired));
+        audio.Update();
+        Check(!weakRetired.expired(), "retired loading clips survive until native I/O settles");
+        testClipState = AudioClipLoadState::Ready;
+        audio.Update();
+        Check(weakRetired.expired(), "settled retired clips release on the audio update");
     }
 
     [[nodiscard]] bool MatricesNearlyEqual(

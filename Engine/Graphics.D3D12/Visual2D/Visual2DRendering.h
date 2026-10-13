@@ -26,6 +26,13 @@ namespace mrg::graphics
         // that can be assigned to a SpriteVisualComponent or widget style.
         [[nodiscard]] virtual visual2d::ImageHandle LoadImage(
             const std::filesystem::path& path) = 0;
+        // Start/poll CPU decoding without waiting. On true, inspect error;
+        // successful images can then be registered on the render thread.
+        virtual bool PrepareImages(std::span<const std::filesystem::path>, std::string &error)
+        {
+            error.clear();
+            return true;
+        }
 
         // Returns the original decoded pixel extent for an image handle.
         // Invalid or expired handles return a zero size. Sprite bounds remain

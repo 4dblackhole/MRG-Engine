@@ -15,6 +15,8 @@
   수정한 뒤 `Engine/SDK/GenerateCoreHeader.ps1`로 다시 생성한다.
 - FMOD는 현재 기본 오디오 backend지만 공개 API에는 FMOD 타입을 노출하지 않는다.
 - 게임 규칙, Scene ID, 게임별 asset과 화면 전환 정책은 Client 저장소에 둔다.
+- 이미지 비동기 준비와 업로드 fence 수명은 Visual2DPerformanceAndOwnership을,
+  SampleAsync/Voice 유지관리는 AudioPlayback을, 텍스트 LRU는 TextRendering을 따른다.
 
 새 게임에서 엔진을 연결하는 방법은
 [EngineIntegration.md](EngineIntegration.md), 현재 샘플의 실제 시작·종료 과정은

@@ -16,6 +16,7 @@
 #include <cstring>
 #include <exception>
 #include <limits>
+#include <list>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -544,6 +545,7 @@ namespace mrg::graphics
             pendingUploads.clear();
             glyphCache.clear();
             layoutCache.clear();
+            layoutRecency.clear();
             atlasPages.clear();
             pipelineState.Reset();
             rootSignature.Reset();
@@ -927,12 +929,17 @@ namespace mrg::graphics
             if (const auto found = layoutCache.find(key);
                 found != layoutCache.end())
             {
-                return found->second;
+                layoutRecency.splice(layoutRecency.begin(), layoutRecency, found->second.recency);
+                return found->second.layout;
             }
 
-            if (layoutCache.size() >= 128)
+            // Keep the working set across frames. Evict one least-recently
+            // used layout; clearing everything made 129 static labels thrash.
+            constexpr std::size_t MaximumCachedLayouts = 2048;
+            if (layoutCache.size() >= MaximumCachedLayouts)
             {
-                layoutCache.clear();
+                layoutCache.erase(layoutRecency.back());
+                layoutRecency.pop_back();
             }
 
             const Font::Impl& font =
@@ -971,7 +978,16 @@ namespace mrg::graphics
                     command.layoutSizePixels.y,
                     layout.ReleaseAndGetAddressOf()),
                 "IDWriteFactory::CreateTextLayout");
-            layoutCache.emplace(std::move(key), layout);
+            layoutRecency.push_front(key);
+            try
+            {
+                layoutCache.emplace(std::move(key), LayoutEntry{layout, layoutRecency.begin()});
+            }
+            catch (...)
+            {
+                layoutRecency.pop_front();
+                throw;
+            }
             return layout;
         }
 
@@ -1632,10 +1648,13 @@ namespace mrg::graphics
         std::uint32_t atlasDescriptorSize{};
         std::vector<AtlasPage> atlasPages;
         std::unordered_map<GlyphKey, GlyphEntry, GlyphKeyHash> glyphCache;
-        std::unordered_map<
-            LayoutKey,
-            ComPtr<IDWriteTextLayout>,
-            LayoutKeyHash> layoutCache;
+        struct LayoutEntry
+        {
+            ComPtr<IDWriteTextLayout> layout;
+            std::list<LayoutKey>::iterator recency;
+        };
+        std::list<LayoutKey> layoutRecency;
+        std::unordered_map<LayoutKey, LayoutEntry, LayoutKeyHash> layoutCache;
         std::vector<PendingGlyphUpload> pendingUploads;
         std::vector<GlyphInstance> pendingInstances;
         std::array<FrameInstanceBuffer, FrameCount> frameBuffers{};

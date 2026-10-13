@@ -28,6 +28,7 @@ namespace mrg::graphics
 
         [[nodiscard]] visual2d::ImageHandle LoadImage(
             const std::filesystem::path& path) override;
+        bool PrepareImages(std::span<const std::filesystem::path> paths, std::string &error) override;
         [[nodiscard]] visual2d::Size GetImageSize(
             visual2d::ImageHandle image) const noexcept override;
         void SubmitScreen(

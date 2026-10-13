@@ -12,6 +12,11 @@ Visual2D 텍스트와 ComboBox는 renderer 기본 글꼴, 시스템 family 또�
 `SceneGameClient::AudioPlayback()`은 Scene 사이에서 공유하는 재생 관리자를 제공한다.
 사용법과 Clip·Voice 수명은 [AudioPlayback.md](Docs/AudioPlayback.md)에 있다.
 `StreamAsync`는 파일 열기를 비동기로 요청하고 `AudioClip::LoadState`로 준비 상태를 조회한다.
+`SampleAsync`도 준비 상태를 확인한 뒤 재생한다. Visual2D의 `PrepareImages`는 CPU 이미지
+디코드를 비동기로 준비하며 GPU 업로드는 fence까지 자원을 보관해 이미지별 대기를 제거한다.
+텍스트 레이아웃은 2,048항목 LRU이고 화면 clip 밖의 primitive는 제출 전에 제외한다.
+상세 계약은 [Visual2D 성능·소유권](Docs/Visual2DPerformanceAndOwnership.md)과
+[텍스트 렌더링](Docs/TextRendering.md)에 있다.
 `StreamAsyncAccurate`는 정확한 길이/PCM seek 준비도 비동기로 수행한다. Clip 길이 조회,
 마이크로초 시작 위치와 준비된 Voice의 DSP 예약, 취소 Clip의 지연 해제를 지원한다.
 화면 Sprite는 `SceneGameClient::ScreenVisuals()`가 Canvas와 이미지 등록을 소유하고

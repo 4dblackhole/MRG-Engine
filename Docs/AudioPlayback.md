@@ -33,6 +33,12 @@ Channel을 만들지 않는다. Voice 객체를 버려도 재생은 계속되며
 
 ## SceneGameClient 공통 재생 관리
 
+`SampleAsync`는 Sample의 CREATESAMPLE에 NONBLOCKING을 적용합니다. StreamAsync처럼
+LoadState가 Ready인지 확인한 뒤 재생해야 하며 기존 동기 Sample/Stream 값은 유지합니다.
+SceneGameClient는 native Voice 종료 확인을 최대 500Hz(2ms 주기)로 실행합니다.
+AudioPlaybackManager를 직접 사용하는 호출자의 Update는 즉시 검사하며, 입력 timestamp나
+DSP 예약 정밀도에는 영향이 없습니다.
+
 2026-10-12 source seek/duration/retire 변경은 Debug/Release x64 전체
 `MRG-Engine.sln` Rebuild와 두 구성의 `MRG.Collision.Tests`로 검증했다.
 SDK probe는 원본 us 위치·길이·DSP 예약 전달과 Loading Clip 유지/Ready 후 해제를 검사한다.

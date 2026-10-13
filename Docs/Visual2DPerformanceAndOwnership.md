@@ -50,6 +50,18 @@ Scene의 Canvas dispatcher가 결정한다.
 
 ## GPU 자원 소유권
 
+`Visual2DRenderSystem::PrepareImages(paths, error)`는 D3D12에서 복사한 파일 경로의 WIC
+디코드를 worker로 보냅니다. false는 준비 중이며, true라도 error가 있으면 실패입니다.
+Ready 뒤 기존 LoadImage/RegisterImage로 GPU 자원을 만듭니다. 다른 renderer의 기본 구현은
+동기 LoadImage 계약을 유지합니다. worker는 그래픽/Scene observer를 빌리지 않습니다.
+PrepareImages/LoadImage/poll은 기존 렌더 소유 스레드에서 호출합니다.
+
+텍스처 업로드는 렌더 queue에 제출한 뒤 이미지별 fence 대기를 하지 않습니다. 같은 queue의
+후속 draw가 copy 뒤에 실행되며, command allocator/list·upload buffer·destination handle을
+완료 fence까지 보관합니다. 정상 프레임에서 완료분을 해제하고 종료 시 남은 작업을 기다립니다.
+화면 SubmitScreen은 clip 밖의 primitive를 텍스트 shaping/instance 생성 전에 거릅니다.
+Canvas 트리 자체의 수집 비용은 남으므로 큰 목록은 Client에서 가시 항목만 생성해야 합니다.
+
 `DrawPacketType::RectangleBatch`는 불변 사각형 geometry를 공유한다. component는
 `shared_ptr<const vector<RectanglePrimitive>>`를 게시한 후 내용을 변경하지 않는다.
 Canvas 수집은 geometry handle만 복사하며 node transform과 clip을 packet에 적용한다.

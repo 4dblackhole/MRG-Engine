@@ -37,6 +37,8 @@ namespace mrg::audio
         StreamAsync,
         // Async stream opening with an accurate duration/PCM seek table.
         StreamAsyncAccurate,
+        // Decode a memory-resident sample without blocking the caller.
+        SampleAsync,
     };
 
     enum class AudioEffectType : std::uint8_t
@@ -2563,6 +2565,10 @@ namespace mrg::graphics
 
 #include <cstdint>
 #include <filesystem>
+#include <future>
+#include <map>
+#include <deque>
+#include <string>
 #include <memory>
 #include <span>
 #include <vector>
@@ -2640,9 +2646,8 @@ namespace mrg::graphics
         std::shared_ptr<RenderTargetTexture>;
 
     // Decodes common image formats through WIC and owns the shader-visible
-    // descriptor heap used by textured materials.  Initial uploads are
-    // synchronous so temporary upload buffers can be released immediately;
-    // no upload wait is added to the normal render loop.
+    // descriptor heap used by textured materials. Upload lifetimes are retained
+    // until their fence completes; decoding can be prepared on a worker.
     class TextureManager final
     {
     public:
@@ -2656,6 +2661,8 @@ namespace mrg::graphics
             ID3D12Device& device,
             ID3D12CommandQueue& commandQueue);
         void Shutdown() noexcept;
+        bool PrepareImages(std::span<const std::filesystem::path> paths, std::string &error);
+        void CollectCompletedUploads();
 
         [[nodiscard]] TextureSetHandle LoadTextureSet(
             std::span<const std::filesystem::path> paths);
@@ -2692,6 +2699,8 @@ namespace mrg::graphics
             std::span<const std::filesystem::path> paths) const;
         [[nodiscard]] static DecodedImage DecodeImage(
             const std::filesystem::path& path);
+        DecodedImage TakePreparedImage(const std::filesystem::path &path);
+        void PollPreparation();
         void BeginUploadCommands();
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE
             InitializeDescriptorBlock(TextureSet& textureSet);
@@ -2702,7 +2711,19 @@ namespace mrg::graphics
             TextureSet& textureSet,
             std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>>&
                 uploadBuffers);
-        void ExecuteUploadAndWait();
+        void ExecuteUpload(std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> buffers, TextureSetHandle target);
+        struct PendingUpload
+        {
+            std::uint64_t fence{};
+            Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+            Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commands;
+            std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> buffers;
+            TextureSetHandle target;
+        };
+        std::deque<PendingUpload> pendingUploads_;
+        std::map<std::filesystem::path, std::shared_ptr<DecodedImage>> preparedImages_;
+        std::future<decltype(preparedImages_)> preparation_;
+        std::string preparationError_;
 
         ID3D12Device* device_{};
         ID3D12CommandQueue* commandQueue_{};
@@ -3185,6 +3206,13 @@ namespace mrg::graphics
         // that can be assigned to a SpriteVisualComponent or widget style.
         [[nodiscard]] virtual visual2d::ImageHandle LoadImage(
             const std::filesystem::path& path) = 0;
+        // Start/poll CPU decoding without waiting. On true, inspect error;
+        // successful images can then be registered on the render thread.
+        virtual bool PrepareImages(std::span<const std::filesystem::path>, std::string &error)
+        {
+            error.clear();
+            return true;
+        }
 
         // Returns the original decoded pixel extent for an image handle.
         // Invalid or expired handles return a zero size. Sprite bounds remain
@@ -3770,6 +3798,7 @@ namespace mrg::scene
         visual2d::ScreenVisual2DManager screenVisuals_;
         SceneManager scenes_;
         bool initialized_{};
+        double playbackMaintenanceSeconds_{};
     };
 }
 // ===== END Engine\Core\Client\SceneGameClient.h =====

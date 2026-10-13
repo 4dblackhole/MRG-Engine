@@ -426,12 +426,14 @@ namespace mrg::audio
 
         FMOD::Sound* sound = nullptr;
         const std::string utf8Path = Utf8Path(path);
-        const FMOD_MODE mode = FMOD_DEFAULT |
-            (loadMode != AudioLoadMode::Sample
-                ? FMOD_CREATESTREAM
-                : FMOD_CREATESAMPLE) |
-            ((loadMode == AudioLoadMode::StreamAsync || loadMode == AudioLoadMode::StreamAsyncAccurate)
-                ? FMOD_NONBLOCKING : 0) |
+        const FMOD_MODE mode =
+            FMOD_DEFAULT |
+            (loadMode != AudioLoadMode::Sample && loadMode != AudioLoadMode::SampleAsync ? FMOD_CREATESTREAM
+                                                                                         : FMOD_CREATESAMPLE) |
+            ((loadMode == AudioLoadMode::StreamAsync || loadMode == AudioLoadMode::StreamAsyncAccurate ||
+              loadMode == AudioLoadMode::SampleAsync)
+                 ? FMOD_NONBLOCKING
+                 : 0) |
             (loadMode == AudioLoadMode::StreamAsyncAccurate ? FMOD_ACCURATETIME : 0);
         const FMOD_RESULT result = fmodBackend->NativeSystem()->createSound(
             utf8Path.c_str(),

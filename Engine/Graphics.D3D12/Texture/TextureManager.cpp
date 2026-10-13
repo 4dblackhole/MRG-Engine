@@ -4,6 +4,7 @@
 #include <wincodec.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -236,6 +237,68 @@ namespace mrg::graphics
 
     RenderTargetTexture::~RenderTargetTexture() = default;
 
+    void TextureManager::PollPreparation()
+    {
+        if (!preparation_.valid() || preparation_.wait_for(std::chrono::seconds{0}) != std::future_status::ready)
+            return;
+        try
+        {
+            preparedImages_.merge(preparation_.get());
+        }
+        catch (const std::exception &error)
+        {
+            preparationError_ = error.what();
+        }
+    }
+
+    bool TextureManager::PrepareImages(std::span<const std::filesystem::path> paths, std::string &error)
+    {
+        if (!initialized_)
+            throw std::logic_error("Image preparation requires an initialized texture manager.");
+        PollPreparation();
+        error = std::exchange(preparationError_, {});
+        if (!error.empty())
+            return true;
+        if (preparation_.valid())
+            return false;
+        std::vector<std::filesystem::path> missing;
+        for (const auto &path : paths)
+            if (!preparedImages_.contains(path.lexically_normal()))
+                missing.push_back(path.lexically_normal());
+        if (missing.empty())
+            return true;
+        preparation_ = std::async(std::launch::async,
+                                  [paths = std::move(missing)]
+                                  {
+                                      const auto result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+                                      ThrowIfFailed(result, "Initialize image preparation COM apartment");
+                                      struct Apartment
+                                      {
+                                          ~Apartment()
+                                          {
+                                              CoUninitialize();
+                                          }
+                                      } apartment;
+                                      std::map<std::filesystem::path, std::shared_ptr<DecodedImage>> decoded;
+                                      for (const auto &path : paths)
+                                          decoded.emplace(path, std::make_shared<DecodedImage>(DecodeImage(path)));
+                                      return decoded;
+                                  });
+        return false;
+    }
+
+    TextureManager::DecodedImage TextureManager::TakePreparedImage(const std::filesystem::path &path)
+    {
+        PollPreparation();
+        if (auto cached = preparedImages_.find(path.lexically_normal()); cached != preparedImages_.end())
+        {
+            auto image = std::move(*cached->second);
+            preparedImages_.erase(cached);
+            return image;
+        }
+        return DecodeImage(path);
+    }
+
     TextureManager::~TextureManager()
     {
         Shutdown();
@@ -314,6 +377,35 @@ namespace mrg::graphics
 
     void TextureManager::Shutdown() noexcept
     {
+        // The worker owns only copied paths. Join at teardown, never in a frame,
+        // so a subsequent Initialize cannot consume an earlier preparation job.
+        if (preparation_.valid())
+        {
+            try
+            {
+                static_cast<void>(preparation_.get());
+            }
+            catch (...)
+            {
+            }
+        }
+        if (!pendingUploads_.empty() && pendingUploads_.back().fence == 0 && commandQueue_ && uploadFence_)
+        {
+            // A failed submission signal must not leave an unreachable fence
+            // that Shutdown waits on forever. Retry once while resources live.
+            const auto fence = nextUploadFenceValue_++;
+            if (SUCCEEDED(commandQueue_->Signal(uploadFence_.Get(), fence)))
+                pendingUploads_.back().fence = fence;
+        }
+        if (!pendingUploads_.empty() && uploadFence_ && uploadFenceEvent_ && pendingUploads_.back().fence != 0 &&
+            uploadFence_->GetCompletedValue() < pendingUploads_.back().fence)
+        {
+            if (SUCCEEDED(uploadFence_->SetEventOnCompletion(pendingUploads_.back().fence, uploadFenceEvent_)))
+                WaitForSingleObject(uploadFenceEvent_, INFINITE);
+        }
+        pendingUploads_.clear();
+        preparedImages_.clear();
+        preparationError_.clear();
         if (uploadFenceEvent_ != nullptr)
         {
             CloseHandle(uploadFenceEvent_);
@@ -342,7 +434,7 @@ namespace mrg::graphics
         decodedImages.reserve(paths.size());
         for (const std::filesystem::path& path : paths)
         {
-            decodedImages.push_back(DecodeImage(path));
+            decodedImages.push_back(TakePreparedImage(path));
         }
 
         BeginUploadCommands();
@@ -379,7 +471,7 @@ namespace mrg::graphics
             throw;
         }
 
-        ExecuteUploadAndWait();
+        ExecuteUpload(std::move(uploadBuffers), textureSet);
         nextDescriptorBlock_ += MaxTexturesPerSet;
         return textureSet;
     }
@@ -406,7 +498,7 @@ namespace mrg::graphics
 
         // Decode before opening the upload list so invalid user assets cannot
         // leave the reusable allocator in a recording state.
-        const DecodedImage decodedImage = DecodeImage(path);
+        const DecodedImage decodedImage = TakePreparedImage(path);
         D3D12TextureSet& mutableSet =
             RequireMutableTextureSet(textureSet);
         BeginUploadCommands();
@@ -431,7 +523,7 @@ namespace mrg::graphics
             throw;
         }
 
-        ExecuteUploadAndWait();
+        ExecuteUpload(std::move(uploadBuffers), textureSet);
         return textureSet;
     }
 
@@ -607,12 +699,21 @@ namespace mrg::graphics
 
     void TextureManager::BeginUploadCommands()
     {
-        ThrowIfFailed(
-            uploadAllocator_->Reset(),
-            "Reset texture upload command allocator");
-        ThrowIfFailed(
-            uploadCommandList_->Reset(uploadAllocator_.Get(), nullptr),
-            "Reset texture upload command list");
+        CollectCompletedUploads();
+        if (!uploadAllocator_)
+        {
+            ThrowIfFailed(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                                          IID_PPV_ARGS(uploadAllocator_.ReleaseAndGetAddressOf())),
+                          "Create texture upload allocator");
+            ThrowIfFailed(device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, uploadAllocator_.Get(), nullptr,
+                                                     IID_PPV_ARGS(uploadCommandList_.ReleaseAndGetAddressOf())),
+                          "Create texture upload list");
+        }
+        else
+        {
+            ThrowIfFailed(uploadAllocator_->Reset(), "Reset texture upload allocator");
+            ThrowIfFailed(uploadCommandList_->Reset(uploadAllocator_.Get(), nullptr), "Reset texture upload list");
+        }
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE TextureManager::InitializeDescriptorBlock(
@@ -776,32 +877,30 @@ namespace mrg::graphics
         uploadBuffers.push_back(std::move(uploadBuffer));
     }
 
-    void TextureManager::ExecuteUploadAndWait()
+    void TextureManager::CollectCompletedUploads()
     {
-        ID3D12CommandList* commandLists[]{uploadCommandList_.Get()};
-        commandQueue_->ExecuteCommandLists(1, commandLists);
-
-        // Texture loading is an initialization path. Waiting here keeps the
-        // temporary upload buffers local and adds no normal-frame GPU wait.
-        const std::uint64_t fenceValue = nextUploadFenceValue_++;
-        ThrowIfFailed(
-            commandQueue_->Signal(uploadFence_.Get(), fenceValue),
-            "Signal texture upload fence");
-        if (uploadFence_->GetCompletedValue() >= fenceValue)
-        {
+        if (!uploadFence_)
             return;
-        }
+        while (!pendingUploads_.empty() && pendingUploads_.front().fence != 0 &&
+               uploadFence_->GetCompletedValue() >= pendingUploads_.front().fence)
+            pendingUploads_.pop_front();
+    }
 
-        ThrowIfFailed(
-            uploadFence_->SetEventOnCompletion(
-                fenceValue,
-                uploadFenceEvent_),
-            "Wait for texture upload fence");
-        if (WaitForSingleObject(uploadFenceEvent_, INFINITE) != WAIT_OBJECT_0)
-        {
-            throw std::runtime_error(
-                "Waiting for texture upload completion failed.");
-        }
+    void TextureManager::ExecuteUpload(std::vector<ComPtr<ID3D12Resource>> buffers, TextureSetHandle target)
+    {
+        const auto fenceValue = nextUploadFenceValue_++;
+        pendingUploads_.push_back(
+            {fenceValue, uploadAllocator_, uploadCommandList_, std::move(buffers), std::move(target)});
+        ID3D12CommandList *commands[]{uploadCommandList_.Get()};
+        commandQueue_->ExecuteCommandLists(1, commands);
+        const auto signalResult = commandQueue_->Signal(uploadFence_.Get(), fenceValue);
+        // Later draws use this same queue, which orders them after the copy.
+        // Keep the allocator, command list, upload and destination alive on CPU.
+        uploadAllocator_.Reset();
+        uploadCommandList_.Reset();
+        if (FAILED(signalResult))
+            pendingUploads_.back().fence = 0;
+        ThrowIfFailed(signalResult, "Signal texture upload fence");
     }
 
     ID3D12DescriptorHeap* TextureManager::DescriptorHeap() const noexcept

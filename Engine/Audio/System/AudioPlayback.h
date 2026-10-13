@@ -17,6 +17,8 @@ namespace mrg::audio
         StreamAsync,
         // Async stream opening with an accurate duration/PCM seek table.
         StreamAsyncAccurate,
+        // Decode a memory-resident sample without blocking the caller.
+        SampleAsync,
     };
 
     enum class AudioEffectType : std::uint8_t

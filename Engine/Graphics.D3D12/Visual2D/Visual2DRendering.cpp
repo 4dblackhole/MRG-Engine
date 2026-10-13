@@ -849,6 +849,17 @@ namespace mrg::graphics
         return implementation_->GetImageSize(image);
     }
 
+    bool D3D12Visual2DRenderer::PrepareImages(std::span<const std::filesystem::path> paths, std::string &error)
+    {
+        if (!IsInitialized())
+            throw std::logic_error("Image preparation requires an initialized Visual2D renderer.");
+        std::vector<std::filesystem::path> missing;
+        for (const auto &path : paths)
+            if (!implementation_->imageHandlesByPath.contains(ImageCacheKey(path.lexically_normal())))
+                missing.push_back(path);
+        return implementation_->meshRendering->Textures().PrepareImages(missing, error);
+    }
+
     void D3D12Visual2DRenderer::SubmitScreen(
         const visual2d::Visual2DCanvas& canvas,
         const RenderContext& context,
@@ -920,6 +931,11 @@ namespace mrg::graphics
                 screenOrigin,
                 static_cast<float>(context.width),
                 static_cast<float>(context.height));
+            // Clip before text shaping or instance submission. A shader clip
+            // alone still paid all CPU work for off-screen list rows/cells.
+            if (bounds.x >= clipRectPixels.z || bounds.y >= clipRectPixels.w ||
+                bounds.x + bounds.width <= clipRectPixels.x || bounds.y + bounds.height <= clipRectPixels.y)
+                return;
             const DirectX::XMFLOAT4 roundedRectLocal{
                 0.0F,
                 0.0F,

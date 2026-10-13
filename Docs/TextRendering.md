@@ -26,6 +26,10 @@ CPU 제출 목록에 저장하고, `Flush`가 아틀라스 page별로 정렬해
 
 ## 글꼴 로드
 
+레이아웃 캐시는 문자열·글꼴·크기·영역·정렬을 키로 하는 2,048항목 LRU입니다.
+캐시 hit는 사용 순서를 갱신하고 가득 차면 가장 오래 쓰지 않은 한 항목만 축출합니다.
+기존의 128항목 전체 삭제는 제거했습니다. 최초 레이아웃/글리프 생성 비용은 남습니다.
+
 ```cpp
 mrg::graphics::FontHandle fileFont =
     services.textRendering.LoadFontFile(

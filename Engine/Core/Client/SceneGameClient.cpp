@@ -51,7 +51,12 @@ namespace mrg::scene
         screenVisuals_.Update(context.deltaSeconds);
         const bool keepRunning = scenes_.Update(context);
         OnClientUpdated(context);
-        audioPlayback_.Update();
+        playbackMaintenanceSeconds_ += context.deltaSeconds;
+        if (playbackMaintenanceSeconds_ >= 0.002)
+        {
+            playbackMaintenanceSeconds_ = 0;
+            audioPlayback_.Update();
+        }
         return keepRunning;
     }
 
@@ -84,6 +89,7 @@ namespace mrg::scene
         screenVisuals_.Shutdown();
         audioPlayback_.StopAll();
         initialized_ = false;
+        playbackMaintenanceSeconds_ = 0;
     }
 
     audio::AudioPlaybackManager& SceneGameClient::AudioPlayback() noexcept

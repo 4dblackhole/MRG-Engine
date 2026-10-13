@@ -316,6 +316,7 @@ namespace mrg::graphics
         }
 
         currentFrameIndex_ = frameIndex;
+        textureManager_.CollectCompletedUploads();
         // D3D12Renderer waited for this frame index before calling us, so GPU
         // resources retained by its previous submission are now releasable.
         instanceBuffers_[currentFrameIndex_].retainedMaterials.clear();

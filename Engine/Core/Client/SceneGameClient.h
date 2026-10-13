@@ -55,5 +55,6 @@ namespace mrg::scene
         visual2d::ScreenVisual2DManager screenVisuals_;
         SceneManager scenes_;
         bool initialized_{};
+        double playbackMaintenanceSeconds_{};
     };
 }

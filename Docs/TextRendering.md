@@ -20,15 +20,12 @@
 6. `D3D12Renderer::EndFrame`은 메시 draw를 먼저 기록하고 텍스트 draw를
    기록한다. 그러므로 일반 텍스트는 3D 장면 위에 합성된다.
 
-`Submit`은 command list를 즉시 실행하지 않는다. DirectWrite 레이아웃 결과를
-CPU 제출 목록에 저장하고, `Flush`가 아틀라스 page별로 정렬해
-`DrawInstanced`를 기록한다.
+`Submit`은 command list를 즉시 실행하지 않는다. 화면 clip과 겹치는 글리프를
+CPU 제출 목록에 저장하고 `Flush`가 `DrawInstanced`를 기록한다.
+제출 순서를 유지하면서 연속된 같은 아틀라스 페이지만 묶는다. 페이지별 정렬로
+반투명 텍스트의 앞뒤 합성 순서를 바꾸지 않는다.
 
 ## 글꼴 로드
-
-레이아웃 캐시는 문자열·글꼴·크기·영역·정렬을 키로 하는 2,048항목 LRU입니다.
-캐시 hit는 사용 순서를 갱신하고 가득 차면 가장 오래 쓰지 않은 한 항목만 축출합니다.
-기존의 128항목 전체 삭제는 제거했습니다. 최초 레이아웃/글리프 생성 비용은 남습니다.
 
 ```cpp
 mrg::graphics::FontHandle fileFont =
@@ -44,8 +41,8 @@ mrg::graphics::FontHandle systemFont =
 `FontHandle`을 해제하면 되며 DirectWrite COM 타입은 공개 API에 노출되지
 않는다.
 
-Visual2D는 직접 `FontHandle`을 보관하지 않고 backend-neutral descriptor를
-draw packet에 싣습니다.
+Visual2D는 직접 `FontHandle`을 보관하지 않고 backend-neutral `TextContent`에
+문자열·글꼴 descriptor·크기·정렬을 담아 공유합니다.
 
 ```cpp
 auto& label = mrg::visual2d::CreateLabel(parent, bounds, L"Text", "Label");
@@ -60,7 +57,8 @@ combo.GetComponent<mrg::visual2d::ComboBoxBehaviorComponent>()->SetFont(
 `Default`는 Visual2D renderer의 기본 글꼴을 사용합니다. `System`의 value는
 시스템 family 이름, `File`의 value는 실행 파일 기준 경로입니다. D3D12
 Visual2D renderer는 화면용·texture용 `TextRenderSystem`마다 descriptor를
-`FontHandle`로 한 번 해석해 캐시하고 종료할 때 해제합니다.
+`FontHandle`로 해석합니다. 살아 있는 `TextContent`별로 글꼴과 배치 결과를 유지해
+매 프레임 경로 정규화·문자열 복사·DirectWrite Draw를 반복하지 않습니다.
 
 ## 문자열 제출
 
@@ -84,20 +82,75 @@ renderContext.textRendering->Submit(L"Hello, rhythm!", command);
 색상은 선형 RGBA 값이며 알파 블렌딩을 지원한다. `FontHandle`이 비어 있거나
 크기/레이아웃이 유효하지 않으면 제출은 오류로 처리된다.
 
-## 캐시와 GPU 처리
+## 배치 유지와 Visual2D 계약
 
-- 텍스트 레이아웃은 문자열, 글꼴, 크기, 레이아웃 크기와 정렬 조합으로
-  캐시한다.
-- rasterized 글리프는 글꼴 face, glyph index, pixel size 조합으로
-  1024×1024 R8 아틀라스 page에 저장한다.
-- 새 글리프만 upload heap에서 아틀라스로 복사한다.
-- 글리프 instance는 프레임별 mapped upload buffer에 기록하고 atlas page별로
-  묶어 draw한다.
-- 업로드 리소스는 해당 frame resource를 다시 사용해도 안전해질 때까지
-  보관한다. 글리프 추가 때문에 매 프레임 전체 GPU fence를 기다리지 않는다.
+변경되지 않는 문구는 `CreateLayout`의 `TextLayoutHandle`을 보관하고 매 프레임
+`Submit(handle, command)`로 제출할 수 있습니다. `SizePixels()`는 배치의 실제
+문자열 폭과 높이를 반환합니다. DirectWrite 객체는 공개하지 않습니다.
 
-현재 구현은 일반 단색 글리프를 대상으로 한다. 컬러 이모지, underline,
-strikethrough, inline object, SDF 확대 렌더링은 아직 지원하지 않는다.
+```cpp
+// 글꼴·문자열·크기·배치 영역·정렬이 바뀔 때 준비한다.
+auto layout = services.textRendering.CreateLayout(L"Hello, rhythm!", command);
+// Render에서는 위치·transform·색상·depth·clip만 바꿔 제출한다.
+renderContext.textRendering->Submit(layout, command);
+```
+
+준비된 handle 제출은 command의 글꼴·크기·영역·정렬을 다시 적용하지 않습니다.
+이 값이 달라지면 새 handle을 준비해야 합니다. 문자열 제출과 `CreateLayout`은
+문자열·글꼴·크기·영역·정렬을 키로 하는 2,048항목 LRU를 공유합니다.
+스타일만 공유하는 TextFormat에도 LRU를 사용합니다. 살아 있는 라벨의 handle은
+LRU 축출 이후에도 유효하므로 2,049개 이상의 고정 라벨이 배치를 매번 만들지 않습니다.
+첫 배치 생성과 처음 필요한 글리프 rasterization 비용은 남습니다.
+
+`DrawPacket::text`는 `TextContentHandle`입니다. 직접 packet을 만드는 소비자도
+문자열·글꼴·크기·정렬을 이 payload에 담고 게시 후 변경하지 않아야 합니다.
+`TextVisualComponent`와 ComboBox는 실제 내용/스타일 변경 때만 payload를 교체합니다.
+색상·위치·clip·`SetTextOffset`·`SetRepeatOffset` 변경은 배치를 재생성하지 않습니다.
+repeat는 같은 배치를 두 번 제출할 뿐이며 애니메이션은 소비 프로젝트 책임입니다.
+
+renderer는 payload를 약한 참조로 추적하고 화면/texture별 배치를 유지합니다.
+원본이 사라지면 해당 유지 상태를 회수하며 resize 때 사용하지 않는 크기 변형도 교체합니다.
+`TextVisualComponent::MeasuredSize()`는 마지막 렌더에서 계산한 논리 크기이고,
+첫 렌더 전에는 값이 없습니다. 여러 영역에 같은 payload를 그리면 마지막 pass의 값입니다.
+이 측정 캐시의 쓰기와 UI 읽기는 엔진 Update/Render 스레드에서 수행합니다.
+
+## 글리프 캐시와 GPU 처리
+
+- 배치에는 font-face 정체성·글리프·위치·bounds를 유지합니다. 64개 단위 bounds와
+  개별 bounds로 clip 밖의 글리프를 캐시 조회·rasterization·instance 생성 전에 거릅니다.
+- 실제 face 정체성은 run마다 한 번 해석합니다. fallback face를 구분하고
+  glyph index·정확한 pixel size·measuring mode를 키로 회색조 이미지를 공유합니다.
+- DirectWrite `GRAYSCALE` + `DWRITE_TEXTURE_ALIASED_1x1`의 한 채널 alpha를
+  1024×1024 R8 페이지에 저장합니다. ClearType 채널의 최댓값으로 변환하지 않습니다.
+- 기본 픽셀 예산은 16페이지, 16MiB입니다. CPU 캐시, descriptor, 글꼴과 업로드
+  버퍼는 별도이므로 전체 텍스트 메모리의 상한은 아닙니다.
+- 현재 제출 또는 GPU 사용 중인 페이지는 회수하지 않습니다. 예산을 넘겨야
+  현재 글자를 표시할 수 있으면 일시 확대합니다. 안전해진 미사용 페이지는 재사용하고
+  뒤쪽의 초과 페이지는 이후 `BeginFrame`에서 해제합니다.
+- 배치는 영구 UV를 보관하지 않습니다. 페이지 회수 때 그 페이지의 글리프 캐시를
+  삭제하고 다음 제출에서 이미지를 다시 준비하므로 오래 보관한 handle도 안전합니다.
+- 새 글리프는 프레임별 persistently mapped upload arena에 함께 배치합니다.
+  row pitch는 256바이트, footprint 시작은 512바이트 정렬이며 arena를 fence 완료
+  전에 덮어쓰지 않습니다. 같은 renderIndex의 여러 off-screen pass는 이어서 할당합니다.
+- instance 버퍼도 프레임별로 재사용합니다. 사용한 descriptor heap은 해당 프레임의
+  GPU 완료까지 유지하고 확장한 heap의 SRV는 원본 texture에서 새로 만듭니다.
+  글리프 추가 때문에 전체 GPU fence를 별도로 기다리지 않습니다.
+
+`Statistics()`는 해당 renderIndex의 배치 생성·글리프 rasterization·제출 수,
+업로드 arena 생성·업로드 바이트·현재 페이지 수·축출 수를 제공합니다.
+GPU 시간이나 총 프로세스 메모리를 나타내지는 않습니다.
+
+현재 구현은 수평 단색 글리프를 대상으로 합니다. 컬러 이모지, 세로쓰기,
+underline, strikethrough, inline object, SDF 확대 렌더링은 지원하지 않습니다.
+
+## SDK 회귀 검증
+
+Debug/Release x64 빌드 후 `MRG.Collision.Tests.exe`를 실행합니다.
+기본 경로는 Visual2D payload 재사용·무효화·측정·repeat 계약을 검사합니다.
+`--text-rendering`은 실제 D3D12에서 LRU보다 많은 유지 배치, 긴 clip 문구,
+512개 한글의 단일 upload arena, 아틀라스 확대·회수·재생성을 검사합니다.
+`--text-pixels`는 다중 페이지의 겹친 글자 합성 순서를 GPU readback으로 검사합니다.
+각 경로는 별도 프로세스로 실행합니다.
 
 ## FPS/UPS 성능 오버레이
 

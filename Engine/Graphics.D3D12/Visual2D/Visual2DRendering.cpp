@@ -224,19 +224,79 @@ namespace mrg::graphics
             return loaded;
         }
 
-        void Initialize(
-            MeshRenderSystem& meshes,
-            TextRenderSystem& text)
+        struct TextVariant
+        {
+            float fontSize{};
+            DirectX::XMFLOAT2 area{};
+            std::uint64_t lastUsed{};
+            TextLayoutHandle layout;
+        };
+        struct RetainedText
+        {
+            std::weak_ptr<const visual2d::TextContent> source;
+            FontHandle font;
+            std::vector<TextVariant> variants;
+        };
+        using TextCache = std::unordered_map<const visual2d::TextContent *, RetainedText>;
+
+        void PruneTextCaches(std::uint64_t renderIndex)
+        {
+            if (textPruneIndex == renderIndex)
+                return;
+            textPruneIndex = renderIndex;
+            const auto expired = [](const auto &item) { return item.second.source.expired(); };
+            std::erase_if(screenTextCache, expired);
+            std::erase_if(textureTextCache, expired);
+        }
+
+        TextLayoutHandle ResolveLayout(TextRenderSystem &rendering, const FontHandle &defaultFont,
+                                       std::unordered_map<std::wstring, FontHandle> &fonts, TextCache &cache,
+                                       const visual2d::TextContentHandle &source, TextDrawCommand &command,
+                                       DirectX::XMFLOAT2 logicalScale, std::uint64_t renderIndex)
+        {
+            if (!source)
+                throw std::invalid_argument("A Visual2D text packet requires content.");
+            auto &retained = cache[source.get()];
+            if (retained.source.expired())
+            {
+                // Publish only after font resolution succeeds, so a failed
+                // file/font lookup cannot leave a partially initialized entry.
+                auto font = ResolveFont(rendering, defaultFont, fonts, source->font);
+                retained = {};
+                retained.source = source;
+                retained.font = std::move(font);
+            }
+            command.style.font = retained.font;
+            command.horizontalAlignment = ToTextAlignment(source->alignment);
+            for (auto &variant : retained.variants)
+                if (variant.fontSize == command.style.fontSizePixels && variant.area.x == command.layoutSizePixels.x &&
+                    variant.area.y == command.layoutSizePixels.y)
+                {
+                    variant.lastUsed = renderIndex;
+                    const auto size = variant.layout->SizePixels();
+                    source->measuredSize = visual2d::Size{size.x / logicalScale.x, size.y / logicalScale.y};
+                    return variant.layout;
+                }
+            // Keep variants actually used together (e.g. combo header + popup),
+            // while replacing obsolete resize variants rather than accumulating them.
+            std::erase_if(retained.variants,
+                          [renderIndex](const auto &variant) { return variant.lastUsed != renderIndex; });
+            auto layout = rendering.CreateLayout(source->value, command);
+            retained.variants.push_back({command.style.fontSizePixels, command.layoutSizePixels, renderIndex, layout});
+            const auto size = layout->SizePixels();
+            source->measuredSize = visual2d::Size{size.x / logicalScale.x, size.y / logicalScale.y};
+            return layout;
+        }
+
+        void Initialize(MeshRenderSystem &meshes, TextRenderSystem &text)
         {
             if (initialized)
             {
-                throw std::logic_error(
-                    "The D3D12 Visual2D renderer is already initialized.");
+                throw std::logic_error("The D3D12 Visual2D renderer is already initialized.");
             }
             if (meshes.Device() == nullptr)
             {
-                throw std::logic_error(
-                    "The mesh renderer has no D3D12 device.");
+                throw std::logic_error("The mesh renderer has no D3D12 device.");
             }
 
             meshRendering = &meshes;
@@ -293,6 +353,9 @@ namespace mrg::graphics
             visualPipeline.Reset();
             visualRootSignature.Reset();
             textureFonts.clear();
+            textureTextCache.clear();
+            screenTextCache.clear();
+            textPruneIndex = 0;
             textureFont.reset();
             textureTextRendering.Shutdown();
             screenFonts.clear();
@@ -806,6 +869,9 @@ namespace mrg::graphics
         TextRenderSystem textureTextRendering;
         FontHandle textureFont;
         std::unordered_map<std::wstring, FontHandle> textureFonts;
+        TextCache screenTextCache;
+        TextCache textureTextCache;
+        std::uint64_t textPruneIndex{};
         ComPtr<ID3D12RootSignature> rectangleRootSignature;
         ComPtr<ID3D12PipelineState> rectanglePipeline;
         std::array<FrameUploadArena, D3D12Renderer::FrameCount>
@@ -874,6 +940,7 @@ namespace mrg::graphics
                 "The D3D12 Visual2D renderer is not initialized for this context.");
         }
 
+        state.PruneTextCaches(context.renderIndex);
         const std::vector<visual2d::DrawPacket> commands = canvas.BuildDrawList();
         DirectX::XMFLOAT4X4 viewProjection{};
         DirectX::XMStoreFloat4x4(
@@ -946,66 +1013,44 @@ namespace mrg::graphics
                 std::min(command.bounds.width, command.bounds.height) * 0.5F);
             if (command.type == visual2d::DrawPacketType::Text)
             {
+                if (!command.text)
+                    throw std::invalid_argument("A text packet requires content.");
                 TextDrawCommand text{};
-                text.positionPixels = {
-                    command.bounds.x * pixelScale,
-                    -(command.bounds.y + command.bounds.height) * pixelScale};
+                text.positionPixels = {(command.bounds.x + command.textOffset.x) * pixelScale,
+                                       -(command.bounds.y + command.bounds.height + command.textOffset.y) * pixelScale};
                 text.layoutSizePixels = {
                     command.bounds.width * pixelScale,
                     command.bounds.height * pixelScale};
                 text.depth = depth;
                 DirectX::XMStoreFloat4x4(
                     &text.transform,
-                    DirectX::XMMatrixScaling(
-                        1.0F / pixelScale,
-                        -1.0F / pixelScale,
-                        1.0F) *
-                    DirectX::XMLoadFloat4x4(&command.nodeTransform) *
-                    DirectX::XMMatrixScaling(
-                        pixelScale,
-                        -pixelScale,
-                        0.0001F) *
-                    DirectX::XMMatrixTranslation(
-                        canvasCenterX,
-                        canvasCenterInScreenPixelsY,
-                        0.0F));
-                text.horizontalAlignment = ToTextAlignment(
-                    command.horizontalAlignment);
+                    DirectX::XMMatrixScaling(1.0F / pixelScale, -1.0F / pixelScale, 1.0F) *
+                        DirectX::XMLoadFloat4x4(&command.nodeTransform) *
+                        DirectX::XMMatrixScaling(pixelScale, -pixelScale, 0.0001F) *
+                        DirectX::XMMatrixTranslation(canvasCenterX, canvasCenterInScreenPixelsY, 0.0F));
                 text.verticalAlignment = TextVerticalAlignment::Center;
-                text.style.font = state.ResolveFont(
-                    *state.screenTextRendering,
-                    state.screenFont,
-                    state.screenFonts,
-                    command.font);
-                text.style.fontSizePixels = command.fontSize * pixelScale;
+                text.style.fontSizePixels = command.text->fontSize * pixelScale;
                 text.style.color = ToFloat4(command.color);
                 text.clipRectPixels = clipRectPixels;
-                state.screenTextRendering->Submit(command.text, text);
+                const auto prepared = state.ResolveLayout(*state.screenTextRendering, state.screenFont,
+                                                          state.screenFonts, state.screenTextCache, command.text, text,
+                                                          {pixelScale, pixelScale}, context.renderIndex);
+                state.screenTextRendering->Submit(prepared, text);
                 return;
             }
             if (command.type == visual2d::DrawPacketType::Image)
             {
-                const auto image = state.imagesByHandle.find(
-                    command.image.value);
-                if (image == state.imagesByHandle.end() ||
-                    bounds.width <= 0.0F || bounds.height <= 0.0F)
+                const auto image = state.imagesByHandle.find(command.image.value);
+                if (image == state.imagesByHandle.end() || bounds.width <= 0.0F || bounds.height <= 0.0F)
                 {
                     return;
                 }
 
                 DirectX::XMFLOAT4X4 world{};
-                DirectX::XMStoreFloat4x4(
-                    &world,
-                    state.QuadToLocal(command.bounds) *
-                    DirectX::XMLoadFloat4x4(&command.nodeTransform) *
-                    DirectX::XMMatrixScaling(
-                        pixelScale,
-                        pixelScale,
-                        0.0001F) *
-                    DirectX::XMMatrixTranslation(
-                        canvasCenterX,
-                        canvasCenterY,
-                        depth));
+                DirectX::XMStoreFloat4x4(&world, state.QuadToLocal(command.bounds) *
+                                                     DirectX::XMLoadFloat4x4(&command.nodeTransform) *
+                                                     DirectX::XMMatrixScaling(pixelScale, pixelScale, 0.0001F) *
+                                                     DirectX::XMMatrixTranslation(canvasCenterX, canvasCenterY, depth));
 
                 state.meshRendering->Submit(
                     state.imageMesh,
@@ -1202,7 +1247,7 @@ namespace mrg::graphics
 
         struct PendingText
         {
-            std::wstring text;
+            TextLayoutHandle layout;
             TextDrawCommand command;
         };
         std::vector<PendingText> textCommands;
@@ -1255,9 +1300,7 @@ namespace mrg::graphics
                     context.renderIndex);
                 for (const PendingText& text : textCommands)
                 {
-                    state.textureTextRendering.Submit(
-                        text.text,
-                        text.command);
+                    state.textureTextRendering.Submit(text.layout, text.command);
                 }
                 state.textureTextRendering.Flush(
                     commandList,
@@ -1286,133 +1329,95 @@ namespace mrg::graphics
             }
         };
 
-        visual2d::ForEachDrawPrimitive(commands, [&](const visual2d::DrawPacket &command)
-        {
-            if (command.bounds.width <= 0.0F ||
-                command.bounds.height <= 0.0F)
+        visual2d::ForEachDrawPrimitive(
+            commands,
+            [&](const visual2d::DrawPacket &command)
             {
-                return;
-            }
-
-            DirectX::XMFLOAT4X4 primitiveTransform{};
-            DirectX::XMStoreFloat4x4(
-                &primitiveTransform,
-                DirectX::XMLoadFloat4x4(&command.nodeTransform) *
-                DirectX::XMMatrixScaling(scaleX, -scaleY, 0.0001F) *
-                DirectX::XMMatrixTranslation(
-                    static_cast<float>(targetWidth) * 0.5F,
-                    static_cast<float>(targetHeight) * 0.5F,
-                    0.0F));
-            const DirectX::XMFLOAT4 clipRectPixels = ToPixelClipRect(
-                command.clipBounds,
-                canvasSize,
-                scaleX,
-                scaleY,
-                {},
-                static_cast<float>(targetWidth),
-                static_cast<float>(targetHeight));
-            const DirectX::XMFLOAT4 roundedRectLocal{
-                0.0F,
-                0.0F,
-                command.bounds.width,
-                command.bounds.height};
-            const float cornerRadiusLocal = std::min(
-                command.cornerRadius,
-                std::min(command.bounds.width, command.bounds.height) * 0.5F);
-            if (command.type == visual2d::DrawPacketType::Rectangle)
-            {
-                selectBatch(BatchType::Rectangles);
-                rectangles.push_back({
-                    {command.bounds.x,
-                     command.bounds.y,
-                     command.bounds.width,
-                     command.bounds.height},
-                    ToFloat4(command.color),
-                    primitiveTransform,
-                    clipRectPixels,
-                    roundedRectLocal,
-                    cornerRadiusLocal});
-                return;
-            }
-
-            if (command.type == visual2d::DrawPacketType::Image)
-            {
-                const auto image = state.imagesByHandle.find(
-                    command.image.value);
-                if (image == state.imagesByHandle.end())
+                if (command.bounds.width <= 0.0F || command.bounds.height <= 0.0F)
                 {
                     return;
                 }
-                selectBatch(
-                    BatchType::Visuals,
-                    image->second.pageIndex);
-                visuals.push_back({
-                    {command.bounds.x,
-                     command.bounds.y,
-                     command.bounds.width,
-                     command.bounds.height},
-                    ToFloat4(command.color),
-                    primitiveTransform,
-                    {command.uvScale.x,
-                     -command.uvScale.y,
-                     command.uvOffset.x,
-                     command.uvOffset.y + command.uvScale.y},
-                    clipRectPixels,
-                    roundedRectLocal,
-                    cornerRadiusLocal,
-                    image->second.textureIndex});
-                return;
-            }
 
-            TextDrawCommand text{};
-            text.positionPixels = {
-                command.bounds.x * scaleX,
-                -(command.bounds.y + command.bounds.height) * scaleY};
-            text.layoutSizePixels = {
-                command.bounds.width * scaleX,
-                command.bounds.height * scaleY};
-            DirectX::XMStoreFloat4x4(
-                &text.transform,
-                DirectX::XMMatrixScaling(
-                    1.0F / scaleX,
-                    -1.0F / scaleY,
-                    1.0F) *
-                DirectX::XMLoadFloat4x4(&command.nodeTransform) *
-                DirectX::XMMatrixScaling(scaleX, -scaleY, 0.0001F) *
-                DirectX::XMMatrixTranslation(
-                    static_cast<float>(targetWidth) * 0.5F,
-                    static_cast<float>(targetHeight) * 0.5F,
-                    0.0F));
-            text.horizontalAlignment = ToTextAlignment(
-                command.horizontalAlignment);
-            text.verticalAlignment = TextVerticalAlignment::Center;
-            text.style.font = state.ResolveFont(
-                state.textureTextRendering,
-                state.textureFont,
-                state.textureFonts,
-                command.font);
-            text.style.fontSizePixels = command.fontSize *
-                std::min(scaleX, scaleY);
-            text.style.color = ToFloat4(command.color);
-            text.clipRectPixels = clipRectPixels;
-            selectBatch(BatchType::Text);
-            textCommands.push_back({command.text, std::move(text)});
-        });
+                DirectX::XMFLOAT4X4 primitiveTransform{};
+                DirectX::XMStoreFloat4x4(&primitiveTransform, DirectX::XMLoadFloat4x4(&command.nodeTransform) *
+                                                                  DirectX::XMMatrixScaling(scaleX, -scaleY, 0.0001F) *
+                                                                  DirectX::XMMatrixTranslation(
+                                                                      static_cast<float>(targetWidth) * 0.5F,
+                                                                      static_cast<float>(targetHeight) * 0.5F, 0.0F));
+                const DirectX::XMFLOAT4 clipRectPixels =
+                    ToPixelClipRect(command.clipBounds, canvasSize, scaleX, scaleY, {}, static_cast<float>(targetWidth),
+                                    static_cast<float>(targetHeight));
+                const DirectX::XMFLOAT4 roundedRectLocal{0.0F, 0.0F, command.bounds.width, command.bounds.height};
+                const float cornerRadiusLocal =
+                    std::min(command.cornerRadius, std::min(command.bounds.width, command.bounds.height) * 0.5F);
+                if (command.type == visual2d::DrawPacketType::Rectangle)
+                {
+                    selectBatch(BatchType::Rectangles);
+                    rectangles.push_back(
+                        {{command.bounds.x, command.bounds.y, command.bounds.width, command.bounds.height},
+                         ToFloat4(command.color),
+                         primitiveTransform,
+                         clipRectPixels,
+                         roundedRectLocal,
+                         cornerRadiusLocal});
+                    return;
+                }
+
+                if (command.type == visual2d::DrawPacketType::Image)
+                {
+                    const auto image = state.imagesByHandle.find(command.image.value);
+                    if (image == state.imagesByHandle.end())
+                    {
+                        return;
+                    }
+                    selectBatch(BatchType::Visuals, image->second.pageIndex);
+                    visuals.push_back(
+                        {{command.bounds.x, command.bounds.y, command.bounds.width, command.bounds.height},
+                         ToFloat4(command.color),
+                         primitiveTransform,
+                         {command.uvScale.x, -command.uvScale.y, command.uvOffset.x,
+                          command.uvOffset.y + command.uvScale.y},
+                         clipRectPixels,
+                         roundedRectLocal,
+                         cornerRadiusLocal,
+                         image->second.textureIndex});
+                    return;
+                }
+
+                TextDrawCommand text{};
+                if (!command.text)
+                    throw std::invalid_argument("A text packet requires content.");
+                text.positionPixels = {(command.bounds.x + command.textOffset.x) * scaleX,
+                                       -(command.bounds.y + command.bounds.height + command.textOffset.y) * scaleY};
+                text.layoutSizePixels = {command.bounds.width * scaleX, command.bounds.height * scaleY};
+                DirectX::XMStoreFloat4x4(
+                    &text.transform, DirectX::XMMatrixScaling(1.0F / scaleX, -1.0F / scaleY, 1.0F) *
+                                         DirectX::XMLoadFloat4x4(&command.nodeTransform) *
+                                         DirectX::XMMatrixScaling(scaleX, -scaleY, 0.0001F) *
+                                         DirectX::XMMatrixTranslation(static_cast<float>(targetWidth) * 0.5F,
+                                                                      static_cast<float>(targetHeight) * 0.5F, 0.0F));
+                text.verticalAlignment = TextVerticalAlignment::Center;
+                text.style.fontSizePixels = command.text->fontSize * std::min(scaleX, scaleY);
+                text.style.color = ToFloat4(command.color);
+                text.clipRectPixels = clipRectPixels;
+                selectBatch(BatchType::Text);
+                state.PruneTextCaches(context.renderIndex);
+                const auto prepared = state.ResolveLayout(state.textureTextRendering, state.textureFont,
+                                                          state.textureFonts, state.textureTextCache, command.text,
+                                                          text, {scaleX, scaleY}, context.renderIndex);
+                textCommands.push_back({prepared, std::move(text)});
+            });
         flushBatch();
 
         textureManager.EndRenderTargetPass(commandList, target);
 
         commandList.RSSetViewports(1, &context.viewport);
         commandList.RSSetScissorRects(1, &context.scissorRectangle);
-        commandList.OMSetRenderTargets(
-            1,
-            &context.renderTargetView,
-            FALSE,
-            &context.depthStencilView);
+        commandList.OMSetRenderTargets(1, &context.renderTargetView, FALSE, &context.depthStencilView);
     }
 
     bool D3D12Visual2DRenderer::IsInitialized() const noexcept
     {
         return implementation_ != nullptr && implementation_->initialized;
     }
-}
+} // namespace mrg::graphics

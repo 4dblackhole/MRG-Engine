@@ -116,6 +116,18 @@ namespace mrg::visual2d
         std::wstring value;
     };
 
+    // Immutable content/style shared by draw packets. Render-owned measurement
+    // is published on the same engine thread as Visual2D Update/Submit.
+    struct TextContent
+    {
+        std::wstring value;
+        TextFont font;
+        float fontSize{18.0F};
+        TextAlignment alignment{TextAlignment::Leading};
+        mutable std::optional<Size> measuredSize;
+    };
+    using TextContentHandle = std::shared_ptr<const TextContent>;
+
     struct RectanglePrimitive
     {
         Rect bounds{};
@@ -131,10 +143,8 @@ namespace mrg::visual2d
         Rect bounds{};
         DirectX::XMFLOAT4X4 nodeTransform{};
         Color color{};
-        std::wstring text;
-        TextFont font;
-        float fontSize{18.0F};
-        TextAlignment horizontalAlignment{TextAlignment::Leading};
+        TextContentHandle text;
+        Point textOffset{};
         ImageHandle image{};
         DirectX::XMFLOAT2 uvScale{1.0F, 1.0F};
         DirectX::XMFLOAT2 uvOffset{};

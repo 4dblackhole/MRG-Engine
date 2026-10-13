@@ -1,4 +1,6 @@
 #include "../App/HeadlessRunTests.h"
+#include "../App/TextRenderingTests.h"
+#include "../App/TextPixelTests.h"
 #include "MRG_Core.h"
 
 #include <DirectXMath.h>
@@ -1146,9 +1148,8 @@ namespace
 
         const std::vector<mrg::visual2d::DrawPacket> commands =
             canvas.BuildDrawList();
-        Check(
-            !commands.empty() && commands.back().text == L"Front",
-            "larger sibling Z-index paints its complete subtree last");
+        Check(!commands.empty() && commands.back().text && commands.back().text->value == L"Front",
+              "larger sibling Z-index paints its complete subtree last");
 
         mrg::visual2d::Visual2DInputRouter router;
         router.Process(
@@ -1165,10 +1166,9 @@ namespace
         back.SetZIndex(20);
         const std::vector<mrg::visual2d::DrawPacket> reorderedCommands =
             canvas.BuildDrawList();
-        Check(
-            !reorderedCommands.empty() &&
-                reorderedCommands.back().text == L"Back",
-            "changing a sibling Z-index invalidates the cached paint order");
+        Check(!reorderedCommands.empty() && reorderedCommands.back().text &&
+                  reorderedCommands.back().text->value == L"Back",
+              "changing a sibling Z-index invalidates the cached paint order");
 
         router.Process(
             canvas,
@@ -1316,6 +1316,34 @@ int main(int argc, char **argv)
 {
     if (argc == 2 && std::string_view(argv[1]) == "--headless-error")
         return TestHeadlessRunError();
+    if (argc == 2 && std::string_view(argv[1]) == "--text-rendering")
+        return TestTextRendering();
+    if (argc == 2 && std::string_view(argv[1]) == "--text-pixels")
+        return TestTextPixelOrder();
+    {
+        namespace v = mrg::visual2d;
+        v::Visual2DCanvas canvas;
+        auto &label = v::CreateLabel(canvas.Root(), {0, 0, 120, 32}, L"Snapshot");
+        auto &text = *label.GetComponent<v::TextVisualComponent>();
+        auto first = canvas.BuildDrawList();
+        const auto source = first.back().text;
+        text.SetText(L"Snapshot");
+        text.SetFont(text.Font());
+        text.SetTextColor({1, 0, 0, 1});
+        text.SetTextOffset({-20, 0});
+        text.SetRepeatOffset(v::Point{200, 0});
+        const auto moved = canvas.BuildDrawList();
+        Check(moved.size() == 2 && moved[0].text == source && moved[1].text == source && moved[0].textOffset.x == -20 &&
+                  moved[1].textOffset.x == 180,
+              "Position, color and a repeated copy preserve immutable text content");
+        source->measuredSize = v::Size{220, 20};
+        Check(text.MeasuredSize() && text.MeasuredSize()->width == 220,
+              "Backend measurement is available in logical Canvas units");
+        text.SetText(L"Changed");
+        const auto changed = canvas.BuildDrawList();
+        Check(changed[0].text != source && source->value == L"Snapshot" && !text.MeasuredSize(),
+              "Content changes publish a new snapshot and reset its measurement");
+    }
     {
         namespace v = mrg::visual2d;
         struct BatchVisual final : v::Visual2DComponent
@@ -1337,7 +1365,8 @@ int main(int argc, char **argv)
         batch.rectangles = geometry;
         v::DrawPacket text;
         text.type = v::DrawPacketType::Text;
-        text.text = L"after geometry";
+        text.text =
+            std::make_shared<v::TextContent>(v::TextContent{L"after geometry", {}, 18, v::TextAlignment::Leading, {}});
         visual.commands = {batch, text};
         auto retained = canvas.BuildDrawList();
         visual.commands.clear();
@@ -1345,8 +1374,9 @@ int main(int argc, char **argv)
         std::vector<v::DrawPacket> expanded;
         v::ForEachDrawPrimitive(retained, [&](const auto &primitive) { expanded.push_back(primitive); });
         Check(retained.size() == 2 && v::DrawPrimitiveCount(retained) == 3 && expanded.size() == 3 &&
-                  expanded[0].bounds.x == 1 && expanded[1].color.green == 1 && expanded[2].text == L"after geometry" &&
-                  expanded[0].cornerRadius == 2 && expanded[0].clipBounds && retained[0].clipBounds &&
+                  expanded[0].bounds.x == 1 && expanded[1].color.green == 1 && expanded[2].text &&
+                  expanded[2].text->value == L"after geometry" && expanded[0].cornerRadius == 2 &&
+                  expanded[0].clipBounds && retained[0].clipBounds &&
                   expanded[0].clipBounds->x == retained[0].clipBounds->x &&
                   expanded[0].nodeTransform._41 == retained[0].nodeTransform._41,
               "Immutable rectangle batches retain lifetime, primitive order, transform and clipping.");

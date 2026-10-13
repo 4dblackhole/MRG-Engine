@@ -31,7 +31,7 @@ namespace
 
     constexpr std::uint32_t AtlasWidth = 1024;
     constexpr std::uint32_t AtlasHeight = 1024;
-    constexpr std::uint32_t MaximumAtlasPages = 16;
+    constexpr std::uint32_t DefaultAtlasPages = 16;
     constexpr std::uint32_t GlyphPadding = 1;
 
     void ThrowIfFailed(const HRESULT result, const char* operation)
@@ -178,6 +178,104 @@ namespace mrg::graphics
         return implementation_->familyName;
     }
 
+    struct TextLayout::Impl final
+    {
+        struct Glyph
+        {
+            std::uint16_t index{};
+            DirectX::XMFLOAT2 origin{};
+            DirectX::XMFLOAT4 bounds{};
+        };
+        struct Block
+        {
+            std::size_t begin{}, end{};
+            DirectX::XMFLOAT4 bounds{};
+        };
+        struct Run
+        {
+            ComPtr<IDWriteFontFace> face;
+            ComPtr<IUnknown> identity;
+            float size{};
+            DWRITE_MEASURING_MODE measuringMode{};
+            std::vector<Glyph> glyphs;
+            std::vector<Block> blocks;
+        };
+
+        void AppendRun(float originX, float originY, DWRITE_MEASURING_MODE mode, const DWRITE_GLYPH_RUN &source)
+        {
+            if (source.isSideways)
+                throw std::invalid_argument("Vertical text is not supported by this text renderer.");
+            Run run;
+            run.face = source.fontFace;
+            ThrowIfFailed(source.fontFace->QueryInterface(IID_PPV_ARGS(run.identity.GetAddressOf())),
+                          "IDWriteFontFace::QueryInterface");
+            run.size = source.fontEmSize;
+            run.measuringMode = mode;
+            DWRITE_FONT_METRICS fontMetrics{};
+            source.fontFace->GetMetrics(&fontMetrics);
+            if (fontMetrics.designUnitsPerEm == 0)
+                throw std::invalid_argument("A font must have nonzero design units per em.");
+            const float scale = source.fontEmSize / static_cast<float>(fontMetrics.designUnitsPerEm);
+            std::vector<DWRITE_GLYPH_METRICS> metrics(source.glyphCount);
+            ThrowIfFailed(
+                source.fontFace->GetDesignGlyphMetrics(source.glyphIndices, source.glyphCount, metrics.data(), FALSE),
+                "IDWriteFontFace::GetDesignGlyphMetrics");
+            run.glyphs.reserve(source.glyphCount);
+            const bool rtl = (source.bidiLevel & 1U) != 0;
+            float pen = originX;
+            for (UINT32 index = 0; index < source.glyphCount; ++index)
+            {
+                const float advance = source.glyphAdvances ? source.glyphAdvances[index] : 0.0F;
+                if (rtl)
+                    pen -= advance;
+                const auto offset = source.glyphOffsets ? source.glyphOffsets[index] : DWRITE_GLYPH_OFFSET{};
+                Glyph glyph;
+                glyph.index = source.glyphIndices[index];
+                glyph.origin = {pen + (rtl ? -offset.advanceOffset : offset.advanceOffset),
+                                originY - offset.ascenderOffset};
+                const auto &metric = metrics[index];
+                // Conservative outline bounds include grid fitting / antialias overhang.
+                glyph.bounds = {
+                    glyph.origin.x + static_cast<float>(metric.leftSideBearing) * scale - 2.0F,
+                    glyph.origin.y +
+                        (static_cast<float>(metric.topSideBearing) - static_cast<float>(metric.verticalOriginY)) *
+                            scale -
+                        2.0F,
+                    glyph.origin.x +
+                        (static_cast<float>(metric.advanceWidth) - static_cast<float>(metric.rightSideBearing)) *
+                            scale +
+                        2.0F,
+                    glyph.origin.y +
+                        (static_cast<float>(metric.advanceHeight) - static_cast<float>(metric.bottomSideBearing) -
+                         static_cast<float>(metric.verticalOriginY)) *
+                            scale +
+                        2.0F};
+                run.glyphs.push_back(glyph);
+                if (!rtl)
+                    pen += advance;
+            }
+            // A long clipped title visits blocks first, then only nearby glyphs.
+            for (std::size_t begin = 0; begin < run.glyphs.size(); begin += 64)
+            {
+                Block block{begin, std::min(begin + 64, run.glyphs.size()), run.glyphs[begin].bounds};
+                for (std::size_t index = begin + 1; index < block.end; ++index)
+                {
+                    const auto &bounds = run.glyphs[index].bounds;
+                    block.bounds.x = std::min(block.bounds.x, bounds.x);
+                    block.bounds.y = std::min(block.bounds.y, bounds.y);
+                    block.bounds.z = std::max(block.bounds.z, bounds.z);
+                    block.bounds.w = std::max(block.bounds.w, bounds.w);
+                }
+                run.blocks.push_back(block);
+            }
+            runs.push_back(std::move(run));
+        }
+
+        FontHandle font;
+        DirectX::XMFLOAT2 size{};
+        std::vector<Run> runs;
+    };
+
     struct TextRenderSystem::Impl final
     {
         struct GlyphInstance final
@@ -218,7 +316,8 @@ namespace mrg::graphics
         struct FrameInstanceBuffer final
         {
             std::vector<FrameInstancePage> pages;
-            std::vector<ComPtr<ID3D12Resource>> uploadResources;
+            std::vector<FrameInstancePage> glyphUploadPages;
+            std::vector<ComPtr<ID3D12DescriptorHeap>> descriptorHeaps;
             std::uint64_t renderIndex{};
         };
 
@@ -228,6 +327,8 @@ namespace mrg::graphics
             std::uint32_t nextX{GlyphPadding};
             std::uint32_t nextY{GlyphPadding};
             std::uint32_t rowHeight{};
+            std::uint8_t inFlightFrames{};
+            std::uint64_t lastUsedRenderIndex{};
         };
 
         struct PendingGlyphUpload final
@@ -300,48 +401,63 @@ namespace mrg::graphics
             }
         };
 
+        struct LayoutKeyView
+        {
+            const Font *font{};
+            std::wstring_view text;
+            std::uint32_t fontSizeBits{}, widthBits{}, heightBits{};
+            TextHorizontalAlignment horizontalAlignment{};
+            TextVerticalAlignment verticalAlignment{};
+            bool operator==(const LayoutKeyView &) const noexcept = default;
+        };
+        static LayoutKeyView KeyView(const LayoutKey &key) noexcept
+        {
+            return {key.font.get(),       key.text,       key.fontSizeBits,
+                    key.widthBits,        key.heightBits, key.horizontalAlignment,
+                    key.verticalAlignment};
+        }
         struct LayoutKeyHash final
         {
-            [[nodiscard]] std::size_t operator()(
-                const LayoutKey& key) const noexcept
+            using is_transparent = void;
+            std::size_t operator()(const LayoutKey &key) const noexcept
+            {
+                return (*this)(KeyView(key));
+            }
+            std::size_t operator()(const LayoutKeyView &key) const noexcept
             {
                 std::size_t result = 0;
-                HashCombine(
-                    result,
-                    reinterpret_cast<std::uintptr_t>(key.font.get()));
+                HashCombine(result, reinterpret_cast<std::uintptr_t>(key.font));
                 HashCombine(result, key.text);
                 HashCombine(result, key.fontSizeBits);
                 HashCombine(result, key.widthBits);
                 HashCombine(result, key.heightBits);
-                HashCombine(
-                    result,
-                    static_cast<std::uint32_t>(
-                        key.horizontalAlignment));
-                HashCombine(
-                    result,
-                    static_cast<std::uint32_t>(
-                        key.verticalAlignment));
+                HashCombine(result, static_cast<std::uint32_t>(key.horizontalAlignment));
+                HashCombine(result, static_cast<std::uint32_t>(key.verticalAlignment));
                 return result;
             }
         };
-
+        struct LayoutKeyEqual final
+        {
+            using is_transparent = void;
+            bool operator()(const LayoutKey &a, const LayoutKey &b) const noexcept
+            {
+                return a == b;
+            }
+            bool operator()(const LayoutKey &a, const LayoutKeyView &b) const noexcept
+            {
+                return KeyView(a) == b;
+            }
+            bool operator()(const LayoutKeyView &a, const LayoutKey &b) const noexcept
+            {
+                return a == KeyView(b);
+            }
+        };
         class GlyphRunCollector final : public IDWriteTextRenderer
         {
         public:
-            GlyphRunCollector(
-                Impl& owner,
-                const DirectX::XMFLOAT4& color,
-                const float depth,
-                const DirectX::XMFLOAT4X4& transform,
-                const DirectX::XMFLOAT4& clipRectPixels) noexcept
-                : owner_(owner),
-                  color_(color),
-                  depth_(depth),
-                  transform_(transform),
-                  clipRectPixels_(clipRectPixels)
-            {
-            }
-
+          explicit GlyphRunCollector(TextLayout::Impl &owner) noexcept : owner_(owner)
+          {
+          }
             HRESULT STDMETHODCALLTYPE QueryInterface(
                 REFIID interfaceId,
                 void** object) override
@@ -435,15 +551,7 @@ namespace mrg::graphics
 
                 try
                 {
-                    owner_.AppendGlyphRun(
-                        baselineOriginX,
-                        baselineOriginY,
-                        measuringMode,
-                        *glyphRun,
-                        color_,
-                        depth_,
-                        transform_,
-                        clipRectPixels_);
+                    owner_.AppendRun(baselineOriginX, baselineOriginY, measuringMode, *glyphRun);
                     return S_OK;
                 }
                 catch (...)
@@ -492,11 +600,7 @@ namespace mrg::graphics
 
         private:
             std::atomic<ULONG> referenceCount_{1};
-            Impl& owner_;
-            DirectX::XMFLOAT4 color_{};
-            float depth_{};
-            DirectX::XMFLOAT4X4 transform_{};
-            DirectX::XMFLOAT4 clipRectPixels_{};
+            TextLayout::Impl &owner_;
             std::exception_ptr error_;
         };
 
@@ -538,6 +642,9 @@ namespace mrg::graphics
                         page.resource->Unmap(0, nullptr);
                     }
                 }
+                for (FrameInstancePage &page : frame.glyphUploadPages)
+                    if (page.resource && page.mappedData)
+                        page.resource->Unmap(0, nullptr);
                 frame = {};
             }
 
@@ -546,6 +653,8 @@ namespace mrg::graphics
             glyphCache.clear();
             layoutCache.clear();
             layoutRecency.clear();
+            formatCache.clear();
+            formatRecency.clear();
             atlasPages.clear();
             pipelineState.Reset();
             rootSignature.Reset();
@@ -554,6 +663,9 @@ namespace mrg::graphics
             device = nullptr;
             depthStencilFormat = DXGI_FORMAT_UNKNOWN;
             currentFrameIndex = 0;
+            currentRenderIndex = 0;
+            atlasDescriptorCapacity = 0;
+            statistics = {};
             initialized = false;
             frameOpen = false;
         }
@@ -681,72 +793,121 @@ namespace mrg::graphics
             }
 
             currentFrameIndex = frameIndex;
+            if (currentRenderIndex != renderIndex)
+                statistics = {};
+            currentRenderIndex = renderIndex;
             pendingInstances.clear();
             pendingUploads.clear();
             FrameInstanceBuffer& frame = frameBuffers[frameIndex];
             if (frame.renderIndex != renderIndex)
             {
                 frame.renderIndex = renderIndex;
-                frame.uploadResources.clear();
+
+                frame.descriptorHeaps.clear();
+                for (auto &page : atlasPages)
+                {
+                    page.inFlightFrames &= static_cast<std::uint8_t>(~(1U << frameIndex));
+                    // An inactive off-screen pass may skip one ring index.
+                    // Engine frames older than the two-frame fence ring are complete.
+                    if (renderIndex >= page.lastUsedRenderIndex && renderIndex - page.lastUsedRenderIndex >= FrameCount)
+                        page.inFlightFrames = 0;
+                }
+                TrimAtlasPages();
                 for (FrameInstancePage& page : frame.pages)
                 {
                     page.used = 0;
                 }
+                for (auto &page : frame.glyphUploadPages)
+                    page.used = 0;
             }
             frameOpen = true;
         }
 
-        void Submit(
-            const std::wstring_view text,
-            const TextDrawCommand& command)
+        static void ValidateLayoutCommand(const TextDrawCommand &command)
         {
-            RequireFrameOpen();
-            if (text.empty())
-            {
-                return;
-            }
-            if (command.style.font == nullptr)
-            {
-                throw std::invalid_argument(
-                    "TextStyle requires a valid FontHandle.");
-            }
-            if (!std::isfinite(command.style.fontSizePixels) ||
-                command.style.fontSizePixels <= 0.0F)
-            {
-                throw std::invalid_argument(
-                    "Text font size must be positive and finite.");
-            }
-            if (!std::isfinite(command.layoutSizePixels.x) ||
-                !std::isfinite(command.layoutSizePixels.y) ||
-                command.layoutSizePixels.x <= 0.0F ||
-                command.layoutSizePixels.y <= 0.0F)
-            {
-                throw std::invalid_argument(
-                    "Text layout size must be positive and finite.");
-            }
-
-            ComPtr<IDWriteTextLayout> layout =
-                FindOrCreateLayout(text, command);
-            ComPtr<GlyphRunCollector> collector;
-            collector.Attach(
-                new GlyphRunCollector(
-                    *this,
-                    command.style.color,
-                    command.depth,
-                    command.transform,
-                    command.clipRectPixels));
-            const HRESULT drawResult = layout->Draw(
-                nullptr,
-                collector.Get(),
-                command.positionPixels.x,
-                command.positionPixels.y);
-            if (collector->Error())
-            {
-                std::rethrow_exception(collector->Error());
-            }
-            ThrowIfFailed(drawResult, "IDWriteTextLayout::Draw");
+            if (!command.style.font)
+                throw std::invalid_argument("TextStyle requires a valid FontHandle.");
+            if (!std::isfinite(command.style.fontSizePixels) || command.style.fontSizePixels <= 0)
+                throw std::invalid_argument("Text font size must be positive and finite.");
+            if (!std::isfinite(command.layoutSizePixels.x) || !std::isfinite(command.layoutSizePixels.y) ||
+                command.layoutSizePixels.x <= 0 || command.layoutSizePixels.y <= 0)
+                throw std::invalid_argument("Text layout size must be positive and finite.");
         }
 
+        TextLayoutHandle CreateLayout(std::wstring_view text, const TextDrawCommand &command)
+        {
+            RequireInitialized();
+            ValidateLayoutCommand(command);
+            if (text.size() > std::numeric_limits<UINT32>::max())
+                throw std::length_error("Text exceeds DirectWrite's string length limit.");
+            return FindOrCreateLayout(text, command);
+        }
+
+        void Submit(std::wstring_view text, const TextDrawCommand &command)
+        {
+            RequireFrameOpen();
+            if (!text.empty())
+                Submit(CreateLayout(text, command), command);
+        }
+
+        static bool IntersectsClip(const DirectX::XMFLOAT4 &localBounds, const TextDrawCommand &command)
+        {
+            const auto matrix = DirectX::XMLoadFloat4x4(&command.transform);
+            float left = std::numeric_limits<float>::infinity(), top = left;
+            float right = -left, bottom = -left;
+            for (const auto x : {localBounds.x, localBounds.z})
+                for (const auto y : {localBounds.y, localBounds.w})
+                {
+                    const auto point = DirectX::XMVector4Transform(
+                        DirectX::XMVectorSet(x + command.positionPixels.x, y + command.positionPixels.y, 0, 1), matrix);
+                    const float px = DirectX::XMVectorGetX(point), py = DirectX::XMVectorGetY(point);
+                    left = std::min(left, px);
+                    right = std::max(right, px);
+                    top = std::min(top, py);
+                    bottom = std::max(bottom, py);
+                }
+            const auto &clip = command.clipRectPixels;
+            return left < clip.z && top < clip.w && right > clip.x && bottom > clip.y;
+        }
+
+        void Submit(const TextLayoutHandle &layout, const TextDrawCommand &command)
+        {
+            RequireFrameOpen();
+            if (!layout)
+                throw std::invalid_argument("A prepared text layout is required.");
+            for (const auto &run : layout->implementation_->runs)
+            {
+                for (const auto &block : run.blocks)
+                {
+                    if (!IntersectsClip(block.bounds, command))
+                        continue;
+                    for (std::size_t index = block.begin; index < block.end; ++index)
+                    {
+                        const auto &prepared = run.glyphs[index];
+                        if (!IntersectsClip(prepared.bounds, command))
+                            continue;
+                        const GlyphEntry &glyph = FindOrCreateGlyph(*run.face.Get(), run.identity.Get(), prepared.index,
+                                                                    run.size, run.measuringMode);
+                        if (!glyph.drawable)
+                            continue;
+                        auto &atlas = atlasPages[glyph.pageIndex];
+                        atlas.lastUsedRenderIndex = currentRenderIndex;
+                        atlas.inFlightFrames |= static_cast<std::uint8_t>(1U << currentFrameIndex);
+                        pendingInstances.push_back(
+                            GlyphInstance{command.transform,
+                                          {command.positionPixels.x + prepared.origin.x + glyph.bearingPixels.x,
+                                           command.positionPixels.y + prepared.origin.y + glyph.bearingPixels.y},
+                                          glyph.sizePixels,
+                                          glyph.uvRectangle,
+                                          command.style.color,
+                                          command.clipRectPixels,
+                                          command.depth,
+                                          glyph.pageIndex});
+                        ++statistics.submittedGlyphs;
+                    }
+                }
+            }
+        }
         void Flush(
             ID3D12GraphicsCommandList& commandList,
             const std::uint32_t viewportWidth,
@@ -766,15 +927,8 @@ namespace mrg::graphics
             UploadNewGlyphs(commandList);
             if (!pendingInstances.empty())
             {
-                // One atlas page is bound per draw. Sorting makes all glyphs
-                // for a page one contiguous instance-buffer range.
-                std::stable_sort(
-                    pendingInstances.begin(),
-                    pendingInstances.end(),
-                    [](const GlyphInstance& first, const GlyphInstance& second)
-                    {
-                        return first.pageIndex < second.pageIndex;
-                    });
+                // Preserve paint order, including overlapping translucent text.
+                // Consecutive pages are batched below; no per-frame glyph sorting.
                 FrameInstanceBuffer& frame =
                     frameBuffers[currentFrameIndex];
                 std::size_t allocationStart = 0;
@@ -802,6 +956,9 @@ namespace mrg::graphics
 
                 ID3D12DescriptorHeap* heaps[]{
                     atlasDescriptorHeap.Get()};
+                // Heap growth keeps every heap used by recorded passes alive.
+                if (frame.descriptorHeaps.empty() || frame.descriptorHeaps.back() != atlasDescriptorHeap)
+                    frame.descriptorHeaps.push_back(atlasDescriptorHeap);
                 commandList.SetDescriptorHeaps(1, heaps);
                 commandList.SetGraphicsRootSignature(rootSignature.Get());
                 commandList.SetPipelineState(pipelineState.Get());
@@ -862,159 +1019,132 @@ namespace mrg::graphics
             frameOpen = false;
         }
 
-        void AppendGlyphRun(
-            const float baselineOriginX,
-            const float baselineOriginY,
-            const DWRITE_MEASURING_MODE measuringMode,
-            const DWRITE_GLYPH_RUN& glyphRun,
-            const DirectX::XMFLOAT4& color,
-            const float depth,
-            const DirectX::XMFLOAT4X4& transform,
-            const DirectX::XMFLOAT4& clipRectPixels)
+        static constexpr std::size_t CachedLayoutLimit = 2048;
+
+        ComPtr<IDWriteTextFormat> FindOrCreateFormat(const TextDrawCommand &command)
         {
-            float penX = baselineOriginX;
-            const bool rightToLeft = (glyphRun.bidiLevel & 1U) != 0;
-            for (UINT32 index = 0; index < glyphRun.glyphCount; ++index)
+            const Font::Impl &font = *command.style.font->implementation_;
+            LayoutKey formatKey{command.style.font,
+                                {},
+                                std::bit_cast<std::uint32_t>(command.style.fontSizePixels),
+                                0,
+                                0,
+                                command.horizontalAlignment,
+                                command.verticalAlignment};
+            ComPtr<IDWriteTextFormat> format;
+            const auto cachedFormat = formatCache.find(formatKey);
+            if (cachedFormat != formatCache.end())
             {
-                const DWRITE_GLYPH_OFFSET offset =
-                    glyphRun.glyphOffsets != nullptr
-                    ? glyphRun.glyphOffsets[index]
-                    : DWRITE_GLYPH_OFFSET{};
-                const GlyphEntry& glyph = FindOrCreateGlyph(
-                    *glyphRun.fontFace,
-                    glyphRun.glyphIndices[index],
-                    glyphRun.fontEmSize,
-                    measuringMode);
-
-                if (glyph.drawable)
-                {
-                    pendingInstances.push_back(GlyphInstance{
-                        transform,
-                        {
-                            penX + offset.advanceOffset +
-                                glyph.bearingPixels.x,
-                            baselineOriginY - offset.ascenderOffset +
-                                glyph.bearingPixels.y},
-                        glyph.sizePixels,
-                        glyph.uvRectangle,
-                        color,
-                        clipRectPixels,
-                        depth,
-                        glyph.pageIndex});
-                }
-
-                const float advance =
-                    glyphRun.glyphAdvances != nullptr
-                    ? glyphRun.glyphAdvances[index]
-                    : 0.0F;
-                penX += rightToLeft ? -advance : advance;
+                format = cachedFormat->second.format;
+                formatRecency.splice(formatRecency.begin(), formatRecency, cachedFormat->second.recency);
+                return format;
             }
+
+            ThrowIfFailed(directWriteFactory->CreateTextFormat(font.familyName.c_str(), font.collection.Get(),
+                                                               DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                                                               DWRITE_FONT_STRETCH_NORMAL, command.style.fontSizePixels,
+                                                               L"ko-kr", format.ReleaseAndGetAddressOf()),
+                          "IDWriteFactory::CreateTextFormat");
+            ThrowIfFailed(format->SetTextAlignment(ToDirectWrite(command.horizontalAlignment)),
+                          "IDWriteTextFormat::SetTextAlignment");
+            ThrowIfFailed(format->SetParagraphAlignment(ToDirectWrite(command.verticalAlignment)),
+                          "IDWriteTextFormat::SetParagraphAlignment");
+            ThrowIfFailed(format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP), "IDWriteTextFormat::SetWordWrapping");
+
+            if (formatCache.size() >= CachedLayoutLimit)
+            {
+                formatCache.erase(formatRecency.back());
+                formatRecency.pop_back();
+            }
+            formatRecency.push_front(formatKey);
+            try
+            {
+                formatCache.emplace(std::move(formatKey), FormatEntry{format, formatRecency.begin()});
+            }
+            catch (...)
+            {
+                formatRecency.pop_front();
+                throw;
+            }
+
+            return format;
         }
 
-        [[nodiscard]] ComPtr<IDWriteTextLayout> FindOrCreateLayout(
-            const std::wstring_view text,
-            const TextDrawCommand& command)
+        TextLayoutHandle CompileLayout(std::wstring_view text, const TextDrawCommand &command,
+                                       const ComPtr<IDWriteTextFormat> &format)
         {
-            LayoutKey key{
-                command.style.font,
-                std::wstring(text),
-                std::bit_cast<std::uint32_t>(
-                    command.style.fontSizePixels),
-                std::bit_cast<std::uint32_t>(
-                    command.layoutSizePixels.x),
-                std::bit_cast<std::uint32_t>(
-                    command.layoutSizePixels.y),
-                command.horizontalAlignment,
-                command.verticalAlignment};
-            if (const auto found = layoutCache.find(key);
-                found != layoutCache.end())
+            ComPtr<IDWriteTextLayout> layout;
+            ThrowIfFailed(directWriteFactory->CreateTextLayout(
+                              text.empty() ? L"" : text.data(), static_cast<UINT32>(text.size()), format.Get(),
+                              command.layoutSizePixels.x, command.layoutSizePixels.y, layout.ReleaseAndGetAddressOf()),
+                          "IDWriteFactory::CreateTextLayout");
+            auto prepared = std::make_shared<TextLayout::Impl>();
+            prepared->font = command.style.font;
+            ComPtr<GlyphRunCollector> collector;
+            collector.Attach(new GlyphRunCollector(*prepared));
+            const HRESULT result = layout->Draw(nullptr, collector.Get(), 0, 0);
+            if (collector->Error())
+                std::rethrow_exception(collector->Error());
+            ThrowIfFailed(result, "IDWriteTextLayout::Draw");
+            DWRITE_TEXT_METRICS metrics{};
+            ThrowIfFailed(layout->GetMetrics(&metrics), "IDWriteTextLayout::GetMetrics");
+            prepared->size = {metrics.widthIncludingTrailingWhitespace, metrics.height};
+            return TextLayoutHandle(new TextLayout(std::move(prepared)));
+        }
+
+        [[nodiscard]] TextLayoutHandle FindOrCreateLayout(const std::wstring_view text, const TextDrawCommand &command)
+        {
+            const LayoutKeyView lookup{command.style.font.get(),
+                                       text,
+                                       std::bit_cast<std::uint32_t>(command.style.fontSizePixels),
+                                       std::bit_cast<std::uint32_t>(command.layoutSizePixels.x),
+                                       std::bit_cast<std::uint32_t>(command.layoutSizePixels.y),
+                                       command.horizontalAlignment,
+                                       command.verticalAlignment};
+            if (const auto found = layoutCache.find(lookup); found != layoutCache.end())
             {
                 layoutRecency.splice(layoutRecency.begin(), layoutRecency, found->second.recency);
                 return found->second.layout;
             }
-
+            LayoutKey key{command.style.font, std::wstring(text),         lookup.fontSizeBits,     lookup.widthBits,
+                          lookup.heightBits,  lookup.horizontalAlignment, lookup.verticalAlignment};
             // Keep the working set across frames. Evict one least-recently
             // used layout; clearing everything made 129 static labels thrash.
-            constexpr std::size_t MaximumCachedLayouts = 2048;
-            if (layoutCache.size() >= MaximumCachedLayouts)
+            if (layoutCache.size() >= CachedLayoutLimit)
             {
-                layoutCache.erase(layoutRecency.back());
+                layoutCache.erase(*layoutRecency.back());
                 layoutRecency.pop_back();
             }
 
-            const Font::Impl& font =
-                *command.style.font->implementation_;
-            ComPtr<IDWriteTextFormat> format;
-            ThrowIfFailed(
-                directWriteFactory->CreateTextFormat(
-                    font.familyName.c_str(),
-                    font.collection.Get(),
-                    DWRITE_FONT_WEIGHT_NORMAL,
-                    DWRITE_FONT_STYLE_NORMAL,
-                    DWRITE_FONT_STRETCH_NORMAL,
-                    command.style.fontSizePixels,
-                    L"ko-kr",
-                    format.ReleaseAndGetAddressOf()),
-                "IDWriteFactory::CreateTextFormat");
-            ThrowIfFailed(
-                format->SetTextAlignment(
-                    ToDirectWrite(command.horizontalAlignment)),
-                "IDWriteTextFormat::SetTextAlignment");
-            ThrowIfFailed(
-                format->SetParagraphAlignment(
-                    ToDirectWrite(command.verticalAlignment)),
-                "IDWriteTextFormat::SetParagraphAlignment");
-            ThrowIfFailed(
-                format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP),
-                "IDWriteTextFormat::SetWordWrapping");
-
-            ComPtr<IDWriteTextLayout> layout;
-            ThrowIfFailed(
-                directWriteFactory->CreateTextLayout(
-                    key.text.c_str(),
-                    static_cast<UINT32>(key.text.size()),
-                    format.Get(),
-                    command.layoutSizePixels.x,
-                    command.layoutSizePixels.y,
-                    layout.ReleaseAndGetAddressOf()),
-                "IDWriteFactory::CreateTextLayout");
-            layoutRecency.push_front(key);
+            auto handle = CompileLayout(text, command, FindOrCreateFormat(command));
+            ++statistics.layoutCreations;
+            const auto inserted = layoutCache.emplace(std::move(key), LayoutEntry{handle, {}}).first;
             try
             {
-                layoutCache.emplace(std::move(key), LayoutEntry{layout, layoutRecency.begin()});
+                layoutRecency.push_front(&inserted->first);
+                inserted->second.recency = layoutRecency.begin();
             }
             catch (...)
             {
-                layoutRecency.pop_front();
+                layoutCache.erase(inserted);
                 throw;
             }
-            return layout;
+            return handle;
         }
 
-        [[nodiscard]] const GlyphEntry& FindOrCreateGlyph(
-            IDWriteFontFace& fontFace,
-            const std::uint16_t glyphIndex,
-            const float fontEmSize,
-            const DWRITE_MEASURING_MODE measuringMode)
+        [[nodiscard]] const GlyphEntry &FindOrCreateGlyph(IDWriteFontFace &fontFace, IUnknown *identity,
+                                                          const std::uint16_t glyphIndex, const float fontEmSize,
+                                                          const DWRITE_MEASURING_MODE measuringMode)
         {
-            ComPtr<IUnknown> identity;
-            ThrowIfFailed(
-                fontFace.QueryInterface(
-                    __uuidof(IUnknown),
-                    reinterpret_cast<void**>(
-                        identity.ReleaseAndGetAddressOf())),
-                "IDWriteFontFace::QueryInterface");
-            const GlyphKey key{
-                reinterpret_cast<std::uintptr_t>(identity.Get()),
-                std::bit_cast<std::uint32_t>(fontEmSize),
-                glyphIndex,
-                measuringMode};
+            const GlyphKey key{reinterpret_cast<std::uintptr_t>(identity), std::bit_cast<std::uint32_t>(fontEmSize),
+                               glyphIndex, measuringMode};
             if (const auto found = glyphCache.find(key);
                 found != glyphCache.end())
             {
                 return found->second;
             }
 
+            ++statistics.glyphRasterizations;
             // Rasterize exactly one glyph. Its font-face COM identity is part
             // of the cache key, so equal glyph indices from different fonts
             // never share an atlas entry accidentally.
@@ -1029,29 +1159,16 @@ namespace mrg::graphics
             singleGlyphRun.glyphOffsets = &zeroOffset;
 
             ComPtr<IDWriteGlyphRunAnalysis> analysis;
-            // DirectWrite emits the antialiased texture requested below only
-            // when the analysis uses the matching ClearType mode. The three
-            // channel coverages are collapsed to one R8 value before upload,
-            // so the final D3D12 composition remains color-neutral.
-            ThrowIfFailed(
-                directWriteFactory->CreateGlyphRunAnalysis(
-                    &singleGlyphRun,
-                    nullptr,
-                    DWRITE_RENDERING_MODE1_NATURAL_SYMMETRIC,
-                    measuringMode,
-                    DWRITE_GRID_FIT_MODE_ENABLED,
-                    DWRITE_TEXT_ANTIALIAS_MODE_CLEARTYPE,
-                    0.0F,
-                    0.0F,
-                    analysis.ReleaseAndGetAddressOf()),
-                "IDWriteFactory3::CreateGlyphRunAnalysis");
+            // Grayscale directly produces the single alpha channel used by R8.
+            ThrowIfFailed(directWriteFactory->CreateGlyphRunAnalysis(
+                              &singleGlyphRun, nullptr, DWRITE_RENDERING_MODE1_NATURAL_SYMMETRIC, measuringMode,
+                              DWRITE_GRID_FIT_MODE_ENABLED, DWRITE_TEXT_ANTIALIAS_MODE_GRAYSCALE, 0.0F, 0.0F,
+                              analysis.ReleaseAndGetAddressOf()),
+                          "IDWriteFactory3::CreateGlyphRunAnalysis");
 
             RECT bounds{};
-            ThrowIfFailed(
-                analysis->GetAlphaTextureBounds(
-                    DWRITE_TEXTURE_CLEARTYPE_3x1,
-                    &bounds),
-                "IDWriteGlyphRunAnalysis::GetAlphaTextureBounds");
+            ThrowIfFailed(analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_ALIASED_1x1, &bounds),
+                          "IDWriteGlyphRunAnalysis::GetAlphaTextureBounds");
             const std::uint32_t width = static_cast<std::uint32_t>(
                 std::max<LONG>(bounds.right - bounds.left, 0));
             const std::uint32_t height = static_cast<std::uint32_t>(
@@ -1068,17 +1185,10 @@ namespace mrg::graphics
             entry.drawable = width > 0 && height > 0;
             if (entry.drawable)
             {
-                // DirectWrite returns three ClearType coverage channels. The
-                // renderer stores their maximum as a color-neutral R8 mask.
-                std::vector<std::uint8_t> clearTypePixels(
-                    static_cast<std::size_t>(width) * height * 3U);
-                ThrowIfFailed(
-                    analysis->CreateAlphaTexture(
-                        DWRITE_TEXTURE_CLEARTYPE_3x1,
-                        &bounds,
-                        clearTypePixels.data(),
-                        static_cast<UINT32>(clearTypePixels.size())),
-                    "IDWriteGlyphRunAnalysis::CreateAlphaTexture");
+                std::vector<std::uint8_t> grayscalePixels(static_cast<std::size_t>(width) * height);
+                ThrowIfFailed(analysis->CreateAlphaTexture(DWRITE_TEXTURE_ALIASED_1x1, &bounds, grayscalePixels.data(),
+                                                           static_cast<UINT32>(grayscalePixels.size())),
+                              "IDWriteGlyphRunAnalysis::CreateAlphaTexture");
 
                 const std::uint32_t uploadWidth =
                     width + GlyphPadding * 2U;
@@ -1091,12 +1201,7 @@ namespace mrg::graphics
                 {
                     for (std::uint32_t x = 0; x < width; ++x)
                     {
-                        const std::size_t sourceIndex =
-                            (static_cast<std::size_t>(y) * width + x) * 3U;
-                        const std::uint8_t alpha = std::max({
-                            clearTypePixels[sourceIndex],
-                            clearTypePixels[sourceIndex + 1U],
-                            clearTypePixels[sourceIndex + 2U]});
+                        const std::uint8_t alpha = grayscalePixels[static_cast<std::size_t>(y) * width + x];
                         coverage[
                             static_cast<std::size_t>(
                                 y + GlyphPadding) * uploadWidth +
@@ -1169,11 +1274,26 @@ namespace mrg::graphics
                 }
             }
 
-            if (atlasPages.size() >= MaximumAtlasPages)
+            if (atlasPages.size() >= DefaultAtlasPages)
             {
-                throw std::runtime_error(
-                    "The text glyph atlas reached its page limit.");
+                auto candidate = atlasPages.end();
+                for (auto page = atlasPages.begin(); page != atlasPages.end(); ++page)
+                    if (page->inFlightFrames == 0 &&
+                        (candidate == atlasPages.end() || page->lastUsedRenderIndex < candidate->lastUsedRenderIndex))
+                        candidate = page;
+                if (candidate != atlasPages.end())
+                {
+                    pageIndex = static_cast<std::uint32_t>(candidate - atlasPages.begin());
+                    ErasePageGlyphs(pageIndex);
+                    candidate->nextX = GlyphPadding;
+                    candidate->nextY = GlyphPadding;
+                    candidate->rowHeight = 0;
+                    if (!TryAllocate(*candidate, width, height, destinationX, destinationY))
+                        throw std::runtime_error("A glyph cannot fit an empty atlas page.");
+                    return;
+                }
             }
+            // Current and in-flight glyphs may temporarily exceed the soft budget.
             CreateAtlasPage();
             pageIndex =
                 static_cast<std::uint32_t>(atlasPages.size() - 1U);
@@ -1216,6 +1336,9 @@ namespace mrg::graphics
 
         void CreateAtlasPage()
         {
+            if (atlasPages.size() >= std::numeric_limits<std::uint32_t>::max())
+                throw std::length_error("Too many text atlas pages.");
+            EnsureDescriptorCapacity(static_cast<std::uint32_t>(atlasPages.size() + 1));
             D3D12_RESOURCE_DESC description{};
             description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
             description.Width = AtlasWidth;
@@ -1239,150 +1362,152 @@ namespace mrg::graphics
                     IID_PPV_ARGS(page.texture.ReleaseAndGetAddressOf())),
                 "ID3D12Device::CreateCommittedResource(glyph atlas)");
 
-            D3D12_SHADER_RESOURCE_VIEW_DESC shaderResourceView{};
-            shaderResourceView.Format = DXGI_FORMAT_R8_UNORM;
-            shaderResourceView.ViewDimension =
-                D3D12_SRV_DIMENSION_TEXTURE2D;
-            shaderResourceView.Shader4ComponentMapping =
-                D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            shaderResourceView.Texture2D.MipLevels = 1;
-
-            D3D12_CPU_DESCRIPTOR_HANDLE descriptor =
-                atlasDescriptorHeap->
-                    GetCPUDescriptorHandleForHeapStart();
-            descriptor.ptr +=
-                static_cast<SIZE_T>(atlasPages.size()) *
-                atlasDescriptorSize;
-            device->CreateShaderResourceView(
-                page.texture.Get(),
-                &shaderResourceView,
-                descriptor);
+            WriteAtlasDescriptor(page.texture.Get(), atlasPages.size());
             atlasPages.push_back(std::move(page));
         }
 
-        void UploadNewGlyphs(ID3D12GraphicsCommandList& commandList)
+        void ErasePageGlyphs(std::uint32_t index)
         {
-            if (pendingUploads.empty())
-            {
-                return;
-            }
-
-            // Transition only pages touched by this frame's pending uploads.
-            std::array<bool, MaximumAtlasPages> touchedPages{};
-            for (const PendingGlyphUpload& upload : pendingUploads)
-            {
-                touchedPages[upload.pageIndex] = true;
-            }
-
-            std::vector<D3D12_RESOURCE_BARRIER> toCopy;
-            for (std::uint32_t pageIndex = 0;
-                 pageIndex < atlasPages.size();
-                 ++pageIndex)
-            {
-                if (touchedPages[pageIndex])
-                {
-                    toCopy.push_back(TransitionBarrier(
-                        *atlasPages[pageIndex].texture.Get(),
-                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-                        D3D12_RESOURCE_STATE_COPY_DEST));
-                }
-            }
-            commandList.ResourceBarrier(
-                static_cast<UINT>(toCopy.size()),
-                toCopy.data());
-
-            FrameInstanceBuffer& frame =
-                frameBuffers[currentFrameIndex];
-            for (const PendingGlyphUpload& upload : pendingUploads)
-            {
-                // Each small upload resource is retained by the current frame
-                // until its fence proves that the GPU copy has completed.
-                const std::uint32_t rowPitch = Align(
-                    upload.width,
-                    D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-                const std::size_t uploadSize =
-                    static_cast<std::size_t>(rowPitch) * upload.height;
-
-                ComPtr<ID3D12Resource> uploadBuffer;
-                const D3D12_HEAP_PROPERTIES uploadProperties =
-                    HeapProperties(D3D12_HEAP_TYPE_UPLOAD);
-                const D3D12_RESOURCE_DESC bufferDescription =
-                    BufferDescription(uploadSize);
-                ThrowIfFailed(
-                    device->CreateCommittedResource(
-                        &uploadProperties,
-                        D3D12_HEAP_FLAG_NONE,
-                        &bufferDescription,
-                        D3D12_RESOURCE_STATE_GENERIC_READ,
-                        nullptr,
-                        IID_PPV_ARGS(
-                            uploadBuffer.ReleaseAndGetAddressOf())),
-                    "ID3D12Device::CreateCommittedResource(glyph upload)");
-
-                std::byte* mapped = nullptr;
-                ThrowIfFailed(
-                    uploadBuffer->Map(
-                        0,
-                        nullptr,
-                        reinterpret_cast<void**>(&mapped)),
-                    "ID3D12Resource::Map(glyph upload)");
-                for (std::uint32_t y = 0; y < upload.height; ++y)
-                {
-                    std::memcpy(
-                        mapped + static_cast<std::size_t>(y) * rowPitch,
-                        upload.pixels.data() +
-                            static_cast<std::size_t>(y) * upload.width,
-                        upload.width);
-                }
-                uploadBuffer->Unmap(0, nullptr);
-
-                D3D12_TEXTURE_COPY_LOCATION destination{};
-                destination.pResource =
-                    atlasPages[upload.pageIndex].texture.Get();
-                destination.Type =
-                    D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-                destination.SubresourceIndex = 0;
-
-                D3D12_TEXTURE_COPY_LOCATION source{};
-                source.pResource = uploadBuffer.Get();
-                source.Type =
-                    D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-                source.PlacedFootprint.Offset = 0;
-                source.PlacedFootprint.Footprint.Format =
-                    DXGI_FORMAT_R8_UNORM;
-                source.PlacedFootprint.Footprint.Width = upload.width;
-                source.PlacedFootprint.Footprint.Height = upload.height;
-                source.PlacedFootprint.Footprint.Depth = 1;
-                source.PlacedFootprint.Footprint.RowPitch = rowPitch;
-
-                commandList.CopyTextureRegion(
-                    &destination,
-                    upload.destinationX,
-                    upload.destinationY,
-                    0,
-                    &source,
-                    nullptr);
-                frame.uploadResources.push_back(std::move(uploadBuffer));
-            }
-
-            std::vector<D3D12_RESOURCE_BARRIER> toShaderResource;
-            for (std::uint32_t pageIndex = 0;
-                 pageIndex < atlasPages.size();
-                 ++pageIndex)
-            {
-                if (touchedPages[pageIndex])
-                {
-                    toShaderResource.push_back(TransitionBarrier(
-                        *atlasPages[pageIndex].texture.Get(),
-                        D3D12_RESOURCE_STATE_COPY_DEST,
-                        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
-                }
-            }
-            commandList.ResourceBarrier(
-                static_cast<UINT>(toShaderResource.size()),
-                toShaderResource.data());
+            std::erase_if(glyphCache, [index](const auto &entry)
+                          { return entry.second.drawable && entry.second.pageIndex == index; });
+            ++statistics.atlasEvictions;
         }
 
+        void TrimAtlasPages()
+        {
+            while (atlasPages.size() > DefaultAtlasPages && atlasPages.back().inFlightFrames == 0)
+            {
+                ErasePageGlyphs(static_cast<std::uint32_t>(atlasPages.size() - 1));
+                atlasPages.pop_back();
+            }
+        }
+
+        void EnsureDescriptorCapacity(std::uint32_t required)
+        {
+            if (required <= atlasDescriptorCapacity)
+                return;
+            std::uint32_t capacity = std::max(atlasDescriptorCapacity, DefaultAtlasPages);
+            while (capacity < required)
+            {
+                if (capacity > std::numeric_limits<std::uint32_t>::max() / 2)
+                    throw std::length_error("Text atlas descriptor capacity overflow.");
+                capacity *= 2;
+            }
+            CreateDescriptorHeap(capacity);
+            // Shader-visible heaps cannot be descriptor copy sources. Recreate
+            // views from retained resources instead of reading GPU descriptors.
+            for (std::size_t index = 0; index < atlasPages.size(); ++index)
+                WriteAtlasDescriptor(atlasPages[index].texture.Get(), index);
+        }
+
+        void WriteAtlasDescriptor(ID3D12Resource *texture, std::size_t index)
+        {
+            D3D12_SHADER_RESOURCE_VIEW_DESC view{};
+            view.Format = DXGI_FORMAT_R8_UNORM;
+            view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            view.Texture2D.MipLevels = 1;
+            auto descriptor = atlasDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+            descriptor.ptr += index * atlasDescriptorSize;
+            device->CreateShaderResourceView(texture, &view, descriptor);
+        }
+        static std::size_t AlignUploadOffset(std::size_t value)
+        {
+            constexpr std::size_t alignment = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT;
+            if (value > std::numeric_limits<std::size_t>::max() - (alignment - 1))
+                throw std::length_error("Text upload alignment overflow.");
+            return (value + alignment - 1) & ~(alignment - 1);
+        }
+
+        FrameInstancePage &AllocateGlyphUpload(std::size_t bytes, std::size_t &offset)
+        {
+            auto &pages = frameBuffers[currentFrameIndex].glyphUploadPages;
+            for (auto &page : pages)
+            {
+                const auto begin = AlignUploadOffset(page.used);
+                if (begin <= page.capacity && bytes <= page.capacity - begin)
+                {
+                    offset = begin;
+                    page.used = begin + bytes;
+                    return page;
+                }
+            }
+            std::size_t capacity = 65536;
+            while (capacity < bytes)
+            {
+                if (capacity > std::numeric_limits<std::size_t>::max() / 2)
+                    throw std::length_error("Text upload capacity overflow.");
+                capacity *= 2;
+            }
+            FrameInstancePage page;
+            const auto properties = HeapProperties(D3D12_HEAP_TYPE_UPLOAD);
+            const auto description = BufferDescription(capacity);
+            ThrowIfFailed(device->CreateCommittedResource(&properties, D3D12_HEAP_FLAG_NONE, &description,
+                                                          D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                                          IID_PPV_ARGS(page.resource.GetAddressOf())),
+                          "ID3D12Device::CreateCommittedResource(text glyph arena)");
+            const D3D12_RANGE noReads{0, 0};
+            ThrowIfFailed(page.resource->Map(0, &noReads, reinterpret_cast<void **>(&page.mappedData)),
+                          "ID3D12Resource::Map(text glyph arena)");
+            page.capacity = capacity;
+            page.used = bytes;
+            offset = 0;
+            pages.push_back(std::move(page));
+            ++statistics.uploadAllocations;
+            return pages.back();
+        }
+
+        void UploadNewGlyphs(ID3D12GraphicsCommandList &commandList)
+        {
+            if (pendingUploads.empty())
+                return;
+            std::vector<bool> touchedPages(atlasPages.size());
+            std::size_t bytes = 0;
+            for (const auto &upload : pendingUploads)
+            {
+                touchedPages[upload.pageIndex] = true;
+                const auto rowPitch = Align(upload.width, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+                const auto size = static_cast<std::size_t>(rowPitch) * upload.height;
+                bytes = AlignUploadOffset(bytes);
+                if (size > std::numeric_limits<std::size_t>::max() - bytes)
+                    throw std::length_error("Text glyph upload size overflow.");
+                bytes += size;
+            }
+            std::size_t bufferOffset = 0;
+            auto &arena = AllocateGlyphUpload(bytes, bufferOffset);
+            statistics.uploadBytes += bytes;
+            std::vector<D3D12_RESOURCE_BARRIER> barriers;
+            for (std::size_t index = 0; index < atlasPages.size(); ++index)
+                if (touchedPages[index])
+                    barriers.push_back(TransitionBarrier(*atlasPages[index].texture.Get(),
+                                                         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                                                         D3D12_RESOURCE_STATE_COPY_DEST));
+            commandList.ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+            std::size_t localOffset = 0;
+            for (const auto &upload : pendingUploads)
+            {
+                localOffset = AlignUploadOffset(localOffset);
+                const auto offset = bufferOffset + localOffset;
+                const auto rowPitch = Align(upload.width, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+                for (std::uint32_t row = 0; row < upload.height; ++row)
+                    std::memcpy(arena.mappedData + offset + static_cast<std::size_t>(row) * rowPitch,
+                                upload.pixels.data() + static_cast<std::size_t>(row) * upload.width, upload.width);
+                D3D12_TEXTURE_COPY_LOCATION destination{};
+                destination.pResource = atlasPages[upload.pageIndex].texture.Get();
+                destination.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                D3D12_TEXTURE_COPY_LOCATION source{};
+                source.pResource = arena.resource.Get();
+                source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                source.PlacedFootprint.Offset = offset;
+                source.PlacedFootprint.Footprint = {DXGI_FORMAT_R8_UNORM, upload.width, upload.height, 1, rowPitch};
+                commandList.CopyTextureRegion(&destination, upload.destinationX, upload.destinationY, 0, &source,
+                                              nullptr);
+                localOffset += static_cast<std::size_t>(rowPitch) * upload.height;
+            }
+            for (auto &barrier : barriers)
+                std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+            commandList.ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+        }
         [[nodiscard]] FrameInstancePage& AllocateInstanceRange(
             FrameInstanceBuffer& frame,
             const std::size_t requiredCapacity,
@@ -1433,12 +1558,12 @@ namespace mrg::graphics
             return frame.pages.back();
         }
 
-        void CreateDescriptorHeap()
+        void CreateDescriptorHeap(std::uint32_t capacity = DefaultAtlasPages)
         {
             D3D12_DESCRIPTOR_HEAP_DESC description{};
             description.Type =
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-            description.NumDescriptors = MaximumAtlasPages;
+            description.NumDescriptors = capacity;
             description.Flags =
                 D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
             ThrowIfFailed(
@@ -1450,6 +1575,7 @@ namespace mrg::graphics
             atlasDescriptorSize =
                 device->GetDescriptorHandleIncrementSize(
                     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            atlasDescriptorCapacity = capacity;
         }
 
         void CreatePipeline(const DXGI_FORMAT renderTargetFormat)
@@ -1650,15 +1776,26 @@ namespace mrg::graphics
         std::unordered_map<GlyphKey, GlyphEntry, GlyphKeyHash> glyphCache;
         struct LayoutEntry
         {
-            ComPtr<IDWriteTextLayout> layout;
+            TextLayoutHandle layout;
+            std::list<const LayoutKey *>::iterator recency;
+        };
+        // Map nodes own each key once; rehash preserves their addresses.
+        std::list<const LayoutKey *> layoutRecency;
+        std::unordered_map<LayoutKey, LayoutEntry, LayoutKeyHash, LayoutKeyEqual> layoutCache;
+        struct FormatEntry
+        {
+            ComPtr<IDWriteTextFormat> format;
             std::list<LayoutKey>::iterator recency;
         };
-        std::list<LayoutKey> layoutRecency;
-        std::unordered_map<LayoutKey, LayoutEntry, LayoutKeyHash> layoutCache;
+        std::list<LayoutKey> formatRecency;
+        std::unordered_map<LayoutKey, FormatEntry, LayoutKeyHash> formatCache;
         std::vector<PendingGlyphUpload> pendingUploads;
         std::vector<GlyphInstance> pendingInstances;
         std::array<FrameInstanceBuffer, FrameCount> frameBuffers{};
         std::uint32_t currentFrameIndex{};
+        std::uint64_t currentRenderIndex{};
+        std::uint32_t atlasDescriptorCapacity{};
+        TextRenderStatistics statistics{};
         bool initialized{};
         bool frameOpen{};
     };
@@ -1699,6 +1836,32 @@ namespace mrg::graphics
         const std::filesystem::path& fontFile)
     {
         return implementation_->LoadFontFile(fontFile);
+    }
+
+    TextLayout::TextLayout(std::shared_ptr<Impl> implementation) : implementation_(std::move(implementation))
+    {
+    }
+    TextLayout::~TextLayout() = default;
+    DirectX::XMFLOAT2 TextLayout::SizePixels() const noexcept
+    {
+        return implementation_->size;
+    }
+
+    TextLayoutHandle TextRenderSystem::CreateLayout(std::wstring_view text, const TextDrawCommand &command)
+    {
+        return implementation_->CreateLayout(text, command);
+    }
+
+    void TextRenderSystem::Submit(const TextLayoutHandle &layout, const TextDrawCommand &command)
+    {
+        implementation_->Submit(layout, command);
+    }
+
+    TextRenderStatistics TextRenderSystem::Statistics() const noexcept
+    {
+        auto result = implementation_->statistics;
+        result.atlasPages = implementation_->atlasPages.size();
+        return result;
     }
 
     void TextRenderSystem::BeginFrame(

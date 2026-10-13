@@ -20,22 +20,15 @@ namespace mrg::visual2d
             return packet;
         }
 
-        [[nodiscard]] DrawPacket MakeText(
-            const Rect bounds,
-            const Color color,
-            const std::wstring_view text,
-            const TextFont& font,
-            const float fontSize,
-            const TextAlignment alignment)
+        [[nodiscard]] DrawPacket MakeText(const Rect bounds, const Color color, TextContentHandle text,
+                                          const Point offset = {})
         {
             DrawPacket packet{};
             packet.type = DrawPacketType::Text;
             packet.bounds = bounds;
             packet.color = color;
-            packet.text = text;
-            packet.font = font;
-            packet.fontSize = fontSize;
-            packet.horizontalAlignment = alignment;
+            packet.text = std::move(text);
+            packet.textOffset = offset;
             return packet;
         }
 
@@ -180,7 +173,10 @@ namespace mrg::visual2d
 
     void TextVisualComponent::SetText(std::wstring text)
     {
+        if (text_ == text)
+            return;
         text_ = std::move(text);
+        content_.reset();
     }
 
     const TextFont& TextVisualComponent::Font() const noexcept
@@ -195,7 +191,10 @@ namespace mrg::visual2d
             throw std::invalid_argument(
                 "Visual2D system and file fonts require a name or path.");
         }
+        if (font_.source == font.source && font_.value == font.value)
+            return;
         font_ = std::move(font);
+        content_.reset();
     }
 
     float TextVisualComponent::FontSize() const noexcept
@@ -206,7 +205,10 @@ namespace mrg::visual2d
     void TextVisualComponent::SetFontSize(const float fontSize)
     {
         ValidatePositive(fontSize, "Visual2D font size must be positive.");
+        if (fontSize_ == fontSize)
+            return;
         fontSize_ = fontSize;
+        content_.reset();
     }
 
     Color TextVisualComponent::TextColor() const noexcept
@@ -227,7 +229,10 @@ namespace mrg::visual2d
     void TextVisualComponent::SetHorizontalAlignment(
         const TextAlignment alignment) noexcept
     {
+        if (alignment_ == alignment)
+            return;
         alignment_ = alignment;
+        content_.reset();
     }
 
     Rect TextVisualComponent::ContentBounds() const noexcept
@@ -252,18 +257,39 @@ namespace mrg::visual2d
     {
         if (!text_.empty())
         {
-            packets.push_back(MakeText(
-                ContentBounds(),
-                {textColor_.red,
-                    textColor_.green,
-                    textColor_.blue,
-                    Owner().IsEnabled() ? textColor_.alpha :
-                        textColor_.alpha * 0.55F},
-                text_,
-                font_,
-                fontSize_,
-                alignment_));
+            if (!content_)
+                content_ = std::make_shared<TextContent>(TextContent{text_, font_, fontSize_, alignment_, {}});
+            packets.push_back(MakeText(ContentBounds(),
+                                       {textColor_.red, textColor_.green, textColor_.blue,
+                                        Owner().IsEnabled() ? textColor_.alpha : textColor_.alpha * 0.55F},
+                                       content_, textOffset_));
+            if (repeatOffset_)
+            {
+                auto repeat = packets.back();
+                repeat.textOffset.x += repeatOffset_->x;
+                repeat.textOffset.y += repeatOffset_->y;
+                packets.push_back(std::move(repeat));
+            }
         }
+    }
+
+    std::optional<Size> TextVisualComponent::MeasuredSize() const noexcept
+    {
+        return content_ ? content_->measuredSize : std::nullopt;
+    }
+
+    void TextVisualComponent::SetTextOffset(Point offset)
+    {
+        if (!std::isfinite(offset.x) || !std::isfinite(offset.y))
+            throw std::invalid_argument("Visual2D text offset must be finite.");
+        textOffset_ = offset;
+    }
+
+    void TextVisualComponent::SetRepeatOffset(std::optional<Point> offset)
+    {
+        if (offset && (!std::isfinite(offset->x) || !std::isfinite(offset->y)))
+            throw std::invalid_argument("Visual2D repeat offset must be finite.");
+        repeatOffset_ = offset;
     }
 
     RectangleCollider2DComponent::RectangleCollider2DComponent(
@@ -595,6 +621,7 @@ namespace mrg::visual2d
     void ComboBoxBehaviorComponent::SetItems(std::vector<std::wstring> items)
     {
         items_ = std::move(items);
+        itemContent_.clear();
         if (selectedIndex_ >= items_.size())
         {
             selectedIndex_ = 0;
@@ -671,13 +698,21 @@ namespace mrg::visual2d
             throw std::invalid_argument(
                 "Visual2D system and file fonts require a name or path.");
         }
+        if (font_.source == font.source && font_.value == font.value)
+            return;
         font_ = std::move(font);
+        itemContent_.clear();
+        arrowContent_ = {};
     }
 
     void ComboBoxBehaviorComponent::SetFontSize(const float fontSize)
     {
         ValidatePositive(fontSize, "Visual2D font size must be positive.");
+        if (fontSize_ == fontSize)
+            return;
         fontSize_ = fontSize;
+        itemContent_.clear();
+        arrowContent_ = {};
     }
 
     Color ComboBoxBehaviorComponent::TextColor() const noexcept
@@ -728,33 +763,22 @@ namespace mrg::visual2d
     void ComboBoxBehaviorComponent::AppendDrawPackets(
         std::vector<DrawPacket>& packets) const
     {
+        EnsureTextContent();
         const Size size = Owner().NodeSize();
         const float arrowWidth = std::min(34.0F, size.width);
         if (!items_.empty())
         {
-            packets.push_back(MakeText(
-                {12.0F, 0.0F, std::max(size.width - arrowWidth - 18.0F, 0.0F),
-                    size.height},
-                {textColor_.red,
-                 textColor_.green,
-                 textColor_.blue,
-                 Owner().IsEnabled() ? textColor_.alpha :
-                     textColor_.alpha * 0.55F},
-                items_[selectedIndex_],
-                font_,
-                fontSize_,
-                TextAlignment::Leading));
+            packets.push_back(MakeText({12.0F, 0.0F, std::max(size.width - arrowWidth - 18.0F, 0.0F), size.height},
+                                       {textColor_.red, textColor_.green, textColor_.blue,
+                                        Owner().IsEnabled() ? textColor_.alpha : textColor_.alpha * 0.55F},
+                                       itemContent_[selectedIndex_]));
         }
         packets.push_back(MakeRectangle(
             {size.width - arrowWidth, 0.0F, arrowWidth, size.height},
             {0.025F, 0.055F, 0.125F, Owner().IsEnabled() ? 0.92F : 0.50F}));
-        packets.push_back(MakeText(
-            {size.width - arrowWidth, 0.0F, arrowWidth, size.height},
-            {0.72F, 0.84F, 1.0F, Owner().IsEnabled() ? 1.0F : 0.55F},
-            expanded_ ? L"▲" : L"▼",
-            font_,
-            std::min(fontSize_, 14.0F),
-            TextAlignment::Center));
+        packets.push_back(MakeText({size.width - arrowWidth, 0.0F, arrowWidth, size.height},
+                                   {0.72F, 0.84F, 1.0F, Owner().IsEnabled() ? 1.0F : 0.55F},
+                                   arrowContent_[expanded_ ? 1 : 0]));
 
         if (!expanded_ || items_.empty())
         {
@@ -780,17 +804,8 @@ namespace mrg::visual2d
                 : itemIndex == hoveredItemIndex_ ? style.hovered : style.normal;
             packets.push_back(MakeRectangle(itemBounds, itemColor));
             packets.push_back(MakeText(
-                {itemBounds.x + 10.0F,
-                    itemBounds.y,
-                    std::max(itemBounds.width - 20.0F, 0.0F),
-                    itemBounds.height},
-                itemIndex == selectedIndex_
-                    ? selectedTextColor_
-                    : textColor_,
-                items_[itemIndex],
-                font_,
-                fontSize_,
-                TextAlignment::Leading));
+                {itemBounds.x + 10.0F, itemBounds.y, std::max(itemBounds.width - 20.0F, 0.0F), itemBounds.height},
+                itemIndex == selectedIndex_ ? selectedTextColor_ : textColor_, itemContent_[itemIndex]));
         }
 
         if (items_.size() > visibleCount && popup.height > 0.0F)
@@ -818,6 +833,30 @@ namespace mrg::visual2d
                     trackWidth,
                     thumbHeight},
                 {0.35F, 0.70F, 1.0F, 1.0F}));
+        }
+    }
+
+    void ComboBoxBehaviorComponent::EnsureTextContent() const
+    {
+        if (itemContent_.size() != items_.size())
+            itemContent_.resize(items_.size());
+        const auto prepareItem = [this](std::size_t index)
+        {
+            if (!itemContent_[index])
+                itemContent_[index] = std::make_shared<TextContent>(
+                    TextContent{items_[index], font_, fontSize_, TextAlignment::Leading, {}});
+        };
+        if (!items_.empty())
+            prepareItem(selectedIndex_);
+        if (expanded_)
+            for (std::size_t row = 0; row < VisibleItemCount(); ++row)
+                prepareItem(firstVisibleIndex_ + row);
+        if (!arrowContent_[0])
+        {
+            arrowContent_[0] = std::make_shared<TextContent>(
+                TextContent{L"▼", font_, std::min(fontSize_, 14.0F), TextAlignment::Center, {}});
+            arrowContent_[1] = std::make_shared<TextContent>(
+                TextContent{L"▲", font_, std::min(fontSize_, 14.0F), TextAlignment::Center, {}});
         }
     }
 

@@ -2,6 +2,7 @@
 
 #include "Visual2D/Visual2DNode.h"
 
+#include <array>
 #include <functional>
 #include <optional>
 #include <string_view>
@@ -55,6 +56,12 @@ namespace mrg::visual2d
         void SetHorizontalAlignment(TextAlignment alignment) noexcept;
         [[nodiscard]] Rect ContentBounds() const noexcept;
         void SetContentBounds(Rect bounds);
+        [[nodiscard]] std::optional<Size> MeasuredSize() const noexcept;
+        // Moves glyphs inside the unchanged layout/clip rectangle.
+        void SetTextOffset(Point offset);
+        // Optional second copy shares the same shaping result; its displacement
+        // is relative to the first copy. Animation remains a Client responsibility.
+        void SetRepeatOffset(std::optional<Point> offset);
 
         void AppendDrawPackets(
             std::vector<DrawPacket>& packets) const override;
@@ -66,6 +73,9 @@ namespace mrg::visual2d
         Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
         TextAlignment alignment_{TextAlignment::Leading};
         std::optional<Rect> contentBounds_;
+        Point textOffset_{};
+        std::optional<Point> repeatOffset_;
+        mutable TextContentHandle content_;
     };
 
     class RectangleCollider2DComponent final : public Visual2DComponent
@@ -237,6 +247,7 @@ namespace mrg::visual2d
 
     private:
         [[nodiscard]] Rect PopupBounds() const noexcept;
+        void EnsureTextContent() const;
         [[nodiscard]] std::size_t VisibleItemCount() const noexcept;
         [[nodiscard]] std::optional<std::size_t> ItemIndexAt(
             Point localPosition) const noexcept;
@@ -246,6 +257,8 @@ namespace mrg::visual2d
         [[nodiscard]] const VisualStyle& OwnerStyle() const noexcept;
 
         std::vector<std::wstring> items_;
+        mutable std::vector<TextContentHandle> itemContent_;
+        mutable std::array<TextContentHandle, 2> arrowContent_;
         std::size_t selectedIndex_{};
         std::size_t firstVisibleIndex_{};
         std::size_t maxVisibleItems_{4};

@@ -62,6 +62,14 @@ PrepareImages/LoadImage/poll은 기존 렌더 소유 스레드에서 호출합�
 화면 SubmitScreen은 clip 밖의 primitive를 텍스트 shaping/instance 생성 전에 거릅니다.
 Canvas 트리 자체의 수집 비용은 남으므로 큰 목록은 Client에서 가시 항목만 생성해야 합니다.
 
+`DrawPacket::text`는 불변 문자열·글꼴·크기·정렬을 소유하는 `TextContentHandle`입니다.
+TextVisual/ComboBox는 같은 내용을 반복 게시할 때 payload를 유지합니다.
+D3D12는 payload의 약한 참조와 배치 handle을 별도로 유지하고 원본이 사라지면 회수합니다.
+내용/스타일/배치 영역 변경 때만 shaping하며 색상·transform·clip·텍스트 offset은 재사용합니다.
+`MeasuredSize()`는 마지막 렌더의 논리 크기로 첫 렌더 전에는 비어 있습니다.
+GPU UV는 배치에 고정하지 않으며 글리프 residency와 upload/descriptor 수명은
+[TextRendering](TextRendering.md)의 페이지 회수·frame fence 계약을 따릅니다.
+
 `DrawPacketType::RectangleBatch`는 불변 사각형 geometry를 공유한다. component는
 `shared_ptr<const vector<RectanglePrimitive>>`를 게시한 후 내용을 변경하지 않는다.
 Canvas 수집은 geometry handle만 복사하며 node transform과 clip을 packet에 적용한다.

@@ -14,7 +14,8 @@ Visual2D 텍스트와 ComboBox는 renderer 기본 글꼴, 시스템 family 또�
 `StreamAsync`는 파일 열기를 비동기로 요청하고 `AudioClip::LoadState`로 준비 상태를 조회한다.
 `SampleAsync`도 준비 상태를 확인한 뒤 재생한다. Visual2D의 `PrepareImages`는 CPU 이미지
 디코드를 비동기로 준비하며 GPU 업로드는 fence까지 자원을 보관해 이미지별 대기를 제거한다.
-텍스트 레이아웃은 2,048항목 LRU이고 화면 clip 밖의 primitive는 제출 전에 제외한다.
+텍스트는 유지된 배치와 2,048항목 보조 LRU를 사용하고 clip 밖의 글리프를 제외한다.
+회색조 아틀라스는 기본 16MiB에서 필요한 만큼 확대·회수하며 새 글리프를 upload arena에 묶는다.
 상세 계약은 [Visual2D 성능·소유권](Docs/Visual2DPerformanceAndOwnership.md)과
 [텍스트 렌더링](Docs/TextRendering.md)에 있다.
 `StreamAsyncAccurate`는 정확한 길이/PCM seek 준비도 비동기로 수행한다. Clip 길이 조회,

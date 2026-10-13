@@ -16,7 +16,7 @@
 - FMOD는 현재 기본 오디오 backend지만 공개 API에는 FMOD 타입을 노출하지 않는다.
 - 게임 규칙, Scene ID, 게임별 asset과 화면 전환 정책은 Client 저장소에 둔다.
 - 이미지 비동기 준비와 업로드 fence 수명은 Visual2DPerformanceAndOwnership을,
-  SampleAsync/Voice 유지관리는 AudioPlayback을, 텍스트 LRU는 TextRendering을 따른다.
+  SampleAsync/Voice 유지관리는 AudioPlayback을, 텍스트 배치·아틀라스 수명은 TextRendering을 따른다.
 
 새 게임에서 엔진을 연결하는 방법은
 [EngineIntegration.md](EngineIntegration.md), 현재 샘플의 실제 시작·종료 과정은
@@ -265,7 +265,9 @@ sphere-ray/OBB, OBB-OBB, triangle-ray와 ViewFrustum-sphere 3단계 분류가 �
 
 Visual2D의 `TextVisualComponent`와 `ComboBoxBehaviorComponent`는 `TextFont`로
 renderer 기본 글꼴, 시스템 family 또는 글꼴 파일을 선택한다. D3D12 backend는
-화면/texture 렌더러별로 해석한 글꼴 handle을 캐시한다.
+화면/texture 렌더러별로 불변 TextContent의 글꼴과 배치 handle을 유지한다.
+DrawPacket은 문자열 복사 대신 공유 payload를 전달하며 위치·색상 변경은 shaping을 반복하지 않는다.
+글리프는 clip 검사 뒤 제출하고 회색조 아틀라스의 기본 16MiB 예산은 표시 유지에 맞춰 확대·회수한다.
 
 사용 예제와 자원 수명은 [TextRendering.md](TextRendering.md)를 참고한다.
 

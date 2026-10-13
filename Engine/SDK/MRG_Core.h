@@ -1417,6 +1417,18 @@ namespace mrg::visual2d
         std::wstring value;
     };
 
+    // Immutable content/style shared by draw packets. Render-owned measurement
+    // is published on the same engine thread as Visual2D Update/Submit.
+    struct TextContent
+    {
+        std::wstring value;
+        TextFont font;
+        float fontSize{18.0F};
+        TextAlignment alignment{TextAlignment::Leading};
+        mutable std::optional<Size> measuredSize;
+    };
+    using TextContentHandle = std::shared_ptr<const TextContent>;
+
     struct RectanglePrimitive
     {
         Rect bounds{};
@@ -1432,10 +1444,8 @@ namespace mrg::visual2d
         Rect bounds{};
         DirectX::XMFLOAT4X4 nodeTransform{};
         Color color{};
-        std::wstring text;
-        TextFont font;
-        float fontSize{18.0F};
-        TextAlignment horizontalAlignment{TextAlignment::Leading};
+        TextContentHandle text;
+        Point textOffset{};
         ImageHandle image{};
         DirectX::XMFLOAT2 uvScale{1.0F, 1.0F};
         DirectX::XMFLOAT2 uvOffset{};
@@ -1923,6 +1933,7 @@ namespace mrg::visual2d
 // ===== BEGIN Engine\Core\Visual2D\Visual2DComponents.h =====
 
 
+#include <array>
 #include <functional>
 #include <optional>
 #include <string_view>
@@ -1976,6 +1987,12 @@ namespace mrg::visual2d
         void SetHorizontalAlignment(TextAlignment alignment) noexcept;
         [[nodiscard]] Rect ContentBounds() const noexcept;
         void SetContentBounds(Rect bounds);
+        [[nodiscard]] std::optional<Size> MeasuredSize() const noexcept;
+        // Moves glyphs inside the unchanged layout/clip rectangle.
+        void SetTextOffset(Point offset);
+        // Optional second copy shares the same shaping result; its displacement
+        // is relative to the first copy. Animation remains a Client responsibility.
+        void SetRepeatOffset(std::optional<Point> offset);
 
         void AppendDrawPackets(
             std::vector<DrawPacket>& packets) const override;
@@ -1987,6 +2004,9 @@ namespace mrg::visual2d
         Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
         TextAlignment alignment_{TextAlignment::Leading};
         std::optional<Rect> contentBounds_;
+        Point textOffset_{};
+        std::optional<Point> repeatOffset_;
+        mutable TextContentHandle content_;
     };
 
     class RectangleCollider2DComponent final : public Visual2DComponent
@@ -2158,6 +2178,7 @@ namespace mrg::visual2d
 
     private:
         [[nodiscard]] Rect PopupBounds() const noexcept;
+        void EnsureTextContent() const;
         [[nodiscard]] std::size_t VisibleItemCount() const noexcept;
         [[nodiscard]] std::optional<std::size_t> ItemIndexAt(
             Point localPosition) const noexcept;
@@ -2167,6 +2188,8 @@ namespace mrg::visual2d
         [[nodiscard]] const VisualStyle& OwnerStyle() const noexcept;
 
         std::vector<std::wstring> items_;
+        mutable std::vector<TextContentHandle> itemContent_;
+        mutable std::array<TextContentHandle, 2> arrowContent_;
         std::size_t selectedIndex_{};
         std::size_t firstVisibleIndex_{};
         std::size_t maxVisibleItems_{4};
@@ -2434,6 +2457,7 @@ namespace mrg::visual2d
 #include <DirectXMath.h>
 #include <d3d12.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -2475,6 +2499,33 @@ namespace mrg::graphics
 
     using FontHandle = std::shared_ptr<const Font>;
 
+    // Immutable shaping/placement result. Atlas locations are resolved only
+    // when visible glyphs are submitted, so eviction never invalidates it.
+    class TextLayout final
+    {
+      public:
+        ~TextLayout();
+        [[nodiscard]] DirectX::XMFLOAT2 SizePixels() const noexcept;
+
+      private:
+        friend class TextRenderSystem;
+        struct Impl;
+        explicit TextLayout(std::shared_ptr<Impl> implementation);
+        std::shared_ptr<Impl> implementation_;
+    };
+    using TextLayoutHandle = std::shared_ptr<const TextLayout>;
+
+    struct TextRenderStatistics
+    {
+        std::size_t layoutCreations{};
+        std::size_t glyphRasterizations{};
+        std::size_t submittedGlyphs{};
+        std::size_t uploadAllocations{};
+        std::size_t uploadBytes{};
+        std::size_t atlasPages{};
+        std::size_t atlasEvictions{};
+    };
+
     struct TextStyle
     {
         FontHandle font;
@@ -2509,9 +2560,9 @@ namespace mrg::graphics
         TextStyle style{};
     };
 
-    // Text is submitted while a RenderContext is open. Submit performs
-    // DirectWrite layout and records CPU-side glyph instances only; Flush
-    // uploads cache misses and emits batched D3D12 draws at EndFrame.
+    // Text is submitted while a RenderContext is open. Prepared layouts retain
+    // shaping; Submit records visible glyph instances and Flush uploads cache
+    // misses and emits batched D3D12 draws at EndFrame.
     class TextRenderSystem final
     {
     public:
@@ -2533,6 +2584,12 @@ namespace mrg::graphics
             std::wstring_view familyName);
         [[nodiscard]] FontHandle LoadFontFile(
             const std::filesystem::path& fontFile);
+
+        [[nodiscard]] TextLayoutHandle CreateLayout(std::wstring_view text, const TextDrawCommand &command);
+        // Uses the prepared font/size/alignment; command contributes only
+        // origin, transform, color, depth and clip. Handles may outlive LRU entries.
+        void Submit(const TextLayoutHandle &layout, const TextDrawCommand &command);
+        [[nodiscard]] TextRenderStatistics Statistics() const noexcept;
 
         // renderIndex identifies one engine frame. Multiple BeginFrame/Flush
         // pairs with the same value are independent off-screen text passes

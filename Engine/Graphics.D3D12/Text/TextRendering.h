@@ -6,6 +6,7 @@
 #include <DirectXMath.h>
 #include <d3d12.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -47,6 +48,33 @@ namespace mrg::graphics
 
     using FontHandle = std::shared_ptr<const Font>;
 
+    // Immutable shaping/placement result. Atlas locations are resolved only
+    // when visible glyphs are submitted, so eviction never invalidates it.
+    class TextLayout final
+    {
+      public:
+        ~TextLayout();
+        [[nodiscard]] DirectX::XMFLOAT2 SizePixels() const noexcept;
+
+      private:
+        friend class TextRenderSystem;
+        struct Impl;
+        explicit TextLayout(std::shared_ptr<Impl> implementation);
+        std::shared_ptr<Impl> implementation_;
+    };
+    using TextLayoutHandle = std::shared_ptr<const TextLayout>;
+
+    struct TextRenderStatistics
+    {
+        std::size_t layoutCreations{};
+        std::size_t glyphRasterizations{};
+        std::size_t submittedGlyphs{};
+        std::size_t uploadAllocations{};
+        std::size_t uploadBytes{};
+        std::size_t atlasPages{};
+        std::size_t atlasEvictions{};
+    };
+
     struct TextStyle
     {
         FontHandle font;
@@ -81,9 +109,9 @@ namespace mrg::graphics
         TextStyle style{};
     };
 
-    // Text is submitted while a RenderContext is open. Submit performs
-    // DirectWrite layout and records CPU-side glyph instances only; Flush
-    // uploads cache misses and emits batched D3D12 draws at EndFrame.
+    // Text is submitted while a RenderContext is open. Prepared layouts retain
+    // shaping; Submit records visible glyph instances and Flush uploads cache
+    // misses and emits batched D3D12 draws at EndFrame.
     class TextRenderSystem final
     {
     public:
@@ -105,6 +133,12 @@ namespace mrg::graphics
             std::wstring_view familyName);
         [[nodiscard]] FontHandle LoadFontFile(
             const std::filesystem::path& fontFile);
+
+        [[nodiscard]] TextLayoutHandle CreateLayout(std::wstring_view text, const TextDrawCommand &command);
+        // Uses the prepared font/size/alignment; command contributes only
+        // origin, transform, color, depth and clip. Handles may outlive LRU entries.
+        void Submit(const TextLayoutHandle &layout, const TextDrawCommand &command);
+        [[nodiscard]] TextRenderStatistics Statistics() const noexcept;
 
         // renderIndex identifies one engine frame. Multiple BeginFrame/Flush
         // pairs with the same value are independent off-screen text passes

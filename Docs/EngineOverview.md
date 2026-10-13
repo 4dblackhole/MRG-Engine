@@ -96,8 +96,10 @@ Client wWinMain
 핵심 소유권 규칙은 다음과 같다.
 
 - `mrg::Run`이 플랫폼, 그래픽, 오디오 subsystem을 소유한다.
-- Client와 Scene이 받는 `EngineServices` 및 Render/Update context의 시스템 참조는
-  빌린 참조다. 저장하거나 해제하지 않는다.
+- `EngineServices`의 시스템 참조는 `mrg::Run`이 Scene 종료까지 수명을 보장하는
+  빌린 참조다. 비동기 준비를 기다리는 Scene은 이 참조의 사본을 보관할 수 있으나
+  서비스를 해제하지 않으며 Shutdown에서 관찰자를 먼저 버린다. 창 크기 사본은
+  OnResize에서 갱신한다. Render/Update context 자체는 프레임 밖에 보관하지 않는다.
 - `SceneManager`가 Scene factory와 생성된 Scene 객체를 소유한다.
 - `SceneGameClient::ScreenVisuals()`는 화면 Canvas와 이미지 등록을 소유하며,
   `CreateOwnedCanvas()`의 이동 전용 handle로 Scene Canvas를 자동 해제할 수 있고,

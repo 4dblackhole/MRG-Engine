@@ -14,6 +14,7 @@ $publicHeaders = @(
     'Engine\Audio\System\AudioPlaybackManager.h',
     'Engine\Platform.Win32\System\RuntimePaths.h',
     'Engine\Platform.Win32\Input\Input.h',
+    'Engine\Platform.Win32\Window\WindowControl.h',
     'Engine\Collision\Query\Collision.h',
     'Engine\Geometry\Shape\Vertex.h',
     'Engine\Geometry\Shape\Shape.h',

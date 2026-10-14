@@ -62,6 +62,7 @@
     <ClInclude Include="System\ComApartment.h" />
     <ClInclude Include="System\RuntimePaths.h" />
     <ClInclude Include="Window\Win32Window.h" />
+    <ClInclude Include="Window\WindowControl.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Input\Input.cpp" />

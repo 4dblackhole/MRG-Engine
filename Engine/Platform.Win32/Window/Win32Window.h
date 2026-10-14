@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Input/Input.h"
+#include "Window/WindowControl.h"
 
 #include <Windows.h>
 
@@ -24,7 +25,7 @@ namespace mrg::platform
     };
 
     // Owns the native game window and translates messages into engine state.
-    class Win32Window final
+    class Win32Window final : public IWindowControl
     {
     public:
         Win32Window() = default;
@@ -36,6 +37,10 @@ namespace mrg::platform
         void Initialize(const WindowConfig& config, InputState& input);
         [[nodiscard]] bool PumpMessages();
         void SetTitle(const std::wstring& title) const noexcept;
+
+        [[nodiscard]] WindowResolution ClientSize() const noexcept override;
+        [[nodiscard]] std::vector<WindowResolution> DisplayResolutions() const override;
+        [[nodiscard]] bool SetClientSize(WindowResolution size, std::string &error) override;
 
         [[nodiscard]] HWND Handle() const noexcept;
         [[nodiscard]] std::uint32_t ClientWidth() const noexcept;

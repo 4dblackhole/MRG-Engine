@@ -5,6 +5,7 @@
 #include "Renderer/D3D12Renderer.h"
 #include "System/AudioSystem.h"
 #include "Text/TextRendering.h"
+#include "Window/WindowControl.h"
 
 #include <cstdint>
 #include <string>
@@ -58,6 +59,7 @@ namespace mrg
         audio::AudioSystem& audio;
         std::uint32_t windowWidth{};
         std::uint32_t windowHeight{};
+        platform::IWindowControl *windowControl{}; // Nullable in offscreen/test contexts.
     };
 
     // One Update invocation. deltaSeconds is QPC-derived and clamped by

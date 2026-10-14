@@ -1,5 +1,6 @@
 #include "Window/Win32Window.h"
 
+#include <algorithm>
 #include <array>
 #include <hidusage.h>
 #include <stdexcept>
@@ -156,6 +157,60 @@ namespace mrg::platform
         {
             SetWindowTextW(window_, title.c_str());
         }
+    }
+
+    WindowResolution Win32Window::ClientSize() const noexcept
+    {
+        return {clientWidth_, clientHeight_};
+    }
+
+    std::vector<WindowResolution> Win32Window::DisplayResolutions() const
+    {
+        MONITORINFOEXW monitor{};
+        monitor.cbSize = sizeof(monitor);
+        if (!GetMonitorInfoW(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST), &monitor))
+            throw MakeWin32Error("GetMonitorInfoW");
+        std::vector<WindowResolution> result;
+        DEVMODEW mode{};
+        mode.dmSize = sizeof(mode);
+        for (DWORD index = 0; EnumDisplaySettingsW(monitor.szDevice, index, &mode); ++index)
+        {
+            const WindowResolution size{mode.dmPelsWidth, mode.dmPelsHeight};
+            if (size.width > 0 && size.height > 0 && size.width <= 16384 && size.height <= 16384 &&
+                std::ranges::find(result, size) == result.end())
+                result.push_back(size);
+        }
+        std::ranges::sort(result, [](auto a, auto b)
+                          { return a.width < b.width || (a.width == b.width && a.height < b.height); });
+        return result;
+    }
+
+    bool Win32Window::SetClientSize(WindowResolution size, std::string &error)
+    {
+        error.clear();
+        // Match the D3D12 texture dimension limit before converting to LONG.
+        if (!window_ || size.width == 0 || size.height == 0 || size.width > 16384 || size.height > 16384)
+        {
+            error = "Window dimensions must be within 1..16384 pixels.";
+            return false;
+        }
+        RECT outer{0, 0, static_cast<LONG>(size.width), static_cast<LONG>(size.height)};
+        const auto style = static_cast<DWORD>(GetWindowLongPtrW(window_, GWL_STYLE));
+        const auto extended = static_cast<DWORD>(GetWindowLongPtrW(window_, GWL_EXSTYLE));
+        if (!AdjustWindowRectEx(&outer, style, GetMenu(window_) != nullptr, extended))
+        {
+            error = MakeWin32Error("AdjustWindowRectEx").what();
+            return false;
+        }
+        if (IsZoomed(window_))
+            ShowWindow(window_, SW_RESTORE);
+        if (!SetWindowPos(window_, nullptr, 0, 0, outer.right - outer.left, outer.bottom - outer.top,
+                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE))
+        {
+            error = MakeWin32Error("SetWindowPos").what();
+            return false;
+        }
+        return true;
     }
 
     HWND Win32Window::Handle() const noexcept

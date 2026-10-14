@@ -708,6 +708,33 @@ namespace mrg::platform
 }
 // ===== END Engine\Platform.Win32\Input\Input.h =====
 
+// ===== BEGIN Engine\Platform.Win32\Window\WindowControl.h =====
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace mrg::platform
+{
+    struct WindowResolution
+    {
+        std::uint32_t width{}, height{};
+        bool operator==(const WindowResolution &) const = default;
+    };
+
+    // Run owns this service. Calls belong to the game-loop thread; resize
+    // notifications reach the renderer and Client on the next loop iteration.
+    class IWindowControl
+    {
+      public:
+        virtual ~IWindowControl() = default;
+        [[nodiscard]] virtual WindowResolution ClientSize() const noexcept = 0;
+        [[nodiscard]] virtual std::vector<WindowResolution> DisplayResolutions() const = 0;
+        [[nodiscard]] virtual bool SetClientSize(WindowResolution size, std::string &error) = 0;
+    };
+} // namespace mrg::platform
+// ===== END Engine\Platform.Win32\Window\WindowControl.h =====
+
 // ===== BEGIN Engine\Collision\Query\Collision.h =====
 
 // Backend-neutral 2D/3D collision primitives and stateless intersection
@@ -3378,6 +3405,7 @@ namespace mrg
         audio::AudioSystem& audio;
         std::uint32_t windowWidth{};
         std::uint32_t windowHeight{};
+        platform::IWindowControl *windowControl{}; // Nullable in offscreen/test contexts.
     };
 
     // One Update invocation. deltaSeconds is QPC-derived and clamped by

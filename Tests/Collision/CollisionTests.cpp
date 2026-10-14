@@ -1,6 +1,7 @@
 #include "../App/HeadlessRunTests.h"
-#include "../App/TextRenderingTests.h"
 #include "../App/TextPixelTests.h"
+#include "../App/TextRenderingTests.h"
+#include "../App/WindowControlTests.h"
 #include "MRG_Core.h"
 
 #include <DirectXMath.h>
@@ -1314,6 +1315,8 @@ namespace
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && std::string_view(argv[1]) == "--window-control")
+        return TestWindowControl();
     if (argc == 2 && std::string_view(argv[1]) == "--headless-error")
         return TestHeadlessRunError();
     if (argc == 2 && std::string_view(argv[1]) == "--text-rendering")

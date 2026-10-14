@@ -72,3 +72,6 @@ submodule 내부의 `Engine/SDK/MRG.Core.vcxproj`만 참조하며 엔진의 기�
 Client에 함께 보관했던 기술 예제 Scene은 제거되었다. 엔진의 공개 API 검증은
 현재 `Tests/MRG.Collision.Tests.vcxproj`의 SDK 단위 테스트를 사용한다.
 별도 실행형 검증 프로젝트는 아직 제공하지 않는다.
+
+실행 중 창 크기 변경과 모니터 해상도 조회는 EngineServices의 비소유
+[IWindowControl 서비스](Docs/WindowControl.md)를 사용합니다. 게임별 저장 정책은 Client가 소유합니다.

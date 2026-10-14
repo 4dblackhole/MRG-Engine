@@ -17,4 +17,6 @@
       <Filter>Collision</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup><ClInclude Include="App\WindowControlTests.h"><Filter>App</Filter></ClInclude></ItemGroup>
+  <ItemGroup><ClCompile Include="App\WindowControlTests.cpp"><Filter>App</Filter></ClCompile></ItemGroup>
 </Project>

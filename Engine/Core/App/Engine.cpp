@@ -289,13 +289,13 @@ namespace mrg
                         "Audio initialization failed: " + audioError);
                 }
 
-                const EngineServices services{
-                    renderer.MeshRendering(),
-                    renderer.TextRendering(),
-                    renderer.Visual2DRendering(),
-                    audioSystem,
-                    window.ClientWidth(),
-                    window.ClientHeight()};
+                const EngineServices services{renderer.MeshRendering(),
+                                              renderer.TextRendering(),
+                                              renderer.Visual2DRendering(),
+                                              audioSystem,
+                                              window.ClientWidth(),
+                                              window.ClientHeight(),
+                                              &window};
                 // Client resource creation uses the high-level mesh/material
                 // service; root signatures and PSOs remain owned by Graphics.
                 client->Initialize(services);

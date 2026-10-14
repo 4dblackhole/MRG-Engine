@@ -80,4 +80,6 @@
     <Copy SourceFiles="$(FmodLibraryDir)\fmod.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
   <ImportGroup Label="ExtensionTargets" />
+  <ItemGroup><ClInclude Include="App\WindowControlTests.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="App\WindowControlTests.cpp" /></ItemGroup>
 </Project>

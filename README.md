@@ -16,6 +16,7 @@ Visual2D 텍스트와 ComboBox는 renderer 기본 글꼴, 시스템 family 또�
 디코드를 비동기로 준비하며 GPU 업로드는 fence까지 자원을 보관해 이미지별 대기를 제거한다.
 텍스트는 유지된 배치와 2,048항목 보조 LRU를 사용하고 clip 밖의 글리프를 제외한다.
 회색조 아틀라스는 기본 16MiB에서 필요한 만큼 확대·회수하며 새 글리프를 upload arena에 묶는다.
+TextStyle/TextVisualComponent는 1~999 굵기를 지원하며 글꼴 배치·글리프 캐시를 굵기별로 구분한다.
 상세 계약은 [Visual2D 성능·소유권](Docs/Visual2DPerformanceAndOwnership.md)과
 [텍스트 렌더링](Docs/TextRendering.md)에 있다.
 `StreamAsyncAccurate`는 정확한 길이/PCM seek 준비도 비동기로 수행한다. Clip 길이 조회,

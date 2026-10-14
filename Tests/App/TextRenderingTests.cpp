@@ -42,9 +42,9 @@ namespace
                 CheckFrame(checkedFrames_, renderer_->Statistics());
                 checkedFrames_ = frames_;
             }
-            if (checkedFrames_ == 8)
+            if (checkedFrames_ == 9)
                 completed_ = true;
-            return checkedFrames_ < 8;
+            return checkedFrames_ < 9;
         }
         void Render(const mrg::graphics::RenderContext &context) override
         {
@@ -101,6 +101,31 @@ namespace
                 renderer_->Submit(renderer_->CreateLayout(std::wstring(1, static_cast<wchar_t>(0xAC00U + 5999)), draw),
                                   draw);
                 break;
+            case 8:
+            {
+                draw.style.fontSizePixels = 64;
+                const auto normal = renderer_->CreateLayout(L"WWWW", draw);
+                draw.style.fontWeight = 800;
+                const auto heavy = renderer_->CreateLayout(L"WWWW", draw);
+                Require(normal != heavy && normal->SizePixels().x != heavy->SizePixels().x,
+                        "Font weight must select a distinct layout and font format.");
+                renderer_->Submit(normal, draw);
+                draw.positionPixels.y += 80;
+                renderer_->Submit(heavy, draw);
+                auto invalid = draw;
+                invalid.style.fontWeight = 0;
+                bool rejected = false;
+                try
+                {
+                    static_cast<void>(renderer_->CreateLayout(L"WWWW", invalid));
+                }
+                catch (const std::invalid_argument &)
+                {
+                    rejected = true;
+                }
+                Require(rejected, "Invalid graphics weights must be rejected before layout lookup.");
+                break;
+            }
             }
             ++frames_;
         }
@@ -140,6 +165,9 @@ namespace
             if (frame == 7)
                 Require(stats.glyphRasterizations == 1,
                         "An evicted glyph must be regenerated instead of using an old UV.");
+            if (frame == 8)
+                Require(stats.layoutCreations == 2 && stats.glyphRasterizations == 2,
+                        "Different weights must not share glyph coverage or layout cache entries.");
             std::cout << "Text frame " << frame << ": layouts=" << stats.layoutCreations
                       << ", glyphs=" << stats.submittedGlyphs << ", raster=" << stats.glyphRasterizations
                       << ", uploads=" << stats.uploadAllocations << ", pages=" << stats.atlasPages

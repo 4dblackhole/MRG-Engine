@@ -50,6 +50,9 @@ namespace mrg::visual2d
         void SetFont(TextFont font);
         [[nodiscard]] float FontSize() const noexcept;
         void SetFontSize(float fontSize);
+        [[nodiscard]] std::uint16_t FontWeight() const noexcept;
+        // OpenType weight, 1..999; changing it invalidates shaping/measurement.
+        void SetFontWeight(std::uint16_t weight);
         [[nodiscard]] Color TextColor() const noexcept;
         void SetTextColor(Color color) noexcept;
         [[nodiscard]] TextAlignment HorizontalAlignment() const noexcept;
@@ -70,6 +73,7 @@ namespace mrg::visual2d
         std::wstring text_;
         TextFont font_;
         float fontSize_{18.0F};
+        std::uint16_t fontWeight_{400};
         Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
         TextAlignment alignment_{TextAlignment::Leading};
         std::optional<Rect> contentBounds_;

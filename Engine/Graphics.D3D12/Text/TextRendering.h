@@ -80,6 +80,8 @@ namespace mrg::graphics
         FontHandle font;
         float fontSizePixels{20.0F};
         DirectX::XMFLOAT4 color{1.0F, 1.0F, 1.0F, 1.0F};
+        // OpenType/DirectWrite weight, 1..999; 400 is normal, 700 is bold.
+        std::uint16_t fontWeight{400};
     };
 
     struct TextDrawCommand

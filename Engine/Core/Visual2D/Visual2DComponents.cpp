@@ -216,6 +216,21 @@ namespace mrg::visual2d
         return textColor_;
     }
 
+    std::uint16_t TextVisualComponent::FontWeight() const noexcept
+    {
+        return fontWeight_;
+    }
+
+    void TextVisualComponent::SetFontWeight(const std::uint16_t weight)
+    {
+        if (weight < 1 || weight > 999)
+            throw std::invalid_argument("Visual2D font weight must be in 1..999.");
+        if (fontWeight_ == weight)
+            return;
+        fontWeight_ = weight;
+        content_.reset();
+    }
+
     void TextVisualComponent::SetTextColor(const Color color) noexcept
     {
         textColor_ = color;
@@ -258,7 +273,8 @@ namespace mrg::visual2d
         if (!text_.empty())
         {
             if (!content_)
-                content_ = std::make_shared<TextContent>(TextContent{text_, font_, fontSize_, alignment_, {}});
+                content_ =
+                    std::make_shared<TextContent>(TextContent{text_, font_, fontSize_, alignment_, {}, fontWeight_});
             packets.push_back(MakeText(ContentBounds(),
                                        {textColor_.red, textColor_.green, textColor_.blue,
                                         Owner().IsEnabled() ? textColor_.alpha : textColor_.alpha * 0.55F},

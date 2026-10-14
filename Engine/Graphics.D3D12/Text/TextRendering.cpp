@@ -387,17 +387,15 @@ namespace mrg::graphics
             std::uint32_t heightBits{};
             TextHorizontalAlignment horizontalAlignment{};
             TextVerticalAlignment verticalAlignment{};
+            std::uint16_t fontWeight{400};
 
             [[nodiscard]] bool operator==(
                 const LayoutKey& other) const noexcept
             {
-                return font.get() == other.font.get() &&
-                    text == other.text &&
-                    fontSizeBits == other.fontSizeBits &&
-                    widthBits == other.widthBits &&
-                    heightBits == other.heightBits &&
-                    horizontalAlignment == other.horizontalAlignment &&
-                    verticalAlignment == other.verticalAlignment;
+                return font.get() == other.font.get() && text == other.text && fontSizeBits == other.fontSizeBits &&
+                       widthBits == other.widthBits && heightBits == other.heightBits &&
+                       horizontalAlignment == other.horizontalAlignment &&
+                       verticalAlignment == other.verticalAlignment && fontWeight == other.fontWeight;
             }
         };
 
@@ -408,13 +406,14 @@ namespace mrg::graphics
             std::uint32_t fontSizeBits{}, widthBits{}, heightBits{};
             TextHorizontalAlignment horizontalAlignment{};
             TextVerticalAlignment verticalAlignment{};
+            std::uint16_t fontWeight{400};
             bool operator==(const LayoutKeyView &) const noexcept = default;
         };
         static LayoutKeyView KeyView(const LayoutKey &key) noexcept
         {
-            return {key.font.get(),       key.text,       key.fontSizeBits,
-                    key.widthBits,        key.heightBits, key.horizontalAlignment,
-                    key.verticalAlignment};
+            return {key.font.get(),        key.text,       key.fontSizeBits,
+                    key.widthBits,         key.heightBits, key.horizontalAlignment,
+                    key.verticalAlignment, key.fontWeight};
         }
         struct LayoutKeyHash final
         {
@@ -433,6 +432,7 @@ namespace mrg::graphics
                 HashCombine(result, key.heightBits);
                 HashCombine(result, static_cast<std::uint32_t>(key.horizontalAlignment));
                 HashCombine(result, static_cast<std::uint32_t>(key.verticalAlignment));
+                HashCombine(result, key.fontWeight);
                 return result;
             }
         };
@@ -827,6 +827,8 @@ namespace mrg::graphics
         {
             if (!command.style.font)
                 throw std::invalid_argument("TextStyle requires a valid FontHandle.");
+            if (command.style.fontWeight < 1 || command.style.fontWeight > 999)
+                throw std::invalid_argument("Text font weight must be in 1..999.");
             if (!std::isfinite(command.style.fontSizePixels) || command.style.fontSizePixels <= 0)
                 throw std::invalid_argument("Text font size must be positive and finite.");
             if (!std::isfinite(command.layoutSizePixels.x) || !std::isfinite(command.layoutSizePixels.y) ||
@@ -1030,7 +1032,8 @@ namespace mrg::graphics
                                 0,
                                 0,
                                 command.horizontalAlignment,
-                                command.verticalAlignment};
+                                command.verticalAlignment,
+                                command.style.fontWeight};
             ComPtr<IDWriteTextFormat> format;
             const auto cachedFormat = formatCache.find(formatKey);
             if (cachedFormat != formatCache.end())
@@ -1040,10 +1043,11 @@ namespace mrg::graphics
                 return format;
             }
 
-            ThrowIfFailed(directWriteFactory->CreateTextFormat(font.familyName.c_str(), font.collection.Get(),
-                                                               DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                                                               DWRITE_FONT_STRETCH_NORMAL, command.style.fontSizePixels,
-                                                               L"ko-kr", format.ReleaseAndGetAddressOf()),
+            ThrowIfFailed(directWriteFactory->CreateTextFormat(
+                              font.familyName.c_str(), font.collection.Get(),
+                              static_cast<DWRITE_FONT_WEIGHT>(command.style.fontWeight), DWRITE_FONT_STYLE_NORMAL,
+                              DWRITE_FONT_STRETCH_NORMAL, command.style.fontSizePixels, L"ko-kr",
+                              format.ReleaseAndGetAddressOf()),
                           "IDWriteFactory::CreateTextFormat");
             ThrowIfFailed(format->SetTextAlignment(ToDirectWrite(command.horizontalAlignment)),
                           "IDWriteTextFormat::SetTextAlignment");
@@ -1100,14 +1104,15 @@ namespace mrg::graphics
                                        std::bit_cast<std::uint32_t>(command.layoutSizePixels.x),
                                        std::bit_cast<std::uint32_t>(command.layoutSizePixels.y),
                                        command.horizontalAlignment,
-                                       command.verticalAlignment};
+                                       command.verticalAlignment,
+                                       command.style.fontWeight};
             if (const auto found = layoutCache.find(lookup); found != layoutCache.end())
             {
                 layoutRecency.splice(layoutRecency.begin(), layoutRecency, found->second.recency);
                 return found->second.layout;
             }
-            LayoutKey key{command.style.font, std::wstring(text),         lookup.fontSizeBits,     lookup.widthBits,
-                          lookup.heightBits,  lookup.horizontalAlignment, lookup.verticalAlignment};
+            LayoutKey key{command.style.font, std::wstring(text),         lookup.fontSizeBits,      lookup.widthBits,
+                          lookup.heightBits,  lookup.horizontalAlignment, lookup.verticalAlignment, lookup.fontWeight};
             // Keep the working set across frames. Evict one least-recently
             // used layout; clearing everything made 129 static labels thrash.
             if (layoutCache.size() >= CachedLayoutLimit)

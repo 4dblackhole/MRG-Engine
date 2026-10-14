@@ -1426,6 +1426,7 @@ namespace mrg::visual2d
         float fontSize{18.0F};
         TextAlignment alignment{TextAlignment::Leading};
         mutable std::optional<Size> measuredSize;
+        std::uint16_t fontWeight{400};
     };
     using TextContentHandle = std::shared_ptr<const TextContent>;
 
@@ -1981,6 +1982,9 @@ namespace mrg::visual2d
         void SetFont(TextFont font);
         [[nodiscard]] float FontSize() const noexcept;
         void SetFontSize(float fontSize);
+        [[nodiscard]] std::uint16_t FontWeight() const noexcept;
+        // OpenType weight, 1..999; changing it invalidates shaping/measurement.
+        void SetFontWeight(std::uint16_t weight);
         [[nodiscard]] Color TextColor() const noexcept;
         void SetTextColor(Color color) noexcept;
         [[nodiscard]] TextAlignment HorizontalAlignment() const noexcept;
@@ -2001,6 +2005,7 @@ namespace mrg::visual2d
         std::wstring text_;
         TextFont font_;
         float fontSize_{18.0F};
+        std::uint16_t fontWeight_{400};
         Color textColor_{1.0F, 1.0F, 1.0F, 1.0F};
         TextAlignment alignment_{TextAlignment::Leading};
         std::optional<Rect> contentBounds_;
@@ -2531,6 +2536,8 @@ namespace mrg::graphics
         FontHandle font;
         float fontSizePixels{20.0F};
         DirectX::XMFLOAT4 color{1.0F, 1.0F, 1.0F, 1.0F};
+        // OpenType/DirectWrite weight, 1..999; 400 is normal, 700 is bold.
+        std::uint16_t fontWeight{400};
     };
 
     struct TextDrawCommand

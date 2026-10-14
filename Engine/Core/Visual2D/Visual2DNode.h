@@ -125,6 +125,7 @@ namespace mrg::visual2d
         float fontSize{18.0F};
         TextAlignment alignment{TextAlignment::Leading};
         mutable std::optional<Size> measuredSize;
+        std::uint16_t fontWeight{400};
     };
     using TextContentHandle = std::shared_ptr<const TextContent>;
 

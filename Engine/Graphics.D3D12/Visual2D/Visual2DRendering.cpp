@@ -268,6 +268,7 @@ namespace mrg::graphics
             }
             command.style.font = retained.font;
             command.horizontalAlignment = ToTextAlignment(source->alignment);
+            command.style.fontWeight = source->fontWeight;
             for (auto &variant : retained.variants)
                 if (variant.fontSize == command.style.fontSizePixels && variant.area.x == command.layoutSizePixels.x &&
                     variant.area.y == command.layoutSizePixels.y)

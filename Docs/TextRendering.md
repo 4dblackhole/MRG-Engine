@@ -82,6 +82,13 @@ renderContext.textRendering->Submit(L"Hello, rhythm!", command);
 색상은 선형 RGBA 값이며 알파 블렌딩을 지원한다. `FontHandle`이 비어 있거나
 크기/레이아웃이 유효하지 않으면 제출은 오류로 처리된다.
 
+`TextStyle::fontWeight`와 Visual2D `TextVisualComponent::SetFontWeight`는
+OpenType 굵기 1~999를 받습니다(기본 400, bold 700). 문자열의 내용·크기와 함께
+TextFormat/배치 캐시 키에 포함되며 굵기를 바꾸면 payload와 측정을 갱신합니다.
+파일/시스템 글꼴에서 제공하는 face·가변 굵기를 DirectWrite가 선택합니다.
+범위 밖 값은 이전 스타일을 변경하지 않고 오류로 거부합니다.
+[DirectWrite의 유효 굵기 범위](https://learn.microsoft.com/en-us/windows/win32/api/dwrite/nf-dwrite-idwritetextlayout-setfontweight)를 따릅니다.
+
 ## 배치 유지와 Visual2D 계약
 
 변경되지 않는 문구는 `CreateLayout`의 `TextLayoutHandle`을 보관하고 매 프레임
@@ -149,6 +156,7 @@ Debug/Release x64 빌드 후 `MRG.Collision.Tests.exe`를 실행합니다.
 기본 경로는 Visual2D payload 재사용·무효화·측정·repeat 계약을 검사합니다.
 `--text-rendering`은 실제 D3D12에서 LRU보다 많은 유지 배치, 긴 clip 문구,
 512개 한글의 단일 upload arena, 아틀라스 확대·회수·재생성을 검사합니다.
+서로 다른 굵기의 TextFormat·레이아웃·글리프가 혼동되지 않는 것도 검사합니다.
 `--text-pixels`는 다중 페이지의 겹친 글자 합성 순서를 GPU readback으로 검사합니다.
 각 경로는 별도 프로세스로 실행합니다.
 

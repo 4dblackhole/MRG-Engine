@@ -268,6 +268,7 @@ renderer 기본 글꼴, 시스템 family 또는 글꼴 파일을 선택한다. D
 화면/texture 렌더러별로 불변 TextContent의 글꼴과 배치 handle을 유지한다.
 DrawPacket은 문자열 복사 대신 공유 payload를 전달하며 위치·색상 변경은 shaping을 반복하지 않는다.
 글리프는 clip 검사 뒤 제출하고 회색조 아틀라스의 기본 16MiB 예산은 표시 유지에 맞춰 확대·회수한다.
+글꼴 굵기(1~999, 기본 400)는 TextStyle/TextVisualComponent로 설정하며 굵기를 캐시 키에 포함한다.
 
 사용 예제와 자원 수명은 [TextRendering.md](TextRendering.md)를 참고한다.
 

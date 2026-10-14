@@ -1343,6 +1343,26 @@ int main(int argc, char **argv)
         const auto changed = canvas.BuildDrawList();
         Check(changed[0].text != source && source->value == L"Snapshot" && !text.MeasuredSize(),
               "Content changes publish a new snapshot and reset its measurement");
+        text.SetFontWeight(800);
+        const auto weighted = canvas.BuildDrawList();
+        Check(text.FontWeight() == 800 && weighted[0].text != changed[0].text && weighted[0].text->fontWeight == 800 &&
+                  changed[0].text->fontWeight == 400,
+              "Font weight changes invalidate shaping without mutating retained content");
+        text.SetFontWeight(800);
+        Check(canvas.BuildDrawList()[0].text == weighted[0].text, "An unchanged weight preserves content");
+        for (const auto invalid : std::array<std::uint16_t, 2>{0, 1000})
+        {
+            bool rejected = false;
+            try
+            {
+                text.SetFontWeight(invalid);
+            }
+            catch (const std::invalid_argument &)
+            {
+                rejected = true;
+            }
+            Check(rejected && text.FontWeight() == 800, "Invalid weights preserve the previous style");
+        }
     }
     {
         namespace v = mrg::visual2d;

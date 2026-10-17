@@ -186,13 +186,16 @@ namespace mrg::audio
 
     void AudioSystem::Shutdown() noexcept
     {
+        // Finish retired native sound I/O while its loader/system is alive.
+        // Closing FMOD first can wait on an unfinished async seek indefinitely.
+        // Runtime retirement still polls; only final shutdown may wait here.
+        retiredClips_.clear();
         if (backend_ != nullptr)
         {
             backend_->Shutdown();
             backend_.reset();
         }
         initialized_ = false;
-        retiredClips_.clear(); // The backend shutdown has already cancelled its I/O.
         clipFactory_ = nullptr;
         config_ = {};
         liveObjectCount_.reset();

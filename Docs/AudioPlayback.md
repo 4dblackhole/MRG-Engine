@@ -73,7 +73,9 @@ Client의 별도 에디터 회귀는 실제 MP3의 정확한 비동기 열기/�
 `Playing`은 mixer가 사용 중인 상태다. 기존 Sample/Stream의 동기 로드는 유지한다.
 Clip을 Loading/Playing에서 해제하면 native I/O 또는 mixer를 기다릴 수 있으므로
 UI caller는 준비가 끝날 때까지 소유권을 유지하고, 정지한 clip도 Ready/Failed를 확인한 뒤
-해제한다. 시스템 종료에서는 남은 native 작업을 정리할 수 있다. 이 동작은
+해제한다. 최종 시스템 종료에서는 RetireClip의 Sound를 먼저 release하여 native I/O가
+끝나게 한 뒤 FMOD를 close합니다. 종료 도중에만 이 release가 기다릴 수 있으며,
+런타임 Update/Scene 전환의 retire는 계속 비차단 polling을 사용합니다. 이 동작은
 [FMOD Sound::getOpenState/release](https://www.fmod.com/docs/2.03/api/core-api-sound.html)에 따른다.
 
 `StreamAsyncAccurate`는 비동기 열기에 `FMOD_ACCURATETIME`을 더한다. VBR 파일의

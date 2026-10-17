@@ -45,6 +45,14 @@ namespace mrg::audio
         return implementation_ != nullptr && implementation_->IsPlaying();
     }
 
+    AudioPreparationState AudioVoice::PreparationState(std::string& errorMessage)
+    {
+        if (implementation_)
+            return implementation_->PreparationState(errorMessage);
+        errorMessage = "The audio voice is not initialized.";
+        return AudioPreparationState::Failed;
+    }
+
     bool AudioVoice::Restart(
         const AudioPlaybackSettings& settings,
         AudioBus* const bus,

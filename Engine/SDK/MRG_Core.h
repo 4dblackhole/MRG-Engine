@@ -92,6 +92,8 @@ namespace mrg::audio
         std::int64_t performanceCounterFrequency{};
     };
 
+    enum class AudioPreparationState : std::uint8_t { Loading, Ready, Failed };
+
     class IAudioBusBackend;
     class AudioBus;
 
@@ -99,9 +101,17 @@ namespace mrg::audio
     {
     public:
         virtual ~IAudioVoiceBackend() = default;
+        // Synchronous backends are ready immediately. Async backends advance
+        // pending source seeks here without blocking the caller.
+        [[nodiscard]] virtual AudioPreparationState PreparationState(std::string& errorMessage)
+        {
+            errorMessage.clear();
+            return AudioPreparationState::Ready;
+        }
         [[nodiscard]] virtual bool IsPlaying() const noexcept = 0;
         // Restarts at settings.startPositionMicroseconds without allocating
-        // another native channel. The voice must still be controllable.
+        // another native channel. The voice must still be controllable. A true
+        // return accepts the seek; poll PreparationState before resuming clocks.
         [[nodiscard]] virtual bool Restart(
             const AudioPlaybackSettings& settings,
             IAudioBusBackend* bus,
@@ -173,6 +183,8 @@ namespace mrg::audio
         AudioVoice& operator=(AudioVoice&&) = delete;
 
         [[nodiscard]] bool IsPlaying() const noexcept;
+        // Poll before anchoring a transport clock or unpausing a prepared voice.
+        [[nodiscard]] AudioPreparationState PreparationState(std::string& errorMessage);
         [[nodiscard]] bool Restart(
             const AudioPlaybackSettings& settings,
             AudioBus* bus,
@@ -349,6 +361,9 @@ namespace mrg::audio
         // Playing streams can wait for native I/O or the mixer to finish.
         [[nodiscard]] AudioClipLoadState LoadState(std::string& errorMessage) const;
         [[nodiscard]] bool Play(std::string& errorMessage);
+        // Async source seeks may return a preparing, inaudible voice. Retain it
+        // and poll PreparationState before scheduling/unpausing. The playback
+        // manager also advances preparation during Update.
         [[nodiscard]] std::unique_ptr<AudioVoice> Play(
             const AudioPlaybackSettings& settings,
             AudioBus* bus,
@@ -542,7 +557,8 @@ namespace mrg::audio
         // Borrowed pointer, invalidated by Stop, StopAll or a later Update.
         [[nodiscard]] AudioVoice* FindVoice(AudioPlaybackId id) noexcept;
         [[nodiscard]] const AudioVoice* FindVoice(AudioPlaybackId id) const noexcept;
-        // Reuses the existing native voice/channel and retains its new bus.
+        // Reuses a live channel, or replaces an ended/stolen one under the same
+        // ID, retaining the clip and new bus. Active-channel errors propagate.
         [[nodiscard]] bool Restart(
             AudioPlaybackId id,
             const AudioPlaybackSettings& settings,

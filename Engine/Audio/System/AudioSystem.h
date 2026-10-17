@@ -85,6 +85,9 @@ namespace mrg::audio
         // Playing streams can wait for native I/O or the mixer to finish.
         [[nodiscard]] AudioClipLoadState LoadState(std::string& errorMessage) const;
         [[nodiscard]] bool Play(std::string& errorMessage);
+        // Async source seeks may return a preparing, inaudible voice. Retain it
+        // and poll PreparationState before scheduling/unpausing. The playback
+        // manager also advances preparation during Update.
         [[nodiscard]] std::unique_ptr<AudioVoice> Play(
             const AudioPlaybackSettings& settings,
             AudioBus* bus,

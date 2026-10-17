@@ -4,6 +4,27 @@
 게임 플레이 중 사용하는 backend-neutral 재생 계층을 설명한다. FMOD 타입은
 `Engine/Audio/Backend/Fmod` 밖으로 노출되지 않는다.
 
+## 비동기 위치 준비
+
+Play/Restart의 성공은 요청 수락이며 비동기 탐색 완료를 의미하지 않습니다.
+`AudioVoice::PreparationState(error)`는 Loading/Ready/Failed를 반환하며,
+스트림 생성 내부 탐색 → 요청 위치 탐색 → 완료를 겹치지 않게 진행합니다.
+호출자는 paused Voice를 유지하고 매 Update에서 확인한 뒤, Ready일 때 새 clock snapshot으로
+예약하고 unpause합니다. 탐색 중 새 요청은 이전 native 탐색 완료 후 최신 목표로 이동합니다.
+SetPaused(false)도 준비 중에는 실제 unpause를 완료 시점까지 미룹니다.
+AudioPlaybackManager::Update도 준비를 진행합니다. 직접 생성한 Voice는 준비 완료까지
+보관하고 직접 polling해야 하며, 준비 중 wrapper를 버리는 fire-and-forget은 지원하지 않습니다.
+
+일시정지는 살아 있는 음악 Voice를 유지하고 목표 위치로 Restart할 수 있습니다.
+Manager::Restart는 종료/탈취된 채널만 같은 ID 아래 새 Voice로 교체하고, 살아 있는 채널의
+실제 오류는 보존합니다. 파일 끝 미만의 us가 반올림으로 끝 프레임이 되는 경우 마지막
+유효 프레임으로 제한하며 파일 끝 이상의 요청은 계속 거부합니다.
+
+2026-10-17: Debug/Release x64 전체 Rebuild와 SDK 회귀(종료 중 Restart 교체,
+활성 채널 실패 보존 포함)를 통과했습니다. 별도 공개 SDK NoSound 진단에서 실제 MP3
+4회 재사용, 같은 채널의 0/1/5초 탐색, 종료 샘플 교체, 끝 1us 전 허용/끝 거부와
+지연 Clip 정리 후 종료를 두 구성에서 확인했습니다. 실제 출력 장치 청취는 미검증입니다.
+
 ## 하나의 DSP 기준 타임라인
 
 `AudioSystem::CaptureClockSnapshot()`은 가능한 한 가까운 시점의 DSP clock,

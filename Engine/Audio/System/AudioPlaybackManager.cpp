@@ -82,11 +82,23 @@ namespace mrg::audio
             errorMessage = "Playback restart requires a valid optional bus.";
             return false;
         }
-        if (!entry->second.voice->Restart(settings, bus.get(), errorMessage))
+        auto& playback = entry->second;
+        const bool wasPlaying = playback.voice->IsPlaying();
+        if (wasPlaying && playback.voice->Restart(settings, bus.get(), errorMessage))
         {
-            return false;
+            playback.bus = std::move(bus);
+            errorMessage.clear();
+            return true;
         }
-        entry->second.bus = std::move(bus);
+        // The mixer may finish or steal a sample after IsPlaying. Recreate only
+        // an ended voice; preserve errors on a still-controllable channel.
+        if (playback.voice->IsPlaying())
+            return false;
+        auto replacement = playback.clip->Play(settings, bus.get(), errorMessage);
+        if (!replacement)
+            return false;
+        playback.voice = std::move(replacement);
+        playback.bus = std::move(bus);
         errorMessage.clear();
         return true;
     }
@@ -101,7 +113,7 @@ namespace mrg::audio
             return false;
         }
         AudioVoice& voice = *entry->second.voice;
-        if (voice.IsPlaying() && !voice.Stop(errorMessage))
+        if (voice.IsPlaying() && !voice.Stop(errorMessage) && voice.IsPlaying())
         {
             return false;
         }
@@ -135,6 +147,10 @@ namespace mrg::audio
     {
         std::erase_if(playbacks_, [](const auto& entry)
         {
+            std::string error;
+            // Progress async Play even for callers that only use the manager.
+            // Prepared rhythm transports also poll explicitly before scheduling.
+            static_cast<void>(entry.second.voice->PreparationState(error));
             return !entry.second.voice->IsPlaying();
         });
     }

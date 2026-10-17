@@ -38,6 +38,8 @@ namespace
         bool playing{true};
         bool paused{};
         bool failStop{};
+        bool finishOnRestart{};
+        bool failRestart{};
         int stops{};
         int restarts{};
         std::uint64_t startDspClock{};
@@ -183,8 +185,19 @@ namespace
         bool Restart(
             const mrg::audio::AudioPlaybackSettings& settings,
             mrg::audio::IAudioBusBackend* bus,
-            std::string&) override
+            std::string& error) override
         {
+            if (probe_->finishOnRestart)
+            {
+                probe_->playing = false;
+                error = "ended during restart";
+                return false;
+            }
+            if (probe_->failRestart)
+            {
+                error = "active restart failure";
+                return false;
+            }
             ++probe_->restarts;
             probe_->playing = true;
             probe_->paused = settings.startPaused;
@@ -352,6 +365,18 @@ namespace
         }
         Check(playbackProbes.back()->stops == 1,
             "manager destructor explicitly stops playback");
+        const auto recovered = manager.Play(clip, {}, nullptr, error);
+        const auto ended = playbackProbes.back();
+        ended->finishOnRestart = true;
+        Check(manager.Restart(recovered, settings, nullptr, error) &&
+                  manager.PlaybackCount() == 1 && playbackProbes.back() != ended && error.empty(),
+              "a mixer ending the channel during Restart recreates a voice under the same ID");
+        const auto live = playbackProbes.back();
+        live->failRestart = true;
+        Check(!manager.Restart(recovered, settings, nullptr, error) &&
+                  error == "active restart failure" && playbackProbes.back() == live,
+              "an error on a live channel is preserved rather than hidden by replacement");
+        manager.StopAll();
         playbackProbes.clear();
         std::shared_ptr<AudioClip> retired = audio.LoadSound("retired", error);
         const std::weak_ptr<AudioClip> weakRetired = retired;

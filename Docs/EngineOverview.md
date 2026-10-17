@@ -233,7 +233,8 @@ Canvas 좌표로 변환한다.
 - `StreamAsync` 비동기 열기와 `AudioClip::LoadState` 준비/안전한 해제 상태 조회
 - `StreamAsyncAccurate` 정확한 길이/PCM seek 준비, 원본 us 시작 위치/길이 조회,
   준비 Voice의 `SetDelay`와 정지/취소 Clip의 `AudioSystem::RetireClip` 지연 해제
-- 기존 native Channel을 유지한 `AudioVoice`/관리 재생 ID 재시작
+- 기존 native Channel을 유지한 `AudioVoice`/관리 재생 ID 재시작; PreparationState의 비차단
+  탐색 준비, 종료된 채널의 관리 ID 내 교체와 PCM 끝 경계 보정
 - `SceneGameClient::AudioPlayback()`의 공통 재생 관리: Voice ID 제어, 재생 중 Clip/Bus
   유지, Scene 전환 중 재생 유지와 Client 종료 시 정지
 - 계층적 `AudioBus`, DSP effect, sample-accurate volume fade point

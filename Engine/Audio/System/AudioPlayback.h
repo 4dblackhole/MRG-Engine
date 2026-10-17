@@ -72,6 +72,8 @@ namespace mrg::audio
         std::int64_t performanceCounterFrequency{};
     };
 
+    enum class AudioPreparationState : std::uint8_t { Loading, Ready, Failed };
+
     class IAudioBusBackend;
     class AudioBus;
 
@@ -79,9 +81,17 @@ namespace mrg::audio
     {
     public:
         virtual ~IAudioVoiceBackend() = default;
+        // Synchronous backends are ready immediately. Async backends advance
+        // pending source seeks here without blocking the caller.
+        [[nodiscard]] virtual AudioPreparationState PreparationState(std::string& errorMessage)
+        {
+            errorMessage.clear();
+            return AudioPreparationState::Ready;
+        }
         [[nodiscard]] virtual bool IsPlaying() const noexcept = 0;
         // Restarts at settings.startPositionMicroseconds without allocating
-        // another native channel. The voice must still be controllable.
+        // another native channel. The voice must still be controllable. A true
+        // return accepts the seek; poll PreparationState before resuming clocks.
         [[nodiscard]] virtual bool Restart(
             const AudioPlaybackSettings& settings,
             IAudioBusBackend* bus,
@@ -153,6 +163,8 @@ namespace mrg::audio
         AudioVoice& operator=(AudioVoice&&) = delete;
 
         [[nodiscard]] bool IsPlaying() const noexcept;
+        // Poll before anchoring a transport clock or unpausing a prepared voice.
+        [[nodiscard]] AudioPreparationState PreparationState(std::string& errorMessage);
         [[nodiscard]] bool Restart(
             const AudioPlaybackSettings& settings,
             AudioBus* bus,

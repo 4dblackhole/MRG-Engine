@@ -56,9 +56,14 @@ namespace mrg::audio
             result = SoundTiming(sound, frames, frequency);
             if (result != FMOD_OK)
                 return result;
-            const long double position = std::round(static_cast<long double>(microseconds) * frequency / 1'000'000);
+            long double position = std::round(static_cast<long double>(microseconds) * frequency / 1'000'000);
             if (position >= frames)
-                return FMOD_ERR_INVALID_POSITION;
+            {
+                const auto duration = std::round(static_cast<long double>(frames) * 1'000'000 / frequency);
+                if (frames == 0 || static_cast<long double>(microseconds) >= duration)
+                    return FMOD_ERR_INVALID_POSITION;
+                position = frames - 1; // A valid end-adjacent time rounds to the last sample.
+            }
             return channel->setPosition(static_cast<unsigned int>(position), FMOD_TIMEUNIT_PCM);
         }
 
@@ -67,12 +72,67 @@ namespace mrg::audio
         public:
             FmodAudioVoice(
                 std::shared_ptr<FmodSystemLifetime> lifetime,
-                FMOD::Channel* const channel) noexcept
+                FMOD::Channel* const channel, FMOD::Sound* const sound) noexcept
                 : lifetime_(std::move(lifetime)),
                   channel_(channel),
+                  sound_(sound),
                   generation_(
                       lifetime_ != nullptr ? lifetime_->generation : 0)
             {
+            }
+
+            bool BeginSeek(std::uint64_t position, bool paused, std::string& error)
+            {
+                sourcePosition_ = position;
+                pausedAfterSeek_ = paused;
+                seekStage_ = SeekStage::AwaitSource;
+                sourceReady_ = false;
+                preparationError_.clear();
+                return PreparationState(error) != AudioPreparationState::Failed;
+            }
+
+            AudioPreparationState PreparationState(std::string& error) override
+            {
+                if (!preparationError_.empty())
+                {
+                    error = preparationError_;
+                    return AudioPreparationState::Failed;
+                }
+                if (!HasLiveSystem())
+                    return FailPreparation(FMOD_ERR_INVALID_HANDLE, error);
+                if (sourceReady_ && seekStage_ == SeekStage::None)
+                {
+                    error.clear();
+                    return AudioPreparationState::Ready;
+                }
+                auto state = SourceState(error);
+                if (state != AudioPreparationState::Ready)
+                    return state;
+                if (seekStage_ == SeekStage::AwaitSource)
+                {
+                    const auto result = SetSourcePosition(channel_, sourcePosition_);
+                    if (result == FMOD_ERR_NOTREADY)
+                    {
+                        error.clear();
+                        return AudioPreparationState::Loading;
+                    }
+                    if (result != FMOD_OK)
+                        return FailPreparation(result, error);
+                    seekStage_ = SeekStage::AwaitSeek;
+                    state = SourceState(error);
+                    if (state != AudioPreparationState::Ready)
+                        return state;
+                }
+                if (seekStage_ == SeekStage::AwaitSeek)
+                {
+                    const auto result = channel_->setPaused(pausedAfterSeek_);
+                    if (result != FMOD_OK)
+                        return FailPreparation(result, error);
+                    seekStage_ = SeekStage::None;
+                }
+                error.clear();
+                sourceReady_ = true;
+                return AudioPreparationState::Ready;
             }
 
             [[nodiscard]] bool IsPlaying() const noexcept override
@@ -138,10 +198,6 @@ namespace mrg::audio
                         channel_->setChannelGroup(nativeBus),
                         errorMessage) ||
                     !Apply(
-                        "FMOD::Channel::setPosition",
-                        SetSourcePosition(channel_, settings.startPositionMicroseconds),
-                        errorMessage) ||
-                    !Apply(
                         "FMOD::Channel::setVolume",
                         channel_->setVolume(settings.volume),
                         errorMessage) ||
@@ -155,22 +211,18 @@ namespace mrg::audio
                             settings.startDspClock,
                             settings.endDspClock,
                             settings.endDspClock != 0),
-                        errorMessage) ||
-                    !Apply(
-                        "FMOD::Channel::setPaused",
-                        channel_->setPaused(settings.startPaused),
                         errorMessage))
                 {
                     return false;
                 }
 
-                errorMessage.clear();
-                return true;
+                return BeginSeek(settings.startPositionMicroseconds, settings.startPaused, errorMessage);
             }
 
             [[nodiscard]] bool Stop(
                 std::string& errorMessage) override
             {
+                seekStage_ = SeekStage::None;
                 return Apply(
                     "FMOD::Channel::stop",
                     HasLiveSystem() ? channel_->stop() : FMOD_ERR_INVALID_HANDLE,
@@ -181,6 +233,12 @@ namespace mrg::audio
                 const bool paused,
                 std::string& errorMessage) override
             {
+                if (seekStage_ != SeekStage::None && HasLiveSystem())
+                {
+                    pausedAfterSeek_ = paused;
+                    // A pending seek must never become audible before Ready.
+                    return Apply("FMOD::Channel::setPaused", channel_->setPaused(true), errorMessage);
+                }
                 return Apply(
                     "FMOD::Channel::setPaused",
                     HasLiveSystem()
@@ -220,6 +278,26 @@ namespace mrg::audio
             }
 
         private:
+            enum class SeekStage { None, AwaitSource, AwaitSeek };
+
+            AudioPreparationState FailPreparation(FMOD_RESULT result, std::string& error)
+            {
+                preparationError_ = MakeFmodError("FMOD voice preparation", result);
+                error = preparationError_;
+                return AudioPreparationState::Failed;
+            }
+
+            AudioPreparationState SourceState(std::string& error)
+            {
+                FMOD_OPENSTATE state{};
+                const auto result = sound_->getOpenState(&state, nullptr, nullptr, nullptr);
+                if (result != FMOD_OK || state == FMOD_OPENSTATE_ERROR)
+                    return FailPreparation(result != FMOD_OK ? result : FMOD_ERR_INTERNAL, error);
+                error.clear();
+                return state == FMOD_OPENSTATE_READY || state == FMOD_OPENSTATE_PLAYING
+                    ? AudioPreparationState::Ready : AudioPreparationState::Loading;
+            }
+
             [[nodiscard]] bool HasLiveSystem() const noexcept
             {
                 return channel_ != nullptr &&
@@ -244,7 +322,13 @@ namespace mrg::audio
 
             std::shared_ptr<FmodSystemLifetime> lifetime_;
             FMOD::Channel* channel_{};
+            FMOD::Sound* sound_{}; // The caller/PlaybackManager retains the clip.
             std::uint64_t generation_{};
+            SeekStage seekStage_{};
+            std::uint64_t sourcePosition_{};
+            bool pausedAfterSeek_{};
+            bool sourceReady_{};
+            std::string preparationError_;
         };
     }
 
@@ -315,12 +399,6 @@ namespace mrg::audio
 
         // A new voice already starts at zero. Avoid flushing an async stream
         // unless the caller explicitly requested another source position.
-        if (settings.startPositionMicroseconds != 0)
-        {
-            result = SetSourcePosition(channel, settings.startPositionMicroseconds);
-            if (result != FMOD_OK)
-                return failPlayback("FMOD::Channel::setPosition", result);
-        }
         result = channel->setVolume(settings.volume);
         if (result != FMOD_OK)
         {
@@ -342,6 +420,16 @@ namespace mrg::audio
                 return failPlayback("FMOD::Channel::setDelay", result);
             }
         }
+        auto voice = std::make_unique<FmodAudioVoice>(lifetime_, channel, sound_);
+        if (settings.startPositionMicroseconds != 0)
+        {
+            if (!voice->BeginSeek(settings.startPositionMicroseconds, settings.startPaused, errorMessage))
+            {
+                static_cast<void>(channel->stop());
+                return nullptr;
+            }
+            return voice;
+        }
         result = channel->setPaused(settings.startPaused);
         if (result != FMOD_OK)
         {
@@ -349,7 +437,7 @@ namespace mrg::audio
         }
 
         errorMessage.clear();
-        return std::make_unique<FmodAudioVoice>(lifetime_, channel);
+        return voice;
     }
 
     AudioClipLoadState FmodAudioClip::LoadState(std::string& errorMessage) const

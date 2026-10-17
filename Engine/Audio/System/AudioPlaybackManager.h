@@ -29,7 +29,8 @@ namespace mrg::audio
         // Borrowed pointer, invalidated by Stop, StopAll or a later Update.
         [[nodiscard]] AudioVoice* FindVoice(AudioPlaybackId id) noexcept;
         [[nodiscard]] const AudioVoice* FindVoice(AudioPlaybackId id) const noexcept;
-        // Reuses the existing native voice/channel and retains its new bus.
+        // Reuses a live channel, or replaces an ended/stolen one under the same
+        // ID, retaining the clip and new bus. Active-channel errors propagate.
         [[nodiscard]] bool Restart(
             AudioPlaybackId id,
             const AudioPlaybackSettings& settings,

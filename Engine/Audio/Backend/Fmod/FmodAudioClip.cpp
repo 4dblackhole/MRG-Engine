@@ -363,6 +363,20 @@ namespace mrg::audio
             return nullptr;
         }
 
+        // Validate against the loaded source before playSound can initiate an
+        // implicit async rewind. Invalid requests must not allocate a channel.
+        if (settings.startPositionMicroseconds != 0)
+        {
+            std::uint64_t duration{};
+            if (!GetDurationMicroseconds(duration, errorMessage))
+                return nullptr;
+            if (settings.startPositionMicroseconds >= duration)
+            {
+                errorMessage = MakeFmodError("FMOD source position", FMOD_ERR_INVALID_POSITION);
+                return nullptr;
+            }
+        }
+
         FMOD::ChannelGroup* nativeBus = nullptr;
         if (bus != nullptr)
         {

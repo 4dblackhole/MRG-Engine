@@ -19,6 +19,7 @@ AudioPlaybackManager::Update도 준비를 진행합니다. 직접 생성한 Voic
 Manager::Restart는 종료/탈취된 채널만 같은 ID 아래 새 Voice로 교체하고, 살아 있는 채널의
 실제 오류는 보존합니다. 파일 끝 미만의 us가 반올림으로 끝 프레임이 되는 경우 마지막
 유효 프레임으로 제한하며 파일 끝 이상의 요청은 계속 거부합니다.
+FindVoice의 빌린 포인터는 종료 채널을 교체한 Restart에서도 무효가 되므로 호출 후 다시 조회합니다.
 
 2026-10-17: Debug/Release x64 전체 Rebuild와 SDK 회귀(종료 중 Restart 교체,
 활성 채널 실패 보존 포함)를 통과했습니다. 별도 공개 SDK NoSound 진단에서 실제 MP3

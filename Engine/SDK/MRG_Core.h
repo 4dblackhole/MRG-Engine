@@ -554,7 +554,8 @@ namespace mrg::audio
             const AudioPlaybackSettings& settings,
             std::shared_ptr<AudioBus> bus,
             std::string& errorMessage);
-        // Borrowed pointer, invalidated by Stop, StopAll or a later Update.
+        // Borrowed pointer, invalidated by Stop, StopAll, a later Update, or a
+        // Restart that replaces an ended channel. Reacquire it after Restart.
         [[nodiscard]] AudioVoice* FindVoice(AudioPlaybackId id) noexcept;
         [[nodiscard]] const AudioVoice* FindVoice(AudioPlaybackId id) const noexcept;
         // Reuses a live channel, or replaces an ended/stolen one under the same

@@ -78,4 +78,16 @@
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
+  <ItemGroup>
+    <ClInclude Include="Decode\AudioPcmDecoder.h" />
+    <ClInclude Include="Decode\Submodules\PcmDecoders.h" />
+    <ClInclude Include="Backend\Fmod\FmodPcmClip.h" />
+    <ClCompile Include="Decode\AudioPcmDecoder.cpp" />
+    <ClCompile Include="Decode\Submodules\Mp3Decode.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)ThirdParty\dr_libs&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel></ClCompile>
+    <ClCompile Include="Decode\Submodules\VorbisDecode.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)ThirdParty\stb&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel></ClCompile>
+    <ClCompile Include="Decode\Submodules\MediaFoundationDecode.cpp" />
+    <ClCompile Include="Backend\Fmod\FmodPcmClip.cpp" />
+    <ClCompile Include="ThirdParty\DrMp3.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)ThirdParty\dr_libs&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><EnablePREfast>false</EnablePREfast><PREfastProjectDirectory /><PREfastRulesetDirectories /><PREfastRulesetFile /><WarningLevel>TurnOffAllWarnings</WarningLevel></ClCompile>
+    <ClCompile Include="ThirdParty\StbVorbis.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)ThirdParty\stb&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><EnablePREfast>false</EnablePREfast><PREfastProjectDirectory /><PREfastRulesetDirectories /><PREfastRulesetFile /><WarningLevel>TurnOffAllWarnings</WarningLevel></ClCompile>
+  </ItemGroup>
 </Project>

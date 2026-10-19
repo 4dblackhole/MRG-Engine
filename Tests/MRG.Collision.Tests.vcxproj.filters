@@ -19,4 +19,5 @@
   </ItemGroup>
   <ItemGroup><ClInclude Include="App\WindowControlTests.h"><Filter>App</Filter></ClInclude></ItemGroup>
   <ItemGroup><ClCompile Include="App\WindowControlTests.cpp"><Filter>App</Filter></ClCompile></ItemGroup>
+  <ItemGroup><Filter Include="Audio" /><ClInclude Include="Audio\AudioPcmTests.h"><Filter>Audio</Filter></ClInclude><ClCompile Include="Audio\AudioPcmTests.cpp"><Filter>Audio</Filter></ClCompile></ItemGroup>
 </Project>

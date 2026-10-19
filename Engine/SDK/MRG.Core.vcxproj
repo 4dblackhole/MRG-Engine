@@ -215,4 +215,16 @@
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
+  <ItemGroup>
+    <ClInclude Include="..\Audio\Decode\AudioPcmDecoder.h" />
+    <ClInclude Include="..\Audio\Decode\Submodules\PcmDecoders.h" />
+    <ClInclude Include="..\Audio\Backend\Fmod\FmodPcmClip.h" />
+    <ClCompile Include="..\Audio\Decode\AudioPcmDecoder.cpp" />
+    <ClCompile Include="..\Audio\Decode\Submodules\Mp3Decode.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)..\Audio\ThirdParty\dr_libs&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel></ClCompile>
+    <ClCompile Include="..\Audio\Decode\Submodules\VorbisDecode.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)..\Audio\ThirdParty\stb&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel></ClCompile>
+    <ClCompile Include="..\Audio\Decode\Submodules\MediaFoundationDecode.cpp" />
+    <ClCompile Include="..\Audio\Backend\Fmod\FmodPcmClip.cpp" />
+    <ClCompile Include="..\Audio\ThirdParty\DrMp3.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)..\Audio\ThirdParty\dr_libs&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><EnablePREfast>false</EnablePREfast><PREfastProjectDirectory /><PREfastRulesetDirectories /><PREfastRulesetFile /><WarningLevel>TurnOffAllWarnings</WarningLevel></ClCompile>
+    <ClCompile Include="..\Audio\ThirdParty\StbVorbis.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)..\Audio\ThirdParty\stb&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><EnablePREfast>false</EnablePREfast><PREfastProjectDirectory /><PREfastRulesetDirectories /><PREfastRulesetFile /><WarningLevel>TurnOffAllWarnings</WarningLevel></ClCompile>
+  </ItemGroup>
 </Project>

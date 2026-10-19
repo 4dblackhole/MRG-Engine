@@ -340,3 +340,5 @@ Client 저장소의 추가 문서는 다음과 같다.
 Debug/Release x64 `MRG-Engine.sln` 전체 Rebuild 및 두 구성의 `MRG.Collision.Tests.exe`
 (audio/Camera/collision/Visual2D 공개 SDK 단위 테스트)가 성공했고 `git diff --check`를 통과했다.
 Client의 제거된 예제 실행 경로를 엔진 검증 명령으로 사용하지 않는다.
+
+공통 PCM 디코딩(2026-10-20): `Audio/Decode`의 공개 `DecodeAudioPcm`은 장치와 독립적으로 원본 sample rate의 float PCM을 제공합니다. FMOD 재생과 Client 에디터 분석이 이 결과를 공유하며 MP3 Info/LAME 패딩을 제거합니다. 기존 Vorbis/Windows 코덱 경로와 취소·비동기 수명·메모리 비용은 [AudioPlayback](AudioPlayback.md#공통-pcm-시간축-2026-10-20)을 참고합니다.

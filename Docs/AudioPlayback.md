@@ -163,3 +163,30 @@ Reverb send/return은 별도의 Reverb return 버스와 dry 버스의 volume/fad
 Clip, Voice, Bus, Effect는 모두 Client 소유 RAII 객체다. Mixer sample rate나 DSP
 buffer를 재시작하기 전에는 이 객체를 모두 해제해야 한다. 이 규칙은 재초기화로 인해
 FMOD native handle이 조용히 무효화되는 상황을 막는다.
+
+## 공통 PCM 시간축 (2026-10-20)
+
+`Audio/Decode/AudioPcmDecoder.h`의 `DecodeAudioPcm(path, stop, consume)`는
+장치/AudioSystem 없이 실행하는 공개 SDK 함수입니다. 첫 빈 callback은 채널 수와
+원본 sample rate를 제공하고 이후 callback은 최대 4096프레임의 interleaved float
+PCM을 빌려줍니다. callback 밖에서 사용할 데이터는 호출자가 복사합니다.
+이미 취소된 요청은 파일을 열지 않으며 진행 중 취소는 다음 청크 전에 확인합니다.
+취소로 받은 부분 결과를 완성된 음원으로 게시하면 안 됩니다.
+
+MP3는 고정한 dr_mp3의 고수준 API로 Info/Xing 프레임과 LAME 지연/끝 패딩을
+제외합니다. Vorbis는 기존 stb_vorbis, WAV와 나머지 Windows 코덱은 Media Foundation
+경로를 공통 사용합니다. 새 AAC/Opus 전용 디코더는 추가하지 않았습니다.
+파일의 의도된 앞부분 무음과 원본 sample rate는 보존하며, 음량 임계값으로 자르거나
+형식별 고정 ms를 더하지 않습니다. AAC 등 기존 Windows 코덱의 메타데이터 처리는
+설치된 디코더에 따르며 모든 파일의 gapless 정보를 추정 복원한다고 보장하지 않습니다.
+
+FMOD clip factory는 압축 파일을 다시 디코딩하지 않습니다. 공통 PCM을 소유하고
+FMOD OPENRAW/OPENMEMORY로 전달합니다. Stream 계열도 PCM은 메모리에 먼저
+준비되며 raw-memory 스트림과 PCM 소유권은 clip이 유지합니다. Async 계열은 worker에서
+디코딩한 뒤 Client 스레드의 LoadState에서 native sound 생성을 시작합니다. 기존
+Loading/Ready/Failed, Voice 준비, DSP 예약과 RetireClip 계약은 유지합니다.
+긴 음악의 메모리는 float PCM의 프레임 수 × 채널 수 × 4바이트이며 디스크 캐시는 없습니다.
+샘플 수/byte 길이 범위를 검사하고 초기 탐색/재개/재시작 모두 동일한 PCM 좌표를 사용합니다.
+
+`MRG.Collision.Tests --audio-pcm [UTF-8 audio path]`는 실제 SDK API로 LAME 패딩,
+원본 앞 무음, 취소, 재생 길이 일치, 비동기 로딩과 반복 탐색을 검증합니다.

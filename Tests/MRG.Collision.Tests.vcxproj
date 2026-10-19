@@ -82,4 +82,5 @@
   <ImportGroup Label="ExtensionTargets" />
   <ItemGroup><ClInclude Include="App\WindowControlTests.h" /></ItemGroup>
   <ItemGroup><ClCompile Include="App\WindowControlTests.cpp" /></ItemGroup>
+  <ItemGroup><ClInclude Include="Audio\AudioPcmTests.h" /><ClCompile Include="Audio\AudioPcmTests.cpp" /><None Include="Audio\Fixtures\PaddedTone.mp3" /></ItemGroup>
 </Project>

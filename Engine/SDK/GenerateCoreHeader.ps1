@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $publicHeaders = @(
+    'Engine\Audio\Decode\AudioPcmDecoder.h',
     'Engine\Audio\System\AudioPlayback.h',
     'Engine\Audio\System\AudioSystem.h',
     'Engine\Audio\System\AudioPlaybackManager.h',

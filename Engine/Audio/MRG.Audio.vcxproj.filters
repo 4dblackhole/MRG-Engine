@@ -51,4 +51,19 @@
       <Filter>Backend\Fmod</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Decode\AudioPcmDecoder.h"><Filter>Decode</Filter></ClInclude>
+    <ClInclude Include="Decode\Submodules\PcmDecoders.h"><Filter>Decode\Submodules</Filter></ClInclude>
+    <ClInclude Include="Backend\Fmod\FmodPcmClip.h"><Filter>Backend\Fmod</Filter></ClInclude>
+    <ClCompile Include="Decode\AudioPcmDecoder.cpp"><Filter>Decode</Filter></ClCompile>
+    <ClCompile Include="Decode\Submodules\Mp3Decode.cpp"><Filter>Decode\Submodules</Filter></ClCompile>
+    <ClCompile Include="Decode\Submodules\VorbisDecode.cpp"><Filter>Decode\Submodules</Filter></ClCompile>
+    <ClCompile Include="Decode\Submodules\MediaFoundationDecode.cpp"><Filter>Decode\Submodules</Filter></ClCompile>
+    <ClCompile Include="Backend\Fmod\FmodPcmClip.cpp"><Filter>Backend\Fmod</Filter></ClCompile>
+    <ClCompile Include="ThirdParty\DrMp3.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <ClCompile Include="ThirdParty\StbVorbis.cpp"><Filter>ThirdParty</Filter></ClCompile>
+    <Filter Include="Decode" />
+    <Filter Include="Decode\Submodules" />
+    <Filter Include="ThirdParty" />
+  </ItemGroup>
 </Project>

@@ -177,4 +177,19 @@
     <None Include="..\Graphics.D3D12\Shader\UnlitVertexColorTextureArrayInstanced.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>
     <None Include="..\Graphics.D3D12\Shader\Text.hlsl"><Filter>Graphics.D3D12\Shader</Filter></None>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Audio\Decode\AudioPcmDecoder.h"><Filter>Audio\Decode</Filter></ClInclude>
+    <ClInclude Include="..\Audio\Decode\Submodules\PcmDecoders.h"><Filter>Audio\Decode\Submodules</Filter></ClInclude>
+    <ClInclude Include="..\Audio\Backend\Fmod\FmodPcmClip.h"><Filter>Audio\Backend\Fmod</Filter></ClInclude>
+    <ClCompile Include="..\Audio\Decode\AudioPcmDecoder.cpp"><Filter>Audio\Decode</Filter></ClCompile>
+    <ClCompile Include="..\Audio\Decode\Submodules\Mp3Decode.cpp"><Filter>Audio\Decode\Submodules</Filter></ClCompile>
+    <ClCompile Include="..\Audio\Decode\Submodules\VorbisDecode.cpp"><Filter>Audio\Decode\Submodules</Filter></ClCompile>
+    <ClCompile Include="..\Audio\Decode\Submodules\MediaFoundationDecode.cpp"><Filter>Audio\Decode\Submodules</Filter></ClCompile>
+    <ClCompile Include="..\Audio\Backend\Fmod\FmodPcmClip.cpp"><Filter>Audio\Backend\Fmod</Filter></ClCompile>
+    <ClCompile Include="..\Audio\ThirdParty\DrMp3.cpp"><Filter>Audio\ThirdParty</Filter></ClCompile>
+    <ClCompile Include="..\Audio\ThirdParty\StbVorbis.cpp"><Filter>Audio\ThirdParty</Filter></ClCompile>
+    <Filter Include="Audio\Decode" />
+    <Filter Include="Audio\Decode\Submodules" />
+    <Filter Include="Audio\ThirdParty" />
+  </ItemGroup>
 </Project>

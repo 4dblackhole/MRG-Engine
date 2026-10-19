@@ -1,6 +1,7 @@
 #include "FmodAudioClip.h"
 
 #include "FmodAudioBus.h"
+#include "FmodPcmClip.h"
 
 #include <fmod_errors.h>
 
@@ -21,15 +22,6 @@ namespace mrg::audio
             return std::string(operation) + " failed: " +
                 FMOD_ErrorString(result) + " (" +
                 std::to_string(static_cast<int>(result)) + ")";
-        }
-
-        [[nodiscard]] std::string Utf8Path(
-            const std::filesystem::path& path)
-        {
-            const std::u8string value = path.u8string();
-            return std::string(
-                reinterpret_cast<const char*>(value.data()),
-                value.size());
         }
 
         FMOD_RESULT SoundTiming(FMOD::Sound* sound, unsigned int& frames, float& frequency)
@@ -526,31 +518,6 @@ namespace mrg::audio
             return nullptr;
         }
 
-        FMOD::Sound* sound = nullptr;
-        const std::string utf8Path = Utf8Path(path);
-        const FMOD_MODE mode =
-            FMOD_DEFAULT |
-            (loadMode != AudioLoadMode::Sample && loadMode != AudioLoadMode::SampleAsync ? FMOD_CREATESTREAM
-                                                                                         : FMOD_CREATESAMPLE) |
-            ((loadMode == AudioLoadMode::StreamAsync || loadMode == AudioLoadMode::StreamAsyncAccurate ||
-              loadMode == AudioLoadMode::SampleAsync)
-                 ? FMOD_NONBLOCKING
-                 : 0) |
-            (loadMode == AudioLoadMode::StreamAsyncAccurate ? FMOD_ACCURATETIME : 0);
-        const FMOD_RESULT result = fmodBackend->NativeSystem()->createSound(
-            utf8Path.c_str(),
-            mode,
-            nullptr,
-            &sound);
-        if (result != FMOD_OK || sound == nullptr)
-        {
-            errorMessage = MakeFmodError("FMOD::System::createSound", result);
-            return nullptr;
-        }
-
-        errorMessage.clear();
-        return std::make_unique<FmodAudioClip>(
-            fmodBackend->Lifetime(),
-            sound);
+        return CreateFmodPcmClip(*fmodBackend, path, loadMode, errorMessage);
     }
 }

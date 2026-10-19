@@ -1,0 +1,5 @@
+# Preserve upstream vendor bytes, including upstream-only whitespace.
+Engine/Audio/ThirdParty/dr_libs/dr_mp3.h -text -whitespace
+Engine/Audio/ThirdParty/stb/stb_vorbis.c -text
+Engine/Audio/ThirdParty/dr_libs/LICENSE -text
+Engine/Audio/ThirdParty/stb/LICENSE -text

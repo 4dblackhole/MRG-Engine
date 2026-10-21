@@ -23,11 +23,11 @@ namespace
 
     void ReportFatalError(const std::exception &error, bool showDialog) noexcept
     {
-        OutputDebugStringA("YOUMU fatal error: ");
+        OutputDebugStringA("PhantomCore fatal error: ");
         OutputDebugStringA(error.what());
         OutputDebugStringA("\n");
         if (showDialog)
-            MessageBoxA(nullptr, error.what(), "YOUMU fatal error", MB_OK | MB_ICONERROR);
+            MessageBoxA(nullptr, error.what(), "PhantomCore fatal error", MB_OK | MB_ICONERROR);
     }
 
     void AdvanceDeadline(

@@ -360,3 +360,20 @@ Client의 제거된 예제 실행 경로를 엔진 검증 명령으로 사용하
   CollisionTests C26800, WindowControlTests C6011이며 수정하거나 억제하지 않았습니다.
 - `git diff --check` 통과. 원시 로그는 ignored `build/review-fixes-2026-10-22/`입니다.
   이 검증은 숨긴 창의 자동 SDK 검사이며 실제 화면·물리 입력·청취의 수동 검증은 아닙니다.
+
+## 2026-10-22 PhantomCore 개명과 공개 API
+
+솔루션·프로젝트·문서·빌드 경로를 PhantomCore로 통일했습니다. 소비자는
+`Engine/SDK/PhantomCore.vcxproj` 하나를 참조하고 생성된 `PhantomCore.h` 및
+`PhantomCore.lib`를 사용합니다. 생성기는 원본 헤더에서 공개 헤더를 계속 만듭니다.
+엔진 소유의 이름 있는 C++ 네임스페이스는 제거했고 파일 내부 익명 네임스페이스는
+내부 링크를 위해 유지합니다. 이전 공개 이름의 별칭·전달 헤더는 제공하지 않습니다.
+원본 선언과 직접 호출부, 공개 SDK의 수명·오류 처리·타입 이름 충돌을 검토했습니다.
+
+Debug/Release x64 전체 Rebuild와 MSVC 14.44/v143 Code Analysis를 실제 프로젝트
+include/define/PCH/C++20 설정으로 실행했습니다. 파싱/컴파일 오류와 새 분석 진단은 없습니다.
+기존 ScreenVisual2DManager C26478, Visual2DSurface C26498/C6011,
+CollisionTests C26800, WindowControlTests C6011 진단은 별도 보고합니다.
+두 구성에서 기본 SDK와 `--input-state`, `--texture-lifetime`, `--text-rendering`,
+`--text-pixels`, `--headless-error`가 모두 성공했습니다. `git diff --check`도 통과했습니다.
+자동 숨김 창/GPU 검사이며 실제 화면·물리 입력·청취는 수동 검증하지 않았습니다.

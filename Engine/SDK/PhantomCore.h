@@ -38,7 +38,6 @@ using AudioPcmConsumer = std::function<void(
 // have delivered a prefix; callers must discard it rather than publish it.
 void DecodeAudioPcm(const std::filesystem::path& path,
                     std::stop_token stop, const AudioPcmConsumer& consume);
-
 // ===== END Engine\Audio\Decode\AudioPcmDecoder.h =====
 
 // ===== BEGIN Engine\Audio\System\AudioPlayback.h =====
@@ -294,7 +293,6 @@ private:
     std::unique_ptr<IAudioBusBackend> implementation_;
     std::shared_ptr<std::atomic_size_t> liveObjectCount_;
 };
-
 // ===== END Engine\Audio\System\AudioPlayback.h =====
 
 // ===== BEGIN Engine\Audio\System\AudioSystem.h =====
@@ -545,7 +543,6 @@ private:
     bool initialized_{};
     std::vector<std::shared_ptr<AudioClip>> retiredClips_;
 };
-
 // ===== END Engine\Audio\System\AudioSystem.h =====
 
 // ===== BEGIN Engine\Audio\System\AudioPlaybackManager.h =====
@@ -601,7 +598,6 @@ private:
     std::map<AudioPlaybackId, Playback> playbacks_;
     AudioPlaybackId nextId_{1};
 };
-
 // ===== END Engine\Audio\System\AudioPlaybackManager.h =====
 
 // ===== BEGIN Engine\Platform.Win32\System\RuntimePaths.h =====
@@ -619,7 +615,6 @@ private:
 // the directory containing the current process executable.
 [[nodiscard]] std::filesystem::path ResolveExecutableRelativePath(
     const std::filesystem::path& path);
-
 // ===== END Engine\Platform.Win32\System\RuntimePaths.h =====
 
 // ===== BEGIN Engine\Platform.Win32\Input\Input.h =====
@@ -742,7 +737,6 @@ private:
     bool eventStorageFailed_{};
     std::int64_t performanceCounterFrequency_{};
 };
-
 // ===== END Engine\Platform.Win32\Input\Input.h =====
 
 // ===== BEGIN Engine\Platform.Win32\Window\WindowControl.h =====
@@ -768,7 +762,6 @@ class IWindowControl
     [[nodiscard]] virtual std::vector<WindowResolution> DisplayResolutions() const = 0;
     [[nodiscard]] virtual bool SetClientSize(WindowResolution size, std::string &error) = 0;
 };
-
 // ===== END Engine\Platform.Win32\Window\WindowControl.h =====
 
 // ===== BEGIN Engine\Collision\Query\Collision.h =====
@@ -1028,7 +1021,6 @@ struct TriangleHit3D
     const Obb3D& box,
     const Sphere3D& sphere,
     float epsilon = DefaultEpsilon) noexcept;
-
 // ===== END Engine\Collision\Query\Collision.h =====
 
 // ===== BEGIN Engine\Geometry\Shape\Vertex.h =====
@@ -1167,7 +1159,6 @@ static_assert(ShapeVertex<VertexPositionUvColor>);
 static_assert(ShapeVertex<VertexPositionNormal>);
 static_assert(ShapeVertex<VertexPositionNormalUv>);
 static_assert(ShapeVertex<VertexPositionNormalUvColor>);
-
 // ===== END Engine\Geometry\Shape\Vertex.h =====
 
 // ===== BEGIN Engine\Geometry\Shape\Shape.h =====
@@ -1220,7 +1211,6 @@ private:
     std::vector<VertexAttributes> vertices_;
     std::vector<std::uint32_t> indices_;
 };
-
 // ===== END Engine\Geometry\Shape\Shape.h =====
 
 // ===== BEGIN Engine\Geometry\Primitive\RectangleShape.h =====
@@ -1232,7 +1222,6 @@ class RectangleShape final : public Shape
 public:
     explicit RectangleShape(float width = 2.0F, float height = 2.0F);
 };
-
 // ===== END Engine\Geometry\Primitive\RectangleShape.h =====
 
 // ===== BEGIN Engine\Geometry\Primitive\CurvedRectangleShape.h =====
@@ -1252,7 +1241,6 @@ public:
         float curvatureRadians = 0.785398163F,
         std::uint32_t horizontalSegments = 32);
 };
-
 // ===== END Engine\Geometry\Primitive\CurvedRectangleShape.h =====
 
 // ===== BEGIN Engine\Geometry\Primitive\CubeShape.h =====
@@ -1265,7 +1253,6 @@ class CubeShape final : public Shape
 public:
     explicit CubeShape(float sideLength = 2.0F);
 };
-
 // ===== END Engine\Geometry\Primitive\CubeShape.h =====
 
 // ===== BEGIN Engine\Geometry\Primitive\SphereShape.h =====
@@ -1281,7 +1268,6 @@ public:
         std::uint32_t sliceCount = 32,
         std::uint32_t stackCount = 16);
 };
-
 // ===== END Engine\Geometry\Primitive\SphereShape.h =====
 
 // ===== BEGIN Engine\Core\System\TransformNode.h =====
@@ -1347,7 +1333,6 @@ private:
     std::vector<TransformNode*> children_;
     mutable bool worldDirty_{true};
 };
-
 // ===== END Engine\Core\System\TransformNode.h =====
 
 // ===== BEGIN Engine\Core\Visual2D\Visual2DNode.h =====
@@ -1771,7 +1756,6 @@ private:
     bool hovered_{};
     bool pressed_{};
 };
-
 // ===== END Engine\Core\Visual2D\Visual2DNode.h =====
 
 // ===== BEGIN Engine\Core\Visual2D\Visual2DCanvas.h =====
@@ -1850,7 +1834,6 @@ private:
     Size viewportSize,
     const Visual2DCanvas& canvas,
     Point canvasOrigin = {}) noexcept;
-
 // ===== END Engine\Core\Visual2D\Visual2DCanvas.h =====
 
 // ===== BEGIN Engine\Core\Visual2D\ScreenVisual2DManager.h =====
@@ -1974,7 +1957,6 @@ private:
     std::map<std::wstring, ImageHandle, std::less<>> images_;
     ScreenCanvasId nextCanvasId_{1};
 };
-
 // ===== END Engine\Core\Visual2D\ScreenVisual2DManager.h =====
 
 // ===== BEGIN Engine\Core\Visual2D\Visual2DComponents.h =====
@@ -2256,7 +2238,6 @@ private:
     bool trackingDrag_{};
     bool dragMoved_{};
 };
-
 // ===== END Engine\Core\Visual2D\Visual2DComponents.h =====
 
 // ===== BEGIN Engine\Core\Visual2D\Visual2DInputRouter.h =====
@@ -2306,7 +2287,6 @@ private:
     bool hasPointerSnapshot_{};
     bool hitTestInvalidated_{true};
 };
-
 // ===== END Engine\Core\Visual2D\Visual2DInputRouter.h =====
 
 // ===== BEGIN Engine\Core\Visual2D\Visual2DSurface.h =====
@@ -2444,7 +2424,6 @@ private:
     Point screenPosition,
     Size viewportSize,
     const DirectX::XMFLOAT4X4& viewProjection) noexcept;
-
 // ===== END Engine\Core\Visual2D\Visual2DSurface.h =====
 
 // ===== BEGIN Engine\Core\Visual2D\Visual2DWidgets.h =====
@@ -2493,7 +2472,6 @@ private:
     Rect bounds,
     std::vector<std::wstring> items,
     std::string name = "ComboBox");
-
 // ===== END Engine\Core\Visual2D\Visual2DWidgets.h =====
 
 // ===== BEGIN Engine\Graphics.D3D12\Text\TextRendering.h =====
@@ -2657,7 +2635,6 @@ private:
     struct Impl;
     std::unique_ptr<Impl> implementation_;
 };
-
 // ===== END Engine\Graphics.D3D12\Text\TextRendering.h =====
 
 // ===== BEGIN Engine\Graphics.D3D12\Texture\TextureManager.h =====
@@ -2842,7 +2819,6 @@ private:
     std::shared_ptr<DescriptorBlockPool> descriptorBlocks_;
     bool initialized_{};
 };
-
 // ===== END Engine\Graphics.D3D12\Texture\TextureManager.h =====
 
 // ===== BEGIN Engine\Graphics.D3D12\Mesh\MeshRendering.h =====
@@ -3144,7 +3120,6 @@ private:
     bool initialized_{};
     bool frameOpen_{};
 };
-
 // ===== END Engine\Graphics.D3D12\Mesh\MeshRendering.h =====
 
 // ===== BEGIN Engine\Graphics.D3D12\Renderer\D3D12Renderer.h =====
@@ -3281,7 +3256,6 @@ private:
     // Declared after its dependencies so it is destroyed before them.
     std::unique_ptr<Visual2DRenderSystem> visual2DRenderSystem_;
 };
-
 // ===== END Engine\Graphics.D3D12\Renderer\D3D12Renderer.h =====
 
 // ===== BEGIN Engine\Graphics.D3D12\Visual2D\Visual2DRendering.h =====
@@ -3358,7 +3332,6 @@ public:
 protected:
     Visual2DRenderSystem() = default;
 };
-
 // ===== END Engine\Graphics.D3D12\Visual2D\Visual2DRendering.h =====
 
 // ===== BEGIN Engine\Core\Client\IGameClient.h =====
@@ -3446,7 +3419,6 @@ public:
     virtual void OnResize(std::uint32_t width, std::uint32_t height) = 0;
     virtual void Shutdown() noexcept = 0;
 };
-
 // ===== END Engine\Core\Client\IGameClient.h =====
 
 // ===== BEGIN Engine\Core\System\HighResolutionClock.h =====
@@ -3467,7 +3439,6 @@ private:
     std::int64_t startCounter_{};
     double previousSeconds_{};
 };
-
 // ===== END Engine\Core\System\HighResolutionClock.h =====
 
 // ===== BEGIN Engine\Core\System\Camera.h =====
@@ -3573,7 +3544,6 @@ private:
     mutable bool viewProjectionDirty_{true};
     mutable bool frustumDirty_{true};
 };
-
 // ===== END Engine\Core\System\Camera.h =====
 
 // ===== BEGIN Engine\Core\App\Engine.h =====
@@ -3584,7 +3554,6 @@ private:
 // Takes exclusive ownership of the Client and runs the complete engine
 // lifetime.  See Docs/ExecutionFlow.md for the detailed call order.
 int Run(std::unique_ptr<IGameClient> client);
-
 // ===== END Engine\Core\App\Engine.h =====
 
 // ===== BEGIN Engine\Core\Scene\GameScene.h =====
@@ -3619,7 +3588,6 @@ public:
     // resources retain submitted GPU handles until their fences complete.
     virtual void Shutdown() noexcept;
 };
-
 // ===== END Engine\Core\Scene\GameScene.h =====
 
 // ===== BEGIN Engine\Core\System\MeshInstance.h =====
@@ -3684,7 +3652,6 @@ private:
     DirectX::XMFLOAT2 uvOffset_{0.0F, 0.0F};
     std::uint32_t textureIndex_{NoTextureIndex};
 };
-
 // ===== END Engine\Core\System\MeshInstance.h =====
 
 // ===== BEGIN Engine\Core\Scene\SceneManager.h =====
@@ -3834,7 +3801,6 @@ private:
     bool initialized_{};
     bool started_{};
 };
-
 // ===== END Engine\Core\Scene\SceneManager.h =====
 
 // ===== BEGIN Engine\Core\Client\SceneGameClient.h =====
@@ -3891,5 +3857,4 @@ private:
     bool initialized_{};
     double playbackMaintenanceSeconds_{};
 };
-
 // ===== END Engine\Core\Client\SceneGameClient.h =====

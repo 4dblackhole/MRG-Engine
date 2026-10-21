@@ -85,7 +85,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Pch.h" />
-    <ClInclude Include="MRG_Core.h" />
+    <ClInclude Include="PhantomCore.h" />
     <ClInclude Include="..\Platform.Win32\Input\Input.h"><Filter>Platform.Win32\Input</Filter></ClInclude>
     <ClInclude Include="..\Platform.Win32\System\ComApartment.h"><Filter>Platform.Win32\System</Filter></ClInclude>
     <ClInclude Include="..\Platform.Win32\System\RuntimePaths.h"><Filter>Platform.Win32\System</Filter></ClInclude>

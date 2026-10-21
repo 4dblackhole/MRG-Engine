@@ -1,7 +1,7 @@
 # ?ㅻ뵒??異쒕젰怨?Client ?뚯쑀 Clip
 
 `AudioSystem`? Client??怨듦컻?섎뒗 backend-neutral ?쒕퉬?ㅻ떎. FMOD ??낆?
-`Engine/Audio/Backend/Fmod` ?대??먮쭔 議댁옱?섎ŉ, ?앹꽦??`MRG_Core.h`?먮뒗 怨듦컻
+`Engine/Audio/Backend/Fmod` ?대??먮쭔 議댁옱?섎ŉ, ?앹꽦??`PhantomCore.h`?먮뒗 怨듦컻
 怨꾩빟留??ы븿?쒕떎.
 
 ## FMOD system ?섎챸
@@ -77,7 +77,7 @@ RAII `AudioClip`??諛섑솚?섎ŉ Client媛 ??`std::unique_ptr`???섎챸??愿�
 
 ```cpp
 std::string error;
-std::unique_ptr<mrg::audio::AudioClip> hitSound =
+std::unique_ptr<AudioClip> hitSound =
     audio.LoadSound(path, error);
 
 if (hitSound != nullptr)

@@ -1,8 +1,8 @@
 # Performance statistics
 
-`mrg::Run` measures completed render frames and `IGameClient::Update` calls
+`Run` measures completed render frames and `IGameClient::Update` calls
 continuously.  It publishes a new one-second sample through
-`mrg::UpdateContext::performance`.
+`UpdateContext::performance`.
 
 `PerformanceStatistics::hasMeasurement` remains false until the first full
 interval is complete.  `measurementIndex` increases once for each published

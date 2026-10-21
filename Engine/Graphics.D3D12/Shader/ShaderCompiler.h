@@ -5,18 +5,16 @@
 
 #include <cstdint>
 
-namespace mrg::graphics::detail
-{
-    enum class BuiltInShader : std::uint8_t
-    {
-        UnlitVertexColorInstanced,
-        UnlitVertexColorTextureArrayInstanced,
-        Text,
-        Visual2DRectangle,
-    };
 
-    [[nodiscard]] Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
-        BuiltInShader shader,
-        const char* entryPoint,
-        const char* target);
-}
+enum class BuiltInShader : std::uint8_t
+{
+    UnlitVertexColorInstanced,
+    UnlitVertexColorTextureArrayInstanced,
+    Text,
+    Visual2DRectangle,
+};
+
+[[nodiscard]] Microsoft::WRL::ComPtr<ID3DBlob> CompileShader(
+    BuiltInShader shader,
+    const char* entryPoint,
+    const char* target);

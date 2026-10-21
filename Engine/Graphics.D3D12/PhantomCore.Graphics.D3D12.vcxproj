@@ -13,8 +13,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{D4444444-4444-4444-8444-444444444444}</ProjectGuid>
-    <RootNamespace>MRGEngine</RootNamespace>
+    <ProjectGuid>{B2222222-2222-4222-8222-222222222222}</ProjectGuid>
+    <RootNamespace>PhantomCoreGraphicsD3D12</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -44,11 +44,11 @@
   <PropertyGroup>
     <OutDir>$(BaseOutputPath)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(BaseIntermediateOutputPath)$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>MRG.Engine</TargetName>
+    <TargetName>PhantomCore.Graphics.D3D12</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Platform.Win32;$(ProjectDir)..\Graphics.D3D12;$(ProjectDir)..\Audio;$(ProjectDir)..\Collision;$(ProjectDir)..\Geometry;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\Collision;$(ProjectDir)..\Geometry;$(ProjectDir)..\Core;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
@@ -58,56 +58,43 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="App\Engine.h" />
-    <ClInclude Include="Client\IGameClient.h" />
-    <ClInclude Include="Client\SceneGameClient.h" />
-    <ClInclude Include="Scene\GameScene.h" />
-    <ClInclude Include="Scene\SceneManager.h" />
-    <ClInclude Include="System\Camera.h" />
-    <ClInclude Include="System\HighResolutionClock.h" />
-    <ClInclude Include="System\MeshInstance.h" />
-    <ClInclude Include="System\TransformNode.h" />
-    <ClInclude Include="Visual2D\Visual2DNode.h" />
-    <ClInclude Include="Visual2D\Visual2DCanvas.h" />
-    <ClInclude Include="Visual2D\Visual2DComponents.h" />
-    <ClInclude Include="Visual2D\Visual2DInputRouter.h" />
-    <ClInclude Include="Visual2D\Visual2DSurface.h" />
-    <ClInclude Include="Visual2D\Visual2DWidgets.h" />
+    <ClInclude Include="Renderer\D3D12Renderer.h" />
+    <ClInclude Include="Mesh\MeshRendering.h" />
+    <ClInclude Include="Texture\TextureManager.h" />
+    <ClInclude Include="Text\TextRendering.h" />
+    <ClInclude Include="Shader\ShaderCompiler.h" />
+    <ClInclude Include="Shader\Generated\BuiltInShaders.inl" />
+    <ClInclude Include="Visual2D\Visual2DRendering.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="App\Engine.cpp" />
-    <ClCompile Include="Client\IGameClient.cpp" />
-    <ClCompile Include="Client\SceneGameClient.cpp" />
-    <ClCompile Include="Scene\GameScene.cpp" />
-    <ClCompile Include="Scene\SceneManager.cpp" />
-    <ClCompile Include="System\Camera.cpp" />
-    <ClCompile Include="System\HighResolutionClock.cpp" />
-    <ClCompile Include="System\MeshInstance.cpp" />
-    <ClCompile Include="System\TransformNode.cpp" />
-    <ClCompile Include="Visual2D\Visual2DNode.cpp" />
-    <ClCompile Include="Visual2D\Visual2DCanvas.cpp" />
-    <ClCompile Include="Visual2D\Visual2DComponents.cpp" />
-    <ClCompile Include="Visual2D\Visual2DInputRouter.cpp" />
-    <ClCompile Include="Visual2D\Visual2DSurface.cpp" />
-    <ClCompile Include="Visual2D\Visual2DWidgets.cpp" />
+    <ClCompile Include="Renderer\D3D12Renderer.cpp" />
+    <ClCompile Include="Mesh\MeshRendering.cpp" />
+    <ClCompile Include="Texture\TextureManager.cpp" />
+    <ClCompile Include="Text\TextRendering.cpp" />
+    <ClCompile Include="Shader\ShaderCompiler.cpp" />
+    <ClCompile Include="Visual2D\Visual2DRendering.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Audio\MRG.Audio.vcxproj">
-      <Project>{C3333333-3333-4333-8333-333333333333}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Graphics.D3D12\MRG.Graphics.D3D12.vcxproj">
-      <Project>{B2222222-2222-4222-8222-222222222222}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Geometry\MRG.Geometry.vcxproj">
-      <Project>{96666666-6666-4666-8666-666666666666}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\Collision\MRG.Collision.vcxproj">
+    <None Include="Shader\GenerateEmbeddedShaders.ps1" />
+    <None Include="Shader\UnlitVertexColorInstanced.hlsl" />
+    <None Include="Shader\UnlitVertexColorTextureArrayInstanced.hlsl" />
+    <None Include="Shader\Text.hlsl" />
+    <None Include="Shader\Visual2DRectangle.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Collision\PhantomCore.Collision.vcxproj">
       <Project>{A9999999-9999-4999-8999-999999999999}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\Platform.Win32\MRG.Platform.Win32.vcxproj">
-      <Project>{A1111111-1111-4111-8111-111111111111}</Project>
+    <ProjectReference Include="..\Geometry\PhantomCore.Geometry.vcxproj">
+      <Project>{96666666-6666-4666-8666-666666666666}</Project>
     </ProjectReference>
   </ItemGroup>
+  <Target Name="GenerateEmbeddedShaders" BeforeTargets="ClCompile" Inputs="$(ProjectDir)Shader\GenerateEmbeddedShaders.ps1;$(ProjectDir)Shader\UnlitVertexColorInstanced.hlsl;$(ProjectDir)Shader\UnlitVertexColorTextureArrayInstanced.hlsl;$(ProjectDir)Shader\Text.hlsl;$(ProjectDir)Shader\Visual2DRectangle.hlsl" Outputs="$(ProjectDir)Shader\Generated\BuiltInShaders.inl">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Shader\GenerateEmbeddedShaders.ps1&quot; -ShaderDirectory &quot;$(ProjectDir)Shader&quot; -OutputPath &quot;$(ProjectDir)Shader\Generated\BuiltInShaders.inl&quot;" />
+  </Target>
+  <Target Name="RemoveLegacyRuntimeShaders" AfterTargets="Build">
+    <Delete Files="$(OutDir)shaders\ColoredCube.hlsl;$(OutDir)shaders\UnlitVertexColorInstanced.hlsl;$(OutDir)shaders\UnlitVertexColorTextureArrayInstanced.hlsl;$(OutDir)shaders\Text.hlsl" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

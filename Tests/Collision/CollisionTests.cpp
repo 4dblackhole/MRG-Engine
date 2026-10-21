@@ -5,7 +5,7 @@
 #include "../App/WindowControlTests.h"
 #include "../App/InputStateTests.h"
 #include "../App/TextureLifetimeTests.h"
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 
 #include <DirectXMath.h>
 
@@ -47,34 +47,34 @@ namespace
         int restarts{};
         std::uint64_t startDspClock{};
         std::uint64_t startPositionMicroseconds{};
-        mrg::audio::IAudioBusBackend* restartBus{};
+        IAudioBusBackend* restartBus{};
     };
     std::vector<std::shared_ptr<PlaybackProbe>> playbackProbes;
     bool failTestPlayback{};
-    mrg::audio::AudioClipLoadState testClipState{mrg::audio::AudioClipLoadState::Ready};
+    AudioClipLoadState testClipState{AudioClipLoadState::Ready};
 
     class TestVisual2DRenderer final :
-        public mrg::graphics::Visual2DRenderSystem
+        public Visual2DRenderSystem
     {
     public:
-        [[nodiscard]] mrg::visual2d::ImageHandle LoadImage(
+        [[nodiscard]] ImageHandle LoadImage(
             const std::filesystem::path&) override
         {
             ++imageLoads;
             return {static_cast<std::uint64_t>(imageLoads)};
         }
 
-        [[nodiscard]] mrg::visual2d::Size GetImageSize(
-            const mrg::visual2d::ImageHandle image) const noexcept override
+        [[nodiscard]] Size GetImageSize(
+            const ImageHandle image) const noexcept override
         {
-            return image ? mrg::visual2d::Size{64.0F, 32.0F}
-                         : mrg::visual2d::Size{};
+            return image ? Size{64.0F, 32.0F}
+                         : Size{};
         }
 
         void SubmitScreen(
-            const mrg::visual2d::Visual2DCanvas& canvas,
-            const mrg::graphics::RenderContext&,
-            const mrg::visual2d::Point screenOrigin,
+            const Visual2DCanvas& canvas,
+            const RenderContext&,
+            const Point screenOrigin,
             const std::uint32_t canvasZOrder) override
         {
             ++screenSubmissions;
@@ -84,37 +84,37 @@ namespace
         }
 
         void SubmitPlane(
-            const mrg::visual2d::Visual2DCanvas&,
-            const mrg::graphics::RenderContext&,
+            const Visual2DCanvas&,
+            const RenderContext&,
             const DirectX::XMFLOAT4X4&,
-            mrg::visual2d::Size,
+            Size,
             const DirectX::XMFLOAT4X4&) override
         {
         }
 
-        [[nodiscard]] mrg::graphics::RenderTargetTextureHandle
+        [[nodiscard]] RenderTargetTextureHandle
             CreateCanvasRenderTarget(std::uint32_t, std::uint32_t) override
         {
             return {};
         }
 
         void RenderToTexture(
-            const mrg::visual2d::Visual2DCanvas&,
-            const mrg::graphics::RenderTargetTextureHandle&,
-            const mrg::graphics::RenderContext&) override
+            const Visual2DCanvas&,
+            const RenderTargetTextureHandle&,
+            const RenderContext&) override
         {
         }
 
         int imageLoads{};
         int screenSubmissions{};
-        const mrg::visual2d::Visual2DCanvas* lastCanvas{};
-        mrg::visual2d::Point lastOrigin{};
+        const Visual2DCanvas* lastCanvas{};
+        Point lastOrigin{};
         std::uint32_t lastZOrder{};
     };
 
     void TestManagedScreenVisual2D()
     {
-        using namespace mrg::visual2d;
+
 
         TestVisual2DRenderer renderer;
         ScreenVisual2DManager manager;
@@ -143,7 +143,7 @@ namespace
         Check(NearlyEqual(manager.GetImageSize(first).width, 64.0F),
             "screen presentation manager exposes registered image metadata");
 
-        mrg::graphics::RenderContext context;
+        RenderContext context;
         manager.Render(context);
         Check(renderer.screenSubmissions == 0,
             "hidden managed Canvas is not submitted");
@@ -179,15 +179,15 @@ namespace
             "manager shutdown clears game-facing image registrations");
     }
 
-    class TestVoice final : public mrg::audio::IAudioVoiceBackend
+    class TestVoice final : public IAudioVoiceBackend
     {
     public:
         explicit TestVoice(std::shared_ptr<PlaybackProbe> probe)
             : probe_(std::move(probe)) {}
         bool IsPlaying() const noexcept override { return probe_->playing; }
         bool Restart(
-            const mrg::audio::AudioPlaybackSettings& settings,
-            mrg::audio::IAudioBusBackend* bus,
+            const AudioPlaybackSettings& settings,
+            IAudioBusBackend* bus,
             std::string& error) override
         {
             if (probe_->finishOnRestart)
@@ -233,15 +233,15 @@ namespace
         std::shared_ptr<PlaybackProbe> probe_;
     };
 
-    class TestClip final : public mrg::audio::IAudioClipBackend
+    class TestClip final : public IAudioClipBackend
     {
     public:
         bool GetDurationMicroseconds(std::uint64_t& duration, std::string&) const override
         { duration = 1'000'000; return true; }
-        mrg::audio::AudioClipLoadState LoadState(std::string&) const override { return testClipState; }
-        std::unique_ptr<mrg::audio::IAudioVoiceBackend> Play(
-            const mrg::audio::AudioPlaybackSettings& settings,
-            mrg::audio::IAudioBusBackend*, std::string& error) override
+        AudioClipLoadState LoadState(std::string&) const override { return testClipState; }
+        std::unique_ptr<IAudioVoiceBackend> Play(
+            const AudioPlaybackSettings& settings,
+            IAudioBusBackend*, std::string& error) override
         {
             if (failTestPlayback)
             {
@@ -257,16 +257,16 @@ namespace
         }
     };
 
-    std::unique_ptr<mrg::audio::IAudioClipBackend> CreateTestClip(
-        mrg::audio::IAudioBackend&, const std::filesystem::path&,
-        mrg::audio::AudioLoadMode, std::string&)
+    std::unique_ptr<IAudioClipBackend> CreateTestClip(
+        IAudioBackend&, const std::filesystem::path&,
+        AudioLoadMode, std::string&)
     {
         return std::make_unique<TestClip>();
     }
 
     void TestManagedAudioPlayback()
     {
-        using namespace mrg::audio;
+
         AudioSystem audio;
         AudioConfig config;
         config.preferredBackend = AudioOutputBackend::NoSound;
@@ -409,8 +409,8 @@ namespace
     {
         using namespace DirectX;
 
-        mrg::scene::Camera camera;
-        const mrg::scene::Camera& readOnlyCamera = camera;
+        Camera camera;
+        const Camera& readOnlyCamera = camera;
         const XMMATRIX initialView = readOnlyCamera.ViewMatrix();
         const XMMATRIX initialProjection = readOnlyCamera.ProjectionMatrix();
         Check(
@@ -467,9 +467,9 @@ namespace
 
     void TestPerspectiveFrustum()
     {
-        using namespace mrg::collision;
 
-        mrg::scene::Camera camera;
+
+        Camera camera;
         camera.SetPerspective(DirectX::XM_PIDIV2, 1.0F, 1.0F, 10.0F);
         const ViewFrustum& frustum = camera.Frustum();
 
@@ -517,9 +517,9 @@ namespace
 
     void TestOrthographicFrustum()
     {
-        using namespace mrg::collision;
 
-        mrg::scene::Camera camera;
+
+        Camera camera;
         camera.SetOrthographic(8.0F, 6.0F, 1.0F, 10.0F);
         const ViewFrustum& frustum = camera.Frustum();
 
@@ -569,17 +569,17 @@ namespace
 
     void TestFrustumAndWorldBoundsUpdates()
     {
-        using namespace mrg::collision;
 
-        mrg::scene::Camera camera;
+
+        Camera camera;
         camera.SetOrthographic(10.0F, 10.0F, 1.0F, 20.0F);
         const Sphere3D localSphere{{0.0F, 0.0F, 0.0F}, 1.0F};
 
-        mrg::scene::TransformNode parent;
+        TransformNode parent;
         parent.SetPosition(3.0F, 2.0F, 5.0F);
         parent.SetScale(2.0F, 3.0F, 4.0F);
 
-        mrg::scene::TransformNode instanceTransform;
+        TransformNode instanceTransform;
         instanceTransform.SetParent(&parent);
         instanceTransform.SetPosition(1.0F, 0.0F, 0.0F);
         instanceTransform.SetRotationRollPitchYaw(
@@ -636,7 +636,7 @@ namespace
 
     void TestPlaneAndLines()
     {
-        using namespace mrg::collision;
+
 
         const Plane3D ground{{0.0F, 2.0F, 0.0F}, 0.0F};
         const Line3D descending{{0.0F, 2.0F, 0.0F}, {0.0F, -2.0F, 0.0F}};
@@ -684,7 +684,7 @@ namespace
 
     void TestTwoDimensionalQueries()
     {
-        using namespace mrg::collision;
+
 
         const Circle2D circle{{0.0F, 1.0F}, 1.0F};
         Check(
@@ -747,7 +747,7 @@ namespace
 
     void TestThreeDimensionalVolumes()
     {
-        using namespace mrg::collision;
+
 
         const Obb3D first{
             {0.0F, 0.0F, 0.0F},
@@ -790,7 +790,7 @@ namespace
 
     void TestTriangleAndUvSurfaces()
     {
-        using namespace mrg::collision;
+
 
         const Triangle3D triangle{
             {-1.0F, -1.0F, 0.0F},
@@ -809,7 +809,7 @@ namespace
 
         DirectX::XMFLOAT4X4 identity{};
         DirectX::XMStoreFloat4x4(&identity, DirectX::XMMatrixIdentity());
-        const mrg::visual2d::PlaneVisual2DSurface plane(
+        const PlaneVisual2DSurface plane(
             2.0F, 2.0F, identity);
         const auto planeHit = plane.Raycast(centerRay);
         Check(planeHit.has_value(), "world-space UI plane is raycastable");
@@ -820,9 +820,9 @@ namespace
                     NearlyEqual(planeHit->uv.y, 0.5F),
                 "plane center maps to center UV");
         }
-        mrg::visual2d::WorldSpaceVisual2DCanvas worldCanvas(
+        WorldSpaceVisual2DCanvas worldCanvas(
             {200.0F, 100.0F},
-            std::make_unique<mrg::visual2d::PlaneVisual2DSurface>(
+            std::make_unique<PlaneVisual2DSurface>(
                 2.0F, 2.0F, identity));
         const auto upperCanvasPoint = worldCanvas.MapPointer(
             Ray3D{{0.0F, 0.5F, -2.0F}, {0.0F, 0.0F, 1.0F}});
@@ -832,8 +832,8 @@ namespace
                 NearlyEqual(upperCanvasPoint->y, 25.0F),
             "world surface input maps to centered Y-up Canvas coordinates");
 
-        const mrg::geometry::RectangleShape rectangle(2.0F, 2.0F);
-        const mrg::visual2d::MeshUvVisual2DSurface mesh(rectangle, identity);
+        const RectangleShape rectangle(2.0F, 2.0F);
+        const MeshUvVisual2DSurface mesh(rectangle, identity);
         const auto meshHit = mesh.Raycast(centerRay);
         Check(meshHit.has_value(), "mesh UV UI surface is raycastable");
         if (meshHit)
@@ -844,7 +844,7 @@ namespace
                 "barycentric interpolation preserves rectangle UV");
         }
 
-        const mrg::geometry::CurvedRectangleShape curvedRectangle(
+        const CurvedRectangleShape curvedRectangle(
             3.2F,
             2.1F,
             DirectX::XM_PIDIV4,
@@ -853,7 +853,7 @@ namespace
             curvedRectangle.VertexCount() == 66 &&
                 curvedRectangle.IndexCount() == 192,
             "curved rectangle creates a segmented indexed strip");
-        const mrg::visual2d::MeshUvVisual2DSurface curvedMesh(
+        const MeshUvVisual2DSurface curvedMesh(
             curvedRectangle, identity);
         const auto curvedHit = curvedMesh.Raycast(centerRay);
         Check(curvedHit.has_value(), "curved UI surface is raycastable");
@@ -880,12 +880,12 @@ namespace
 
     void TestVisual2DRouting()
     {
-        mrg::visual2d::Visual2DCanvas canvas(
+        Visual2DCanvas canvas(
             {320.0F, 180.0F},
-            mrg::visual2d::CanvasScaleMode::Fixed);
+            CanvasScaleMode::Fixed);
         const auto canvasPoint = [](const float x, const float y)
         {
-            return mrg::visual2d::Point{x - 160.0F, 90.0F - y};
+            return Point{x - 160.0F, 90.0F - y};
         };
         const auto topLeftRect = [](
             const float x,
@@ -893,14 +893,14 @@ namespace
             const float width,
             const float height)
         {
-            return mrg::visual2d::Rect{x, -y - height, width, height};
+            return Rect{x, -y - height, width, height};
         };
-        auto& button = mrg::visual2d::CreateButton(
-            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+        auto& button = CreateButton(
+            canvas.AnchorNode(Anchor::TopLeft),
             topLeftRect(20.0F, 20.0F, 120.0F, 40.0F),
             L"Apply");
 
-        mrg::visual2d::Visual2DInputRouter router;
+        Visual2DInputRouter router;
         router.Process(
             canvas,
             {canvasPoint(40.0F, 35.0F),
@@ -910,20 +910,20 @@ namespace
             canvas,
             {canvasPoint(40.0F, 35.0F),
                 true, false, false, true, 0.0F, 20});
-        const std::vector<mrg::visual2d::Action> actions = canvas.TakeActions();
+        const std::vector<Action> actions = canvas.TakeActions();
         Check(!button.IsPressed(), "UI button releases pointer capture");
         Check(
             actions.size() == 1 &&
-                actions[0].type == mrg::visual2d::ActionType::Clicked &&
+                actions[0].type == ActionType::Clicked &&
                 actions[0].source == button.Id(),
             "press and release on one button emits a click");
 
-        auto& slider = mrg::visual2d::CreateSlider(
-            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+        auto& slider = CreateSlider(
+            canvas.AnchorNode(Anchor::TopLeft),
             topLeftRect(20.0F, 80.0F, 200.0F, 40.0F),
             0.0F);
         auto* sliderBehavior = slider.GetComponent<
-            mrg::visual2d::SliderBehaviorComponent>();
+            SliderBehaviorComponent>();
         router.Process(
             canvas,
             {canvasPoint(30.0F, 100.0F),
@@ -941,18 +941,18 @@ namespace
             {canvasPoint(300.0F, 100.0F),
                 true, false, false, true, 0.0F, 50});
 
-        (void)mrg::visual2d::CreateSprite(
-            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+        (void)CreateSprite(
+            canvas.AnchorNode(Anchor::TopLeft),
             topLeftRect(240.0F, 20.0F, 40.0F, 40.0F),
-            mrg::visual2d::ImageHandle{123});
-        const std::vector<mrg::visual2d::DrawPacket> imageCommands =
+            ImageHandle{123});
+        const std::vector<DrawPacket> imageCommands =
             canvas.BuildDrawList();
         const bool imageCommandFound = std::any_of(
             imageCommands.begin(),
             imageCommands.end(),
-            [](const mrg::visual2d::DrawPacket& command)
+            [](const DrawPacket& command)
             {
-                return command.type == mrg::visual2d::DrawPacketType::Image &&
+                return command.type == DrawPacketType::Image &&
                     command.image.value == 123;
             });
         Check(
@@ -960,37 +960,37 @@ namespace
             "UI image widgets emit reusable image draw commands");
 
         auto& pointerProbe = canvas.CreateNode(
-            mrg::visual2d::Anchor::TopLeft,
+            Anchor::TopLeft,
             "StationaryPointerProbe");
         pointerProbe.SetBounds({240.0F, -130.0F, 60.0F, 30.0F});
         std::size_t hitTestCount{};
         pointerProbe.AddComponent<
-            mrg::visual2d::CustomCollider2DComponent>(
+            CustomCollider2DComponent>(
             [&hitTestCount](
-                const mrg::visual2d::Visual2DNode&,
-                const mrg::visual2d::Point localPosition)
+                const Visual2DNode&,
+                const Point localPosition)
             {
                 ++hitTestCount;
-                const mrg::visual2d::Rect bounds{
+                const Rect bounds{
                     0.0F, 0.0F, 60.0F, 30.0F};
                 return bounds.Contains(localPosition);
             });
         std::size_t moveEventCount{};
         pointerProbe.AddComponent<
-            mrg::visual2d::PointerReceiverComponent>(
+            PointerReceiverComponent>(
             [&moveEventCount](
-                mrg::visual2d::Visual2DNode&,
-                const mrg::visual2d::PointerEvent& event,
-                std::vector<mrg::visual2d::Action>&)
+                Visual2DNode&,
+                const PointerEvent& event,
+                std::vector<Action>&)
             {
-                if (event.type == mrg::visual2d::PointerEventType::Move)
+                if (event.type == PointerEventType::Move)
                 {
                     ++moveEventCount;
                 }
             });
 
-        mrg::visual2d::Visual2DInputRouter cachedRouter;
-        const mrg::visual2d::PointerInput stationaryPointer{
+        Visual2DInputRouter cachedRouter;
+        const PointerInput stationaryPointer{
             canvasPoint(260.0F, 145.0F),
             true, false, false, false, 0.0F, 60};
         cachedRouter.Process(canvas, stationaryPointer);
@@ -1004,12 +1004,12 @@ namespace
             hitTestCount == 2 && moveEventCount == 2,
             "invalidated UI geometry refreshes a stationary pointer hit");
 
-        auto& combo = mrg::visual2d::CreateComboBox(
-            canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft),
+        auto& combo = CreateComboBox(
+            canvas.AnchorNode(Anchor::TopLeft),
             topLeftRect(20.0F, 130.0F, 180.0F, 30.0F),
             {L"Driver 0", L"Driver 1", L"Driver 2", L"Driver 3", L"Driver 4"});
         auto* comboBehavior = combo.GetComponent<
-            mrg::visual2d::ComboBoxBehaviorComponent>();
+            ComboBoxBehaviorComponent>();
         comboBehavior->SetItemHeight(20.0F);
         comboBehavior->SetMaxVisibleItems(3);
 
@@ -1050,13 +1050,13 @@ namespace
             canvas,
             {canvasPoint(50.0F, 180.0F),
                 true, false, false, true, 0.0F, 100});
-        const std::vector<mrg::visual2d::Action> comboActions =
+        const std::vector<Action> comboActions =
             canvas.TakeActions();
         Check(
             comboBehavior->SelectedIndex() == 2 &&
                 !comboActions.empty() &&
                 comboActions.back().type ==
-                    mrg::visual2d::ActionType::SelectionChanged,
+                    ActionType::SelectionChanged,
             "combo box wheel scrolling selects the shifted visible item");
 
         // Reopen and drag upward by one row before selecting the second row.
@@ -1095,28 +1095,28 @@ namespace
 
     void TestVisual2DClipping()
     {
-        mrg::visual2d::Visual2DCanvas canvas(
+        Visual2DCanvas canvas(
             {200.0F, 100.0F},
-            mrg::visual2d::CanvasScaleMode::Fixed);
+            CanvasScaleMode::Fixed);
         auto& viewport = canvas.CreateNode(
-            mrg::visual2d::Anchor::Center,
+            Anchor::Center,
             "Viewport");
         viewport.SetPivot({0.0F, 0.0F});
         viewport.SetBounds({-40.0F, -20.0F, 80.0F, 40.0F});
         viewport.SetClipRect({0.0F, 0.0F, 80.0F, 40.0F});
-        auto& child = mrg::visual2d::CreateButton(
+        auto& child = CreateButton(
             viewport,
             {60.0F, 0.0F, 40.0F, 40.0F},
             L"Clipped");
-        child.GetComponent<mrg::visual2d::SpriteVisualComponent>()->
+        child.GetComponent<SpriteVisualComponent>()->
             SetCornerRadius(6.0F);
 
-        const std::vector<mrg::visual2d::DrawPacket> packets =
+        const std::vector<DrawPacket> packets =
             canvas.BuildDrawList();
         Check(
             !packets.empty() && std::ranges::all_of(
                 packets,
-                [](const mrg::visual2d::DrawPacket& packet)
+                [](const DrawPacket& packet)
                 {
                     return packet.clipBounds.has_value() &&
                         NearlyEqual(packet.clipBounds->x, -40.0F) &&
@@ -1128,15 +1128,15 @@ namespace
         Check(
             std::ranges::any_of(
                 packets,
-                [](const mrg::visual2d::DrawPacket& packet)
+                [](const DrawPacket& packet)
                 {
                     return packet.type ==
-                            mrg::visual2d::DrawPacketType::Rectangle &&
+                            DrawPacketType::Rectangle &&
                         NearlyEqual(packet.cornerRadius, 6.0F);
                 }),
             "Visual2D Sprite packets retain their local corner radius");
 
-        mrg::visual2d::Visual2DInputRouter router;
+        Visual2DInputRouter router;
         router.Process(
             canvas,
             {{50.0F, 0.0F}, true, true, true, false, 0.0F, 10});
@@ -1162,38 +1162,38 @@ namespace
 
     void TestVisual2DTreeZOrder()
     {
-        mrg::visual2d::Visual2DCanvas canvas(
+        Visual2DCanvas canvas(
             {240.0F, 140.0F},
-            mrg::visual2d::CanvasScaleMode::Fixed);
-        auto& front = mrg::visual2d::CreateButton(
+            CanvasScaleMode::Fixed);
+        auto& front = CreateButton(
             canvas.Root(),
             {-80.0F, -18.0F, 100.0F, 48.0F},
             L"Front");
         front.SetZIndex(10);
-        auto& back = mrg::visual2d::CreateButton(
+        auto& back = CreateButton(
             canvas.Root(),
             {-100.0F, -50.0F, 180.0F, 100.0F},
             L"Back");
 
-        const std::vector<mrg::visual2d::DrawPacket> commands =
+        const std::vector<DrawPacket> commands =
             canvas.BuildDrawList();
         Check(!commands.empty() && commands.back().text && commands.back().text->value == L"Front",
               "larger sibling Z-index paints its complete subtree last");
 
-        mrg::visual2d::Visual2DInputRouter router;
+        Visual2DInputRouter router;
         router.Process(
             canvas,
             {{-60.0F, 10.0F}, true, true, true, false, 0.0F, 10});
         router.Process(
             canvas,
             {{-60.0F, 10.0F}, true, false, false, true, 0.0F, 20});
-        std::vector<mrg::visual2d::Action> actions = canvas.TakeActions();
+        std::vector<Action> actions = canvas.TakeActions();
         Check(
             actions.size() == 1 && actions.front().source == front.Id(),
             "hit testing uses the reverse of sibling paint order");
 
         back.SetZIndex(20);
-        const std::vector<mrg::visual2d::DrawPacket> reorderedCommands =
+        const std::vector<DrawPacket> reorderedCommands =
             canvas.BuildDrawList();
         Check(!reorderedCommands.empty() && reorderedCommands.back().text &&
                   reorderedCommands.back().text->value == L"Back",
@@ -1226,10 +1226,10 @@ namespace
 
     void TestVisual2DAnchorsAndComponents()
     {
-        const mrg::visual2d::Visual2DCanvas panelCanvas(
+        const Visual2DCanvas panelCanvas(
             {320.0F, 210.0F},
-            mrg::visual2d::CanvasScaleMode::Fixed);
-        const auto panelPoint = mrg::visual2d::MapScreenPointer(
+            CanvasScaleMode::Fixed);
+        const auto panelPoint = MapScreenPointer(
             {40.0F, 50.0F},
             {1280.0F, 720.0F},
             panelCanvas,
@@ -1239,7 +1239,7 @@ namespace
                 NearlyEqual(panelPoint->x, -140.0F) &&
                 NearlyEqual(panelPoint->y, 85.0F),
             "a panel-sized Canvas maps from its independent screen origin");
-        const auto capturedOutsidePanel = mrg::visual2d::MapScreenPointer(
+        const auto capturedOutsidePanel = MapScreenPointer(
             {500.0F, 400.0F},
             {1280.0F, 720.0F},
             panelCanvas,
@@ -1252,18 +1252,18 @@ namespace
                     -panelCanvas.LogicalSize().height * 0.5F,
             "Canvas mapping preserves screen-valid drag positions outside a panel");
 
-        mrg::visual2d::Visual2DCanvas canvas;
+        Visual2DCanvas canvas;
         canvas.SetViewportSize({2560.0F, 1080.0F});
         Check(
             NearlyEqual(canvas.PixelScale(), 1.5F) &&
                 NearlyEqual(canvas.LogicalSize().height, 720.0F) &&
                 NearlyEqual(canvas.LogicalSize().width, 2560.0F / 1.5F),
             "fixed-height Canvas scales from 720 vertical design pixels");
-        const auto topLeft = mrg::visual2d::MapScreenPointer(
+        const auto topLeft = MapScreenPointer(
             {0.0F, 0.0F},
             {2560.0F, 1080.0F},
             canvas);
-        const auto bottomRight = mrg::visual2d::MapScreenPointer(
+        const auto bottomRight = MapScreenPointer(
             {2560.0F, 1080.0F},
             {2560.0F, 1080.0F},
             canvas);
@@ -1284,17 +1284,17 @@ namespace
             "screen corners map to a centered Canvas with positive Y upward");
         Check(
             !canvas.RemoveNode(
-                canvas.AnchorNode(mrg::visual2d::Anchor::TopLeft).Id()),
+                canvas.AnchorNode(Anchor::TopLeft).Id()),
             "reserved Canvas anchor nodes cannot be deleted");
 
         auto& centered = canvas.CreateNode(
-            mrg::visual2d::Anchor::Center,
+            Anchor::Center,
             "CenteredSprite");
         centered.SetBounds({0.0F, 0.0F, 100.0F, 60.0F});
-        centered.AddComponent<mrg::visual2d::SpriteVisualComponent>();
-        centered.AddComponent<mrg::visual2d::RectangleCollider2DComponent>();
-        centered.AddComponent<mrg::visual2d::PointerReceiverComponent>();
-        const mrg::visual2d::Rect centeredBounds = centered.BoundsInCanvas();
+        centered.AddComponent<SpriteVisualComponent>();
+        centered.AddComponent<RectangleCollider2DComponent>();
+        centered.AddComponent<PointerReceiverComponent>();
+        const Rect centeredBounds = centered.BoundsInCanvas();
         Check(
             NearlyEqual(
                 centeredBounds.x,
@@ -1303,11 +1303,11 @@ namespace
             "center anchor fixes a node around the screen center");
 
         auto& right = canvas.CreateNode(
-            mrg::visual2d::Anchor::TopRight,
+            Anchor::TopRight,
             "RightSprite");
         right.SetBounds({-20.0F, -20.0F, 100.0F, 50.0F});
-        right.AddComponent<mrg::visual2d::SpriteVisualComponent>();
-        const mrg::visual2d::Rect rightBounds = right.BoundsInCanvas();
+        right.AddComponent<SpriteVisualComponent>();
+        const Rect rightBounds = right.BoundsInCanvas();
         Check(
             NearlyEqual(
                 rightBounds.x + rightBounds.width,
@@ -1318,17 +1318,17 @@ namespace
             "right anchor keeps a fixed inward offset after aspect changes");
 
         Check(
-            centered.RemoveComponent<mrg::visual2d::PointerReceiverComponent>() &&
+            centered.RemoveComponent<PointerReceiverComponent>() &&
                 centered.GetComponent<
-                    mrg::visual2d::PointerReceiverComponent>() == nullptr,
+                    PointerReceiverComponent>() == nullptr,
             "Visual2D behavior components can be removed at runtime");
 
         centered.Transform().SetRotationRollPitchYaw(
             0.0F,
             0.0F,
             DirectX::XM_PIDIV4);
-        mrg::visual2d::Visual2DInputRouter router;
-        const mrg::visual2d::Point centerPoint{
+        Visual2DInputRouter router;
+        const Point centerPoint{
             0.0F,
             0.0F};
         router.Process(
@@ -1358,22 +1358,22 @@ int main(int argc, char **argv)
     if (argc == 2 && std::string_view(argv[1]) == "--text-pixels")
         return TestTextPixelOrder();
     {
-        namespace v = mrg::visual2d;
-        v::Visual2DCanvas canvas;
-        auto &label = v::CreateLabel(canvas.Root(), {0, 0, 120, 32}, L"Snapshot");
-        auto &text = *label.GetComponent<v::TextVisualComponent>();
+
+        Visual2DCanvas canvas;
+        auto &label = CreateLabel(canvas.Root(), {0, 0, 120, 32}, L"Snapshot");
+        auto &text = *label.GetComponent<TextVisualComponent>();
         auto first = canvas.BuildDrawList();
         const auto source = first.back().text;
         text.SetText(L"Snapshot");
         text.SetFont(text.Font());
         text.SetTextColor({1, 0, 0, 1});
         text.SetTextOffset({-20, 0});
-        text.SetRepeatOffset(v::Point{200, 0});
+        text.SetRepeatOffset(Point{200, 0});
         const auto moved = canvas.BuildDrawList();
         Check(moved.size() == 2 && moved[0].text == source && moved[1].text == source && moved[0].textOffset.x == -20 &&
                   moved[1].textOffset.x == 180,
               "Position, color and a repeated copy preserve immutable text content");
-        source->measuredSize = v::Size{220, 20};
+        source->measuredSize = Size{220, 20};
         Check(text.MeasuredSize() && text.MeasuredSize()->width == 220,
               "Backend measurement is available in logical Canvas units");
         text.SetText(L"Changed");
@@ -1402,35 +1402,35 @@ int main(int argc, char **argv)
         }
     }
     {
-        namespace v = mrg::visual2d;
-        struct BatchVisual final : v::Visual2DComponent
+
+        struct BatchVisual final : Visual2DComponent
         {
-            std::vector<v::DrawPacket> commands;
-            void AppendDrawPackets(std::vector<v::DrawPacket> &output) const override
+            std::vector<DrawPacket> commands;
+            void AppendDrawPackets(std::vector<DrawPacket> &output) const override
             { output.insert(output.end(), commands.begin(), commands.end()); }
         };
-        v::Visual2DCanvas canvas;
-        auto &node = canvas.CreateNode(v::Anchor::TopLeft, "Immutable batch");
+        Visual2DCanvas canvas;
+        auto &node = canvas.CreateNode(Anchor::TopLeft, "Immutable batch");
         node.SetBounds({20, 30, 200, 100});
-        node.SetClipRect(v::Rect{0, 0, 150, 80});
+        node.SetClipRect(Rect{0, 0, 150, 80});
         auto &visual = node.AddComponent<BatchVisual>();
-        auto geometry = std::make_shared<const std::vector<v::RectanglePrimitive>>(
-            std::vector<v::RectanglePrimitive>{{{1, 2, 3, 4}, {1, 0, 0, .5F}, 2},
+        auto geometry = std::make_shared<const std::vector<RectanglePrimitive>>(
+            std::vector<RectanglePrimitive>{{{1, 2, 3, 4}, {1, 0, 0, .5F}, 2},
                                                {{5, 6, 7, 8}, {0, 1, 0, 1}, 0}});
-        v::DrawPacket batch;
-        batch.type = v::DrawPacketType::RectangleBatch;
+        DrawPacket batch;
+        batch.type = DrawPacketType::RectangleBatch;
         batch.rectangles = geometry;
-        v::DrawPacket text;
-        text.type = v::DrawPacketType::Text;
+        DrawPacket text;
+        text.type = DrawPacketType::Text;
         text.text =
-            std::make_shared<v::TextContent>(v::TextContent{L"after geometry", {}, 18, v::TextAlignment::Leading, {}});
+            std::make_shared<TextContent>(TextContent{L"after geometry", {}, 18, TextAlignment::Leading, {}});
         visual.commands = {batch, text};
         auto retained = canvas.BuildDrawList();
         visual.commands.clear();
         geometry.reset();
-        std::vector<v::DrawPacket> expanded;
-        v::ForEachDrawPrimitive(retained, [&](const auto &primitive) { expanded.push_back(primitive); });
-        Check(retained.size() == 2 && v::DrawPrimitiveCount(retained) == 3 && expanded.size() == 3 &&
+        std::vector<DrawPacket> expanded;
+        ForEachDrawPrimitive(retained, [&](const auto &primitive) { expanded.push_back(primitive); });
+        Check(retained.size() == 2 && DrawPrimitiveCount(retained) == 3 && expanded.size() == 3 &&
                   expanded[0].bounds.x == 1 && expanded[1].color.green == 1 && expanded[2].text &&
                   expanded[2].text->value == L"after geometry" && expanded[0].cornerRadius == 2 &&
                   expanded[0].clipBounds && retained[0].clipBounds &&

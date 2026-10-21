@@ -1,5 +1,5 @@
 #include "TextRenderingTests.h"
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 #include <cstdlib>
 #include <d3d12sdklayers.h>
 #include <iostream>
@@ -15,27 +15,27 @@ namespace
             throw std::runtime_error(message);
     }
 
-    class TextClient final : public mrg::IGameClient
+    class TextClient final : public IGameClient
     {
       public:
         TextClient(bool &completed, Microsoft::WRL::ComPtr<ID3D12InfoQueue> &queue)
             : completed_(completed), queue_(queue)
         {
         }
-        mrg::EngineConfig GetEngineConfig() const override
+        EngineConfig GetEngineConfig() const override
         {
-            mrg::EngineConfig config;
+            EngineConfig config;
             config.showWindow = false;
             config.renderRateOverrideHz = 120;
-            config.audio.preferredBackend = mrg::audio::AudioOutputBackend::NoSound;
+            config.audio.preferredBackend = AudioOutputBackend::NoSound;
             return config;
         }
-        void Initialize(const mrg::EngineServices &services) override
+        void Initialize(const EngineServices &services) override
         {
             renderer_ = &services.textRendering;
             font_ = renderer_->LoadSystemFont(L"Segoe UI");
         }
-        bool Update(const mrg::UpdateContext &) override
+        bool Update(const UpdateContext &) override
         {
             if (checkedFrames_ < frames_)
             {
@@ -46,11 +46,11 @@ namespace
                 completed_ = true;
             return checkedFrames_ < 9;
         }
-        void Render(const mrg::graphics::RenderContext &context) override
+        void Render(const RenderContext &context) override
         {
             if (frames_ == 0)
                 static_cast<void>(context.meshRendering->Device()->QueryInterface(IID_PPV_ARGS(queue_.GetAddressOf())));
-            mrg::graphics::TextDrawCommand draw;
+            TextDrawCommand draw;
             draw.style.font = font_;
             draw.style.fontSizePixels = 16;
             draw.layoutSizePixels = {300, 40};
@@ -137,12 +137,12 @@ namespace
         }
 
       private:
-        void SubmitPinned(const mrg::graphics::TextDrawCommand &draw)
+        void SubmitPinned(const TextDrawCommand &draw)
         {
             for (const auto &layout : layouts_)
                 renderer_->Submit(layout, draw);
         }
-        void CheckFrame(std::size_t frame, const mrg::graphics::TextRenderStatistics &stats)
+        void CheckFrame(std::size_t frame, const TextRenderStatistics &stats)
         {
             if (frame >= 5 && stats.atlasEvictions > 0)
                 reclaimed_ = true;
@@ -175,10 +175,10 @@ namespace
         }
         bool &completed_;
         Microsoft::WRL::ComPtr<ID3D12InfoQueue> &queue_;
-        mrg::graphics::TextRenderSystem *renderer_{};
-        mrg::graphics::FontHandle font_;
-        std::vector<mrg::graphics::TextLayoutHandle> layouts_;
-        mrg::graphics::TextLayoutHandle large_;
+        TextRenderSystem *renderer_{};
+        FontHandle font_;
+        std::vector<TextLayoutHandle> layouts_;
+        TextLayoutHandle large_;
         std::size_t frames_{}, checkedFrames_{};
         bool reclaimed_{};
     };
@@ -188,7 +188,7 @@ int TestTextRendering()
 {
     bool completed = false;
     Microsoft::WRL::ComPtr<ID3D12InfoQueue> queue;
-    const int result = mrg::Run(std::make_unique<TextClient>(completed, queue));
+    const int result = Run(std::make_unique<TextClient>(completed, queue));
     if (queue)
     {
         for (UINT64 index = 0; index < queue->GetNumStoredMessages(); ++index)

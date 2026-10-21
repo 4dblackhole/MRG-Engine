@@ -1,4 +1,4 @@
-# MRG-Engine working agreement
+# PhantomCore working agreement
 
 This file applies to the entire repository.
 
@@ -17,8 +17,8 @@ This file applies to the entire repository.
 - This repository contains reusable Windows game-engine code only.
 - Build with C++20, Visual Studio 2022, Win32, DirectX 12, and FMOD behind the
   backend-neutral audio API.
-- `Engine/SDK/MRG.Core.vcxproj` is the supported consumer project. It builds
-  one `MRG.Core.lib` and generates the single public `MRG_Core.h` facade.
+- `Engine/SDK/PhantomCore.vcxproj` is the supported consumer project. It builds
+  one `PhantomCore.lib` and generates the single public `PhantomCore.h` facade.
 - Do not add game-specific assets, Scene IDs, gameplay rules, or private
   Client implementation here.
 - Do not commit FMOD SDK files, import libraries, or runtime DLLs.
@@ -30,7 +30,7 @@ This file applies to the entire repository.
 - Public APIs must not expose FMOD or D3D12 implementation-only types.
 - Client-facing headers are selected by
   `Engine/SDK/GenerateCoreHeader.ps1`; never hand-edit generated
-  `Engine/SDK/MRG_Core.h`.
+  `Engine/SDK/PhantomCore.h`.
 - Prefer RAII and `Microsoft::WRL::ComPtr`. Raw pointers are non-owning unless
   an API explicitly documents ownership.
 - Keep the unlimited Update loop, QPC input timestamps, render deadline,
@@ -78,6 +78,6 @@ This file applies to the entire repository.
 
 ## Verification
 
-After engine changes, rebuild `MRG-Engine.sln` in Debug and Release x64.
-Run `bin/x64/<Configuration>/MRG.Collision.Tests.exe` after collision or public
-SDK changes. Tests must include only `MRG_Core.h`.
+After engine changes, rebuild `PhantomCore.sln` in Debug and Release x64.
+Run `bin/x64/<Configuration>/PhantomCore.Collision.Tests.exe` after collision or public
+SDK changes. Tests must include only `PhantomCore.h`.

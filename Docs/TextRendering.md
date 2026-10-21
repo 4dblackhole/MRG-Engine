@@ -1,6 +1,6 @@
 # 텍스트 렌더링
 
-`mrg::graphics::TextRenderSystem`은 글꼴, 색상, 크기, 정렬을 바꿀 수 있는
+`TextRenderSystem`은 글꼴, 색상, 크기, 정렬을 바꿀 수 있는
 2D 텍스트를 D3D12 렌더 타깃에 그린다. DirectWrite는 글꼴 선택, 문자열
 레이아웃, shaping과 글리프 분석을 담당하며, 실제 화면 합성은 엔진의 D3D12
 글리프 아틀라스 파이프라인이 담당한다. Direct2D 및 D3D11-on-12는 사용하지
@@ -28,11 +28,11 @@ CPU 제출 목록에 저장하고 `Flush`가 `DrawInstanced`를 기록한다.
 ## 글꼴 로드
 
 ```cpp
-mrg::graphics::FontHandle fileFont =
+FontHandle fileFont =
     services.textRendering.LoadFontFile(
         L"assets/fonts/MyFont-Regular.ttf");
 
-mrg::graphics::FontHandle systemFont =
+FontHandle systemFont =
     services.textRendering.LoadSystemFont(L"Segoe UI");
 ```
 
@@ -45,12 +45,12 @@ Visual2D는 직접 `FontHandle`을 보관하지 않고 backend-neutral `TextCont
 문자열·글꼴 descriptor·크기·정렬을 담아 공유합니다.
 
 ```cpp
-auto& label = mrg::visual2d::CreateLabel(parent, bounds, L"Text", "Label");
-label.GetComponent<mrg::visual2d::TextVisualComponent>()->SetFont(
-    {mrg::visual2d::TextFontSource::System, L"Segoe UI"});
+auto& label = CreateLabel(parent, bounds, L"Text", "Label");
+label.GetComponent<TextVisualComponent>()->SetFont(
+    {TextFontSource::System, L"Segoe UI"});
 
-combo.GetComponent<mrg::visual2d::ComboBoxBehaviorComponent>()->SetFont(
-    {mrg::visual2d::TextFontSource::File,
+combo.GetComponent<ComboBoxBehaviorComponent>()->SetFont(
+    {TextFontSource::File,
      L"assets/fonts/MyFont-Regular.ttf"});
 ```
 
@@ -63,13 +63,13 @@ Visual2D renderer는 화면용·texture용 `TextRenderSystem`마다 descriptor�
 ## 문자열 제출
 
 ```cpp
-mrg::graphics::TextDrawCommand command;
+TextDrawCommand command;
 command.positionPixels = {24.0F, 24.0F};
 command.layoutSizePixels = {640.0F, 96.0F};
 command.horizontalAlignment =
-    mrg::graphics::TextHorizontalAlignment::Center;
+    TextHorizontalAlignment::Center;
 command.verticalAlignment =
-    mrg::graphics::TextVerticalAlignment::Center;
+    TextVerticalAlignment::Center;
 command.style.font = fileFont;
 command.style.fontSizePixels = 32.0F;
 command.style.color = {0.9F, 0.2F, 0.4F, 1.0F};
@@ -152,7 +152,7 @@ underline, strikethrough, inline object, SDF 확대 렌더링은 지원하지 �
 
 ## SDK 회귀 검증
 
-Debug/Release x64 빌드 후 `MRG.Collision.Tests.exe`를 실행합니다.
+Debug/Release x64 빌드 후 `PhantomCore.Collision.Tests.exe`를 실행합니다.
 기본 경로는 Visual2D payload 재사용·무효화·측정·repeat 계약을 검사합니다.
 `--text-rendering`은 실제 D3D12에서 LRU보다 많은 유지 배치, 긴 clip 문구,
 512개 한글의 단일 upload arena, 아틀라스 확대·회수·재생성을 검사합니다.

@@ -1,5 +1,5 @@
 #include "TextPixelTests.h"
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -17,13 +17,13 @@ namespace
     }
     struct PixelFixture
     {
-        mrg::graphics::TextRenderSystem text;
-        mrg::graphics::FontHandle font;
+        TextRenderSystem text;
+        FontHandle font;
         ComPtr<ID3D12Resource> target, readback;
         ComPtr<ID3D12DescriptorHeap> rtv;
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
 
-        void Initialize(const mrg::graphics::RenderContext &context)
+        void Initialize(const RenderContext &context)
         {
             auto *device = context.meshRendering->Device();
             text.Initialize(*device, DXGI_FORMAT_R8G8B8A8_UNORM);
@@ -122,27 +122,27 @@ namespace
             return error < 1 && covered > 100;
         }
     };
-    class PixelClient final : public mrg::IGameClient
+    class PixelClient final : public IGameClient
     {
       public:
         explicit PixelClient(PixelFixture &fixture) : fixture_(fixture)
         {
         }
-        mrg::EngineConfig GetEngineConfig() const override
+        EngineConfig GetEngineConfig() const override
         {
-            mrg::EngineConfig config;
+            EngineConfig config;
             config.showWindow = false;
-            config.audio.preferredBackend = mrg::audio::AudioOutputBackend::NoSound;
+            config.audio.preferredBackend = AudioOutputBackend::NoSound;
             return config;
         }
-        void Initialize(const mrg::EngineServices &) override
+        void Initialize(const EngineServices &) override
         {
         }
-        bool Update(const mrg::UpdateContext &) override
+        bool Update(const UpdateContext &) override
         {
             return !rendered_;
         }
-        void Render(const mrg::graphics::RenderContext &context) override
+        void Render(const RenderContext &context) override
         {
             fixture_.Initialize(context);
             auto &commands = *context.commandList;
@@ -155,7 +155,7 @@ namespace
             commands.RSSetScissorRects(1, &scissor);
             commands.OMSetRenderTargets(1, &target, FALSE, nullptr);
             fixture_.text.BeginFrame(context.frameIndex, context.renderIndex);
-            mrg::graphics::TextDrawCommand draw;
+            TextDrawCommand draw;
             draw.style.font = fixture_.font;
             draw.style.fontSizePixels = 64;
             draw.layoutSizePixels = {80, 80};
@@ -199,7 +199,7 @@ int TestTextPixelOrder()
 {
     // Resources survive Run until the engine has completed all GPU work.
     PixelFixture fixture;
-    if (mrg::Run(std::make_unique<PixelClient>(fixture)) != 0)
+    if (Run(std::make_unique<PixelClient>(fixture)) != 0)
         return 1;
     return fixture.VerifyPixels() ? 0 : 1;
 }

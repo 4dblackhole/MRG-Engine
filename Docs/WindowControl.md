@@ -17,6 +17,6 @@ Win32Window가 HWND와 메시지 처리를 소유합니다. WM_SIZE가 만든 �
 옵션 콜백 안에서 Scene을 재진입하거나 GPU 자원을 교체하지 않습니다.
 Client의 게임별 옵션·파일 저장·복구 정책은 엔진에 포함하지 않습니다.
 
-`MRG.Collision.Tests.exe --window-control`은 실제 숨김 D3D12/NoSound 실행으로
+`PhantomCore.Collision.Tests.exe --window-control`은 실제 숨김 D3D12/NoSound 실행으로
 960×540 변경, native 지원 크기의 중복 제거, 잘못된 크기 거부,
 지연된 OnResize 및 렌더러 크기·종료 수명을 검사합니다.

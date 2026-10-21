@@ -1,5 +1,5 @@
 #include "WindowControlTests.h"
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -14,20 +14,20 @@ namespace
     {
         bool resized{}, rendered{}, shutdown{};
     };
-    class ResizeClient final : public mrg::IGameClient
+    class ResizeClient final : public IGameClient
     {
       public:
         explicit ResizeClient(ResizeReport &report) : report_(report)
         {
         }
-        mrg::EngineConfig GetEngineConfig() const override
+        EngineConfig GetEngineConfig() const override
         {
-            mrg::EngineConfig config;
+            EngineConfig config;
             config.showWindow = false;
-            config.audio.preferredBackend = mrg::audio::AudioOutputBackend::NoSound;
+            config.audio.preferredBackend = AudioOutputBackend::NoSound;
             return config;
         }
-        void Initialize(const mrg::EngineServices &services) override
+        void Initialize(const EngineServices &services) override
         {
             window_ = services.windowControl;
             Check(window_ != nullptr, "Run provides window control.");
@@ -44,14 +44,14 @@ namespace
             Check(window_->SetClientSize({960, 540}, error) && error.empty(), "Native resize accepted.");
             Check(!report_.resized, "OnResize is deferred outside initialization.");
         }
-        bool Update(const mrg::UpdateContext &context) override
+        bool Update(const UpdateContext &context) override
         {
             Check(context.totalSeconds < 10, "Resize completes promptly.");
             return !report_.rendered;
         }
-        void Render(const mrg::graphics::RenderContext &context) override
+        void Render(const RenderContext &context) override
         {
-            Check(report_.resized && window_->ClientSize() == mrg::platform::WindowResolution{960, 540},
+            Check(report_.resized && window_->ClientSize() == WindowResolution{960, 540},
                   "Renderer receives native size before rendering.");
             Check(context.width == 960 && context.height == 540, "Swap chain matches client size.");
             report_.rendered = true;
@@ -68,13 +68,13 @@ namespace
 
       private:
         ResizeReport &report_;
-        mrg::platform::IWindowControl *window_{};
+        IWindowControl *window_{};
     };
 } // namespace
 int TestWindowControl()
 {
     ResizeReport report;
-    const auto result = mrg::Run(std::make_unique<ResizeClient>(report));
+    const auto result = Run(std::make_unique<ResizeClient>(report));
     if (result != 0 || !report.resized || !report.rendered || !report.shutdown)
         return 1;
     std::cout << "Native window resize, display modes and deferred renderer notification passed.\n";

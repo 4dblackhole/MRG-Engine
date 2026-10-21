@@ -14,7 +14,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{78888888-8888-4888-8888-888888888888}</ProjectGuid>
-    <RootNamespace>MRGCore</RootNamespace>
+    <RootNamespace>PhantomCore</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -44,7 +44,7 @@
   <PropertyGroup>
     <OutDir>$(BaseOutputPath)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(BaseIntermediateOutputPath)$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>MRG.Core</TargetName>
+    <TargetName>PhantomCore</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -63,7 +63,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Pch.h" />
-    <ClInclude Include="MRG_Core.h" />
+    <ClInclude Include="PhantomCore.h" />
     <ClInclude Include="..\Platform.Win32\Input\Input.h" />
     <ClInclude Include="..\Platform.Win32\System\ComApartment.h" />
     <ClInclude Include="..\Platform.Win32\System\RuntimePaths.h" />
@@ -192,12 +192,12 @@
     <CorePublicHeader Include="$(ProjectDir)..\Core\Scene\GameScene.h" />
     <CorePublicHeader Include="$(ProjectDir)..\Core\Scene\SceneManager.h" />
   </ItemGroup>
-  <Target Name="InvalidateMissingCoreHeaderStamp" BeforeTargets="GenerateCoreHeader" Condition="!Exists('$(ProjectDir)MRG_Core.h')">
+  <Target Name="InvalidateMissingCoreHeaderStamp" BeforeTargets="GenerateCoreHeader" Condition="!Exists('$(ProjectDir)PhantomCore.h')">
     <Delete Files="$(IntDir)GenerateCoreHeader.stamp" />
   </Target>
   <Target Name="GenerateCoreHeader" BeforeTargets="PrepareForBuild" Inputs="$(ProjectDir)GenerateCoreHeader.ps1;@(CorePublicHeader)" Outputs="$(IntDir)GenerateCoreHeader.stamp">
     <MakeDir Directories="$(IntDir)" />
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)GenerateCoreHeader.ps1&quot; -RepositoryRoot &quot;$(ProjectDir)..\..&quot; -OutputPath &quot;$(ProjectDir)MRG_Core.h&quot;" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)GenerateCoreHeader.ps1&quot; -RepositoryRoot &quot;$(ProjectDir)..\..&quot; -OutputPath &quot;$(ProjectDir)PhantomCore.h&quot;" />
     <Touch Files="$(IntDir)GenerateCoreHeader.stamp" AlwaysCreate="true" />
     <ItemGroup>
       <FileWrites Include="$(IntDir)GenerateCoreHeader.stamp" />
@@ -207,7 +207,7 @@
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)..\Graphics.D3D12\Shader\GenerateEmbeddedShaders.ps1&quot; -ShaderDirectory &quot;$(ProjectDir)..\Graphics.D3D12\Shader&quot; -OutputPath &quot;$(ProjectDir)..\Graphics.D3D12\Shader\Generated\BuiltInShaders.inl&quot;" />
   </Target>
   <Target Name="CopyCoreSdk" AfterTargets="Build">
-    <Copy SourceFiles="$(ProjectDir)MRG_Core.h" DestinationFiles="$(OutDir)MRG_Core.h" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)PhantomCore.h" DestinationFiles="$(OutDir)PhantomCore.h" SkipUnchangedFiles="true" />
     <Delete Files="$(OutDir)shaders\ColoredCube.hlsl;$(OutDir)shaders\UnlitVertexColorInstanced.hlsl;$(OutDir)shaders\UnlitVertexColorTextureArrayInstanced.hlsl;$(OutDir)shaders\Text.hlsl" />
   </Target>
   <Target Name="EnsureFmodSdk" BeforeTargets="PrepareForBuild">

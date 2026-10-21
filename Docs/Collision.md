@@ -1,11 +1,11 @@
 # 충돌 연산
 
-`mrg::collision`은 렌더링, 장면 객체 소유권, D3D12 리소스와 무관한 stateless
+`collision`은 렌더링, 장면 객체 소유권, D3D12 리소스와 무관한 stateless
 충돌 판정 기능이다. Client에서는 다른 엔진 기능과 마찬가지로
-`MRG_Core.h` 하나를 포함해 사용한다.
+`PhantomCore.h` 하나를 포함해 사용한다.
 
 ```cpp
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 ```
 
 ## 지원 타입
@@ -51,8 +51,6 @@
 충돌 범위를 의도에 맞게 선택해야 한다.
 
 ```cpp
-using namespace mrg::collision;
-
 Circle2D note{{100.0F, 80.0F}, 16.0F};
 
 // 화면 전체를 가로지르는 수학적 직선과 판정한다.
@@ -76,8 +74,6 @@ const bool touchesLaneSegment = Intersects(
 있다.
 
 ```cpp
-using namespace mrg::collision;
-
 Plane3D ground{{0.0F, 1.0F, 0.0F}, 0.0F};
 Ray3D mouseRay{{0.0F, 10.0F, 0.0F}, {0.0F, -2.0F, 0.0F}};
 
@@ -98,8 +94,6 @@ if (const auto hit = Intersect(ground, mouseRay))
 ## OBB 판정
 
 ```cpp
-using namespace mrg::collision;
-
 Obb2D first{{0.0F, 0.0F}, {2.0F, 1.0F}, 0.25F};
 Obb2D second{{2.5F, 0.0F}, {1.0F, 1.0F}, -0.4F};
 const bool overlap2D = Intersects(first, second);
@@ -123,8 +117,6 @@ Windows SDK의 DirectXCollision 구현을 사용하되 공개 API에는 해당 �
 `VolumeIntersection::Outside`, `Intersecting`, `Inside`를 반환한다.
 
 ```cpp
-using namespace mrg::collision;
-
 const ViewFrustum& frustum = camera.Frustum();
 const Sphere3D worldBounds = TransformSphere(
     localBounds,
@@ -157,7 +149,7 @@ Camera 절두체 경로를 사용하지 않는다.
 
 ## 테스트
 
-`Tests/MRG.Collision.Tests.vcxproj`는 다음 항목을 Debug/Release에서 검증한다.
+`Tests/PhantomCore.Collision.Tests.vcxproj`는 다음 항목을 Debug/Release에서 검증한다.
 
 - 평면 교점, 평행·동일 평면 처리, ray 방향 제한
 - 원과 직선·선분의 접촉 및 비접촉
@@ -167,4 +159,4 @@ Camera 절두체 경로를 사용하지 않는다.
 - Perspective/Orthographic 절두체의 여섯 평면과 경계 교차
 - 부모 이동, 회전, 비균일 scale이 적용된 월드 Sphere와 Camera dirty 갱신
 
-테스트 프로젝트도 기능 헤더가 아닌 `MRG_Core.h`만 포함한다.
+테스트 프로젝트도 기능 헤더가 아닌 `PhantomCore.h`만 포함한다.

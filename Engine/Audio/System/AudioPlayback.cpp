@@ -2,297 +2,295 @@
 
 #include <utility>
 
-namespace mrg::audio
+
+namespace
 {
-    namespace
+    void AcquireObject(
+        const std::shared_ptr<std::atomic_size_t>& count) noexcept
     {
-        void AcquireObject(
-            const std::shared_ptr<std::atomic_size_t>& count) noexcept
+        if (count != nullptr)
         {
-            if (count != nullptr)
-            {
-                count->fetch_add(1, std::memory_order_relaxed);
-            }
-        }
-
-        void ReleaseObject(
-            const std::shared_ptr<std::atomic_size_t>& count) noexcept
-        {
-            if (count != nullptr)
-            {
-                count->fetch_sub(1, std::memory_order_release);
-            }
+            count->fetch_add(1, std::memory_order_relaxed);
         }
     }
 
-    AudioVoice::AudioVoice(
-        std::unique_ptr<IAudioVoiceBackend> implementation,
-        std::shared_ptr<std::atomic_size_t> liveObjectCount)
-        : implementation_(std::move(implementation)),
-          liveObjectCount_(std::move(liveObjectCount))
+    void ReleaseObject(
+        const std::shared_ptr<std::atomic_size_t>& count) noexcept
     {
-        AcquireObject(liveObjectCount_);
+        if (count != nullptr)
+        {
+            count->fetch_sub(1, std::memory_order_release);
+        }
     }
+}
 
-    AudioVoice::~AudioVoice()
-    {
-        implementation_.reset();
-        ReleaseObject(liveObjectCount_);
-    }
+AudioVoice::AudioVoice(
+    std::unique_ptr<IAudioVoiceBackend> implementation,
+    std::shared_ptr<std::atomic_size_t> liveObjectCount)
+    : implementation_(std::move(implementation)),
+      liveObjectCount_(std::move(liveObjectCount))
+{
+    AcquireObject(liveObjectCount_);
+}
 
-    bool AudioVoice::IsPlaying() const noexcept
-    {
-        return implementation_ != nullptr && implementation_->IsPlaying();
-    }
+AudioVoice::~AudioVoice()
+{
+    implementation_.reset();
+    ReleaseObject(liveObjectCount_);
+}
 
-    AudioPreparationState AudioVoice::PreparationState(std::string& errorMessage)
+bool AudioVoice::IsPlaying() const noexcept
+{
+    return implementation_ != nullptr && implementation_->IsPlaying();
+}
+
+AudioPreparationState AudioVoice::PreparationState(std::string& errorMessage)
+{
+    if (implementation_)
+        return implementation_->PreparationState(errorMessage);
+    errorMessage = "The audio voice is not initialized.";
+    return AudioPreparationState::Failed;
+}
+
+bool AudioVoice::Restart(
+    const AudioPlaybackSettings& settings,
+    AudioBus* const bus,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        if (implementation_)
-            return implementation_->PreparationState(errorMessage);
         errorMessage = "The audio voice is not initialized.";
-        return AudioPreparationState::Failed;
+        return false;
     }
+    return implementation_->Restart(
+        settings,
+        bus != nullptr ? bus->implementation_.get() : nullptr,
+        errorMessage);
+}
 
-    bool AudioVoice::Restart(
-        const AudioPlaybackSettings& settings,
-        AudioBus* const bus,
-        std::string& errorMessage)
+bool AudioVoice::Stop(std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio voice is not initialized.";
-            return false;
-        }
-        return implementation_->Restart(
-            settings,
-            bus != nullptr ? bus->implementation_.get() : nullptr,
-            errorMessage);
+        errorMessage = "The audio voice is not initialized.";
+        return false;
     }
+    return implementation_->Stop(errorMessage);
+}
 
-    bool AudioVoice::Stop(std::string& errorMessage)
+bool AudioVoice::SetPaused(
+    const bool paused,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio voice is not initialized.";
-            return false;
-        }
-        return implementation_->Stop(errorMessage);
+        errorMessage = "The audio voice is not initialized.";
+        return false;
     }
+    return implementation_->SetPaused(paused, errorMessage);
+}
 
-    bool AudioVoice::SetPaused(
-        const bool paused,
-        std::string& errorMessage)
+bool AudioVoice::SetVolume(
+    const float volume,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio voice is not initialized.";
-            return false;
-        }
-        return implementation_->SetPaused(paused, errorMessage);
+        errorMessage = "The audio voice is not initialized.";
+        return false;
     }
+    return implementation_->SetVolume(volume, errorMessage);
+}
 
-    bool AudioVoice::SetVolume(
-        const float volume,
-        std::string& errorMessage)
+bool AudioVoice::SetPitch(
+    const float pitch,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio voice is not initialized.";
-            return false;
-        }
-        return implementation_->SetVolume(volume, errorMessage);
+        errorMessage = "The audio voice is not initialized.";
+        return false;
     }
+    return implementation_->SetPitch(pitch, errorMessage);
+}
 
-    bool AudioVoice::SetPitch(
-        const float pitch,
-        std::string& errorMessage)
+bool AudioVoice::SetDelay(const std::uint64_t startDspClock,
+    const std::uint64_t endDspClock, std::string& errorMessage)
+{
+    if (!implementation_)
     {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio voice is not initialized.";
-            return false;
-        }
-        return implementation_->SetPitch(pitch, errorMessage);
+        errorMessage = "The audio voice is not initialized.";
+        return false;
     }
+    return implementation_->SetDelay(startDspClock, endDspClock, errorMessage);
+}
 
-    bool AudioVoice::SetDelay(const std::uint64_t startDspClock,
-        const std::uint64_t endDspClock, std::string& errorMessage)
+AudioEffect::AudioEffect(
+    std::unique_ptr<IAudioEffectBackend> implementation,
+    std::shared_ptr<std::atomic_size_t> liveObjectCount)
+    : implementation_(std::move(implementation)),
+      liveObjectCount_(std::move(liveObjectCount))
+{
+    AcquireObject(liveObjectCount_);
+}
+
+AudioEffect::~AudioEffect()
+{
+    implementation_.reset();
+    ReleaseObject(liveObjectCount_);
+}
+
+bool AudioEffect::IsValid() const noexcept
+{
+    return implementation_ != nullptr;
+}
+
+AudioEffectType AudioEffect::Type() const noexcept
+{
+    return implementation_ != nullptr
+        ? implementation_->Type()
+        : AudioEffectType::LowPass;
+}
+
+bool AudioEffect::SetBypass(
+    const bool bypass,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        if (!implementation_)
-        {
-            errorMessage = "The audio voice is not initialized.";
-            return false;
-        }
-        return implementation_->SetDelay(startDspClock, endDspClock, errorMessage);
+        errorMessage = "The audio effect is not initialized.";
+        return false;
     }
+    return implementation_->SetBypass(bypass, errorMessage);
+}
 
-    AudioEffect::AudioEffect(
-        std::unique_ptr<IAudioEffectBackend> implementation,
-        std::shared_ptr<std::atomic_size_t> liveObjectCount)
-        : implementation_(std::move(implementation)),
-          liveObjectCount_(std::move(liveObjectCount))
+bool AudioEffect::SetParameter(
+    const AudioEffectParameter parameter,
+    const float value,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        AcquireObject(liveObjectCount_);
+        errorMessage = "The audio effect is not initialized.";
+        return false;
     }
+    return implementation_->SetParameter(parameter, value, errorMessage);
+}
 
-    AudioEffect::~AudioEffect()
+AudioBus::AudioBus(
+    std::unique_ptr<IAudioBusBackend> implementation,
+    std::shared_ptr<std::atomic_size_t> liveObjectCount)
+    : implementation_(std::move(implementation)),
+      liveObjectCount_(std::move(liveObjectCount))
+{
+    AcquireObject(liveObjectCount_);
+}
+
+AudioBus::~AudioBus()
+{
+    implementation_.reset();
+    ReleaseObject(liveObjectCount_);
+}
+
+bool AudioBus::IsValid() const noexcept
+{
+    return implementation_ != nullptr;
+}
+
+std::string_view AudioBus::Name() const noexcept
+{
+    return implementation_ != nullptr
+        ? implementation_->Name()
+        : std::string_view{};
+}
+
+bool AudioBus::SetVolume(
+    const float volume,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        implementation_.reset();
-        ReleaseObject(liveObjectCount_);
+        errorMessage = "The audio bus is not initialized.";
+        return false;
     }
+    return implementation_->SetVolume(volume, errorMessage);
+}
 
-    bool AudioEffect::IsValid() const noexcept
+bool AudioBus::SetPitch(
+    const float pitch,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        return implementation_ != nullptr;
+        errorMessage = "The audio bus is not initialized.";
+        return false;
     }
+    return implementation_->SetPitch(pitch, errorMessage);
+}
 
-    AudioEffectType AudioEffect::Type() const noexcept
+bool AudioBus::SetMuted(
+    const bool muted,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        return implementation_ != nullptr
-            ? implementation_->Type()
-            : AudioEffectType::LowPass;
+        errorMessage = "The audio bus is not initialized.";
+        return false;
     }
+    return implementation_->SetMuted(muted, errorMessage);
+}
 
-    bool AudioEffect::SetBypass(
-        const bool bypass,
-        std::string& errorMessage)
+bool AudioBus::AddFadePoint(
+    const std::uint64_t dspClock,
+    const float volume,
+    const bool ramp,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio effect is not initialized.";
-            return false;
-        }
-        return implementation_->SetBypass(bypass, errorMessage);
+        errorMessage = "The audio bus is not initialized.";
+        return false;
     }
+    return implementation_->AddFadePoint(
+        dspClock,
+        volume,
+        ramp,
+        errorMessage);
+}
 
-    bool AudioEffect::SetParameter(
-        const AudioEffectParameter parameter,
-        const float value,
-        std::string& errorMessage)
+bool AudioBus::ClearFadePoints(
+    const std::uint64_t beginDspClock,
+    const std::uint64_t endDspClock,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio effect is not initialized.";
-            return false;
-        }
-        return implementation_->SetParameter(parameter, value, errorMessage);
+        errorMessage = "The audio bus is not initialized.";
+        return false;
     }
+    return implementation_->ClearFadePoints(
+        beginDspClock,
+        endDspClock,
+        errorMessage);
+}
 
-    AudioBus::AudioBus(
-        std::unique_ptr<IAudioBusBackend> implementation,
-        std::shared_ptr<std::atomic_size_t> liveObjectCount)
-        : implementation_(std::move(implementation)),
-          liveObjectCount_(std::move(liveObjectCount))
+std::unique_ptr<AudioEffect> AudioBus::AddEffect(
+    const AudioEffectType type,
+    std::string& errorMessage)
+{
+    if (implementation_ == nullptr)
     {
-        AcquireObject(liveObjectCount_);
+        errorMessage = "The audio bus is not initialized.";
+        return nullptr;
     }
 
-    AudioBus::~AudioBus()
+    std::unique_ptr<IAudioEffectBackend> effect =
+        implementation_->AddEffect(type, errorMessage);
+    if (effect == nullptr)
     {
-        implementation_.reset();
-        ReleaseObject(liveObjectCount_);
+        return nullptr;
     }
-
-    bool AudioBus::IsValid() const noexcept
-    {
-        return implementation_ != nullptr;
-    }
-
-    std::string_view AudioBus::Name() const noexcept
-    {
-        return implementation_ != nullptr
-            ? implementation_->Name()
-            : std::string_view{};
-    }
-
-    bool AudioBus::SetVolume(
-        const float volume,
-        std::string& errorMessage)
-    {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio bus is not initialized.";
-            return false;
-        }
-        return implementation_->SetVolume(volume, errorMessage);
-    }
-
-    bool AudioBus::SetPitch(
-        const float pitch,
-        std::string& errorMessage)
-    {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio bus is not initialized.";
-            return false;
-        }
-        return implementation_->SetPitch(pitch, errorMessage);
-    }
-
-    bool AudioBus::SetMuted(
-        const bool muted,
-        std::string& errorMessage)
-    {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio bus is not initialized.";
-            return false;
-        }
-        return implementation_->SetMuted(muted, errorMessage);
-    }
-
-    bool AudioBus::AddFadePoint(
-        const std::uint64_t dspClock,
-        const float volume,
-        const bool ramp,
-        std::string& errorMessage)
-    {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio bus is not initialized.";
-            return false;
-        }
-        return implementation_->AddFadePoint(
-            dspClock,
-            volume,
-            ramp,
-            errorMessage);
-    }
-
-    bool AudioBus::ClearFadePoints(
-        const std::uint64_t beginDspClock,
-        const std::uint64_t endDspClock,
-        std::string& errorMessage)
-    {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio bus is not initialized.";
-            return false;
-        }
-        return implementation_->ClearFadePoints(
-            beginDspClock,
-            endDspClock,
-            errorMessage);
-    }
-
-    std::unique_ptr<AudioEffect> AudioBus::AddEffect(
-        const AudioEffectType type,
-        std::string& errorMessage)
-    {
-        if (implementation_ == nullptr)
-        {
-            errorMessage = "The audio bus is not initialized.";
-            return nullptr;
-        }
-
-        std::unique_ptr<IAudioEffectBackend> effect =
-            implementation_->AddEffect(type, errorMessage);
-        if (effect == nullptr)
-        {
-            return nullptr;
-        }
-        return std::unique_ptr<AudioEffect>(new AudioEffect(
-            std::move(effect),
-            liveObjectCount_));
-    }
+    return std::unique_ptr<AudioEffect>(new AudioEffect(
+        std::move(effect),
+        liveObjectCount_));
 }

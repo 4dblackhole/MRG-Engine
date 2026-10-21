@@ -1,5 +1,5 @@
 #include "TextureLifetimeTests.h"
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -17,26 +17,26 @@ namespace
         unsigned frames{};
         bool shutdown{};
     };
-    class TextureLifetimeClient final : public mrg::IGameClient
+    class TextureLifetimeClient final : public IGameClient
     {
       public:
         explicit TextureLifetimeClient(Report &report) : report_(report)
         {
         }
-        mrg::EngineConfig GetEngineConfig() const override
+        EngineConfig GetEngineConfig() const override
         {
-            mrg::EngineConfig config;
+            EngineConfig config;
             config.showWindow = false;
-            config.audio.preferredBackend = mrg::audio::AudioOutputBackend::NoSound;
+            config.audio.preferredBackend = AudioOutputBackend::NoSound;
             return config;
         }
-        void Initialize(const mrg::EngineServices &services) override
+        void Initialize(const EngineServices &services) override
         {
             textures_ = &services.meshRendering.Textures();
             rendering_ = &services.visual2DRendering;
             for (int i = 0; i < 200; ++i)
                 static_cast<void>(textures_->CreateRenderTargetTexture(1, 1));
-            std::vector<mrg::graphics::RenderTargetTextureHandle> live;
+            std::vector<RenderTargetTextureHandle> live;
             for (int i = 0; i < 16; ++i)
                 live.push_back(textures_->CreateRenderTargetTexture(1, 1));
             bool refused = false;
@@ -53,7 +53,7 @@ namespace
             static_cast<void>(textures_->CreateRenderTargetTexture(1, 1));
             const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
             imagePath_ =
-                std::filesystem::temp_directory_path() / ("mrg-texture-lifetime-" + std::to_string(nonce) + ".bmp");
+                std::filesystem::temp_directory_path() / ("phantomcore-texture-lifetime-" + std::to_string(nonce) + ".bmp");
             constexpr std::array<unsigned char, 58> image{0x42, 0x4d, 58, 0, 0, 0, 0, 0, 0, 0,    54,   0,    0, 0,  40,
                                                           0,    0,    0,  1, 0, 0, 0, 1, 0, 0,    0,    1,    0, 24, 0,
                                                           0,    0,    0,  0, 4, 0, 0, 0, 0, 0,    0,    0,    0, 0,  0,
@@ -68,12 +68,12 @@ namespace
             upload.reset();
             Require(!firstUpload_.expired(), "A submitted upload must retain its descriptor lease until its fence.");
         }
-        bool Update(const mrg::UpdateContext &context) override
+        bool Update(const UpdateContext &context) override
         {
             Require(context.totalSeconds < 15, "Texture lifetime regression timed out.");
             return report_.frames < 64;
         }
-        void Render(const mrg::graphics::RenderContext &context) override
+        void Render(const RenderContext &context) override
         {
             if (context.frameIndex >= targets_.size())
                 throw std::runtime_error("Unexpected frame-ring size.");
@@ -106,18 +106,18 @@ namespace
 
       private:
         Report &report_;
-        mrg::graphics::TextureManager *textures_{};
-        mrg::graphics::Visual2DRenderSystem *rendering_{};
-        mrg::visual2d::Visual2DCanvas canvas_;
+        TextureManager *textures_{};
+        Visual2DRenderSystem *rendering_{};
+        Visual2DCanvas canvas_;
         std::filesystem::path imagePath_;
-        std::weak_ptr<const mrg::graphics::TextureSet> firstUpload_;
-        std::array<std::weak_ptr<mrg::graphics::RenderTargetTexture>, 16> targets_;
+        std::weak_ptr<const TextureSet> firstUpload_;
+        std::array<std::weak_ptr<RenderTargetTexture>, 16> targets_;
     };
 } // namespace
 int TestTextureLifetime()
 {
     Report report;
-    const auto exitCode = mrg::Run(std::make_unique<TextureLifetimeClient>(report));
+    const auto exitCode = Run(std::make_unique<TextureLifetimeClient>(report));
     if (exitCode || report.frames != 64 || !report.shutdown)
         return 1;
     std::cout << "Descriptor reuse: 200 released targets, live-capacity limit "

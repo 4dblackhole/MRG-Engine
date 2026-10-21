@@ -9,60 +9,58 @@
 
 #include <cstdint>
 
-namespace mrg::scene
+
+// Reusable wrapper that combines one GPU mesh, one material,
+// and per-instance state.  Shape itself stays renderer-independent.
+class MeshInstance final
 {
-    // Reusable wrapper that combines one GPU mesh, one material,
-    // and per-instance state.  Shape itself stays renderer-independent.
-    class MeshInstance final
-    {
-    public:
-        MeshInstance() = default;
-        MeshInstance(
-            graphics::GpuMeshHandle mesh,
-            graphics::MaterialInstanceHandle material);
+public:
+    MeshInstance() = default;
+    MeshInstance(
+        GpuMeshHandle mesh,
+        MaterialInstanceHandle material);
 
-        void SetMesh(graphics::GpuMeshHandle mesh);
-        void SetMaterial(graphics::MaterialInstanceHandle material);
-        void Reset() noexcept;
-        [[nodiscard]] const graphics::GpuMeshHandle& Mesh() const noexcept;
-        [[nodiscard]] const graphics::MaterialInstanceHandle&
-            Material() const noexcept;
+    void SetMesh(GpuMeshHandle mesh);
+    void SetMaterial(MaterialInstanceHandle material);
+    void Reset() noexcept;
+    [[nodiscard]] const GpuMeshHandle& Mesh() const noexcept;
+    [[nodiscard]] const MaterialInstanceHandle&
+        Material() const noexcept;
 
-        [[nodiscard]] TransformNode& Transform() noexcept;
-        [[nodiscard]] const TransformNode& Transform() const noexcept;
+    [[nodiscard]] TransformNode& Transform() noexcept;
+    [[nodiscard]] const TransformNode& Transform() const noexcept;
 
-        void SetColor(const DirectX::XMFLOAT4& color) noexcept;
-        [[nodiscard]] const DirectX::XMFLOAT4& Color() const noexcept;
-        void SetTextureIndex(std::uint32_t textureIndex) noexcept;
-        void ClearTexture() noexcept;
-        [[nodiscard]] std::uint32_t TextureIndex() const noexcept;
-        void SetUvTransform(
-            const DirectX::XMFLOAT2& scale,
-            const DirectX::XMFLOAT2& offset) noexcept;
-        void SetUvTransform(
-            const graphics::UvTransform& transform) noexcept;
-        [[nodiscard]] const DirectX::XMFLOAT2& UvScale() const noexcept;
-        [[nodiscard]] const DirectX::XMFLOAT2& UvOffset() const noexcept;
-        [[nodiscard]] bool IsReady() const noexcept;
-        [[nodiscard]] const collision::Sphere3D&
-            LocalBoundingSphere() const;
-        [[nodiscard]] collision::Sphere3D WorldBoundingSphere() const;
-        [[nodiscard]] bool IsVisible(const Camera& camera) const;
+    void SetColor(const DirectX::XMFLOAT4& color) noexcept;
+    [[nodiscard]] const DirectX::XMFLOAT4& Color() const noexcept;
+    void SetTextureIndex(std::uint32_t textureIndex) noexcept;
+    void ClearTexture() noexcept;
+    [[nodiscard]] std::uint32_t TextureIndex() const noexcept;
+    void SetUvTransform(
+        const DirectX::XMFLOAT2& scale,
+        const DirectX::XMFLOAT2& offset) noexcept;
+    void SetUvTransform(
+        const UvTransform& transform) noexcept;
+    [[nodiscard]] const DirectX::XMFLOAT2& UvScale() const noexcept;
+    [[nodiscard]] const DirectX::XMFLOAT2& UvOffset() const noexcept;
+    [[nodiscard]] bool IsReady() const noexcept;
+    [[nodiscard]] const Sphere3D&
+        LocalBoundingSphere() const;
+    [[nodiscard]] Sphere3D WorldBoundingSphere() const;
+    [[nodiscard]] bool IsVisible(const Camera& camera) const;
 
-        // Queues this instance when its world bounding sphere is not outside
-        // the camera frustum. D3D12Renderer batches matching mesh/material
-        // pairs and performs DrawIndexedInstanced in EndFrame.
-        void Submit(
-            const graphics::RenderContext& context,
-            const Camera& camera);
+    // Queues this instance when its world bounding sphere is not outside
+    // the camera frustum. D3D12Renderer batches matching mesh/material
+    // pairs and performs DrawIndexedInstanced in EndFrame.
+    void Submit(
+        const RenderContext& context,
+        const Camera& camera);
 
-    private:
-        graphics::GpuMeshHandle mesh_;
-        graphics::MaterialInstanceHandle material_;
-        TransformNode transform_;
-        DirectX::XMFLOAT4 color_{1.0F, 1.0F, 1.0F, 1.0F};
-        DirectX::XMFLOAT2 uvScale_{1.0F, 1.0F};
-        DirectX::XMFLOAT2 uvOffset_{0.0F, 0.0F};
-        std::uint32_t textureIndex_{graphics::NoTextureIndex};
-    };
-}
+private:
+    GpuMeshHandle mesh_;
+    MaterialInstanceHandle material_;
+    TransformNode transform_;
+    DirectX::XMFLOAT4 color_{1.0F, 1.0F, 1.0F, 1.0F};
+    DirectX::XMFLOAT2 uvScale_{1.0F, 1.0F};
+    DirectX::XMFLOAT2 uvOffset_{0.0F, 0.0F};
+    std::uint32_t textureIndex_{NoTextureIndex};
+};

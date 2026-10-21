@@ -3,13 +3,13 @@
 ## 책임과 프로젝트 경계
 
 `Visual2D`는 일반 Sprite와 옵션 위젯을 같은 노드, Transform, 입력 및 렌더링
-경로로 처리한다. 독립 `MRG.UI` 프로젝트와 `UiElement` 상속 계층은 존재하지 않는다.
+경로로 처리한다. 독립 `PhantomCore.UI` 프로젝트와 `UiElement` 상속 계층은 존재하지 않는다.
 
 ```text
-MRG.Engine/Core/Visual2D
+PhantomCore.Engine/Core/Visual2D
   Visual2DNode + Components + Canvas + Input + Surface + Widget factories
 
-MRG.Graphics.D3D12/Visual2D
+PhantomCore.Graphics.D3D12/Visual2D
   D3D12Visual2DRenderer
 ```
 
@@ -171,18 +171,18 @@ world transform을 사용해야 한다.
 ## 간단한 사용 예
 
 ```cpp
-mrg::visual2d::Visual2DCanvas canvas;
+Visual2DCanvas canvas;
 canvas.SetViewportSize({1920.0F, 1080.0F});
 
 auto& sprite = canvas.CreateNode(
-    mrg::visual2d::Anchor::BottomCenter,
+    Anchor::BottomCenter,
     "Character");
 sprite.SetBounds({0.0F, 48.0F, 128.0F, 128.0F});
-sprite.AddComponent<mrg::visual2d::SpriteVisualComponent>().SetImage(image);
-sprite.AddComponent<mrg::visual2d::RectangleCollider2DComponent>();
-sprite.AddComponent<mrg::visual2d::PointerReceiverComponent>(handler);
+sprite.AddComponent<SpriteVisualComponent>().SetImage(image);
+sprite.AddComponent<RectangleCollider2DComponent>();
+sprite.AddComponent<PointerReceiverComponent>(handler);
 
-mrg::visual2d::Visual2DInputRouter input;
+Visual2DInputRouter input;
 input.Process(canvas, pointerSnapshot);
 
 renderContext.visual2DRendering->SubmitScreen(canvas, renderContext);

@@ -1,17 +1,17 @@
-# MRG-Engine 전체 안내서
+# PhantomCore 전체 안내서
 
-이 문서는 MRG-Engine을 처음 사용하는 개발자와 새 Codex 세션을 위한 시작점이다.
+이 문서는 PhantomCore을 처음 사용하는 개발자와 새 Codex 세션을 위한 시작점이다.
 엔진의 기능, 코드 위치, 객체 수명, Client 경계와 후속 상세 문서를 한곳에서 찾을
 수 있도록 정리한다.
 
 ## 1. 가장 먼저 알아야 할 것
 
 - 대상 환경은 Windows, Visual Studio 2022, C++20, DirectX 12다.
-- 엔진은 하나의 정적 라이브러리 `MRG.Core.lib`와 하나의 공개 헤더
-  `MRG_Core.h`로 Client에 제공된다.
-- Client는 `Engine/SDK/MRG.Core.vcxproj` 하나만 참조하고 `MRG_Core.h`만
+- 엔진은 하나의 정적 라이브러리 `PhantomCore.lib`와 하나의 공개 헤더
+  `PhantomCore.h`로 Client에 제공된다.
+- Client는 `Engine/SDK/PhantomCore.vcxproj` 하나만 참조하고 `PhantomCore.h`만
   포함한다.
-- `Engine/SDK/MRG_Core.h`는 생성 파일이다. 직접 수정하지 않고 원본 기능 헤더를
+- `Engine/SDK/PhantomCore.h`는 생성 파일이다. 직접 수정하지 않고 원본 기능 헤더를
   수정한 뒤 `Engine/SDK/GenerateCoreHeader.ps1`로 다시 생성한다.
 - FMOD는 현재 기본 오디오 backend지만 공개 API에는 FMOD 타입을 노출하지 않는다.
 - 게임 규칙, Scene ID, 게임별 asset과 화면 전환 정책은 Client 저장소에 둔다.
@@ -26,7 +26,7 @@ Client 저장소의 `Docs/ExecutionFlow.md`를 참고한다.
 
 1. 저장소 루트의 `AGENTS.md`를 읽는다.
 2. 이 문서에서 필요한 기능과 소유 프로젝트를 찾는다.
-3. Client라면 `#include "MRG_Core.h"`만 사용한다.
+3. Client라면 `#include "PhantomCore.h"`만 사용한다.
 4. `IGameClient`를 구현하거나 `SceneGameClient`를 상속한다.
 5. `GameScene::Initialize`에서 리소스를 만들고, `Update`에서 상태를 바꾸며,
    `Render`에서는 렌더 시스템에 제출한다.
@@ -36,14 +36,14 @@ Client 저장소의 `Docs/ExecutionFlow.md`를 참고한다.
 최소 진입점은 다음과 같다.
 
 ```cpp
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 
 #include <memory>
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
     auto game = std::make_unique<MyGameClient>();
-    return mrg::Run(std::move(game));
+    return Run(std::move(game));
 }
 ```
 
@@ -53,14 +53,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 SDK 테스트의 `--headless-error`는 실제 D3D12/NoSound 실행 중 Update 예외를 주입해
 이 정리와 비차단 종료를 검증합니다. 기본 SDK 단위 테스트와 별도로 실행합니다.
 
-여러 Scene을 사용하는 게임은 `mrg::scene::SceneGameClient`를 상속하고
+여러 Scene을 사용하는 게임은 `SceneGameClient`를 상속하고
 `RegisterScenes`에서 Scene factory와 수명 정책을 등록하는 방식이 권장된다.
 
 ## 3. 전체 구조와 주요 기능
 
 | 영역 | 실제 위치 | 주요 책임과 공개 개념 |
 | --- | --- | --- |
-| 애플리케이션 | `Engine/Core/App` | `mrg::Run`, subsystem 생성·메인 루프·종료 순서 |
+| 애플리케이션 | `Engine/Core/App` | `Run`, subsystem 생성·메인 루프·종료 순서 |
 | Client 계약 | `Engine/Core/Client` | `IGameClient`, `SceneGameClient`, `EngineServices`, Update/Render context |
 | Scene | `Engine/Core/Scene` | `GameScene`, `SceneManager`, factory, 지연 전환, 수명 정책 |
 | 공통 시스템 | `Engine/Core/System` | `Camera`, `TransformNode`, `MeshInstance`, `HighResolutionClock` |
@@ -71,17 +71,17 @@ SDK 테스트의 `--headless-error`는 실제 D3D12/NoSound 실행 중 Update �
 | D3D12 Graphics | `Engine/Graphics.D3D12` | device, swap chain, frame resource, mesh/material, texture, text, shader |
 | Visual2D Core | `Engine/Core/Visual2D` | Sprite·위젯 공통 Node, component, Canvas, 입력, 평면·곡면 Surface |
 | Visual2D 표현 | `Engine/Graphics.D3D12/Visual2D` | 엔진 소유 2D renderer, 화면·평면·render texture 제출 |
-| 통합 SDK | `Engine/SDK` | `MRG.Core.lib`, 생성된 `MRG_Core.h` |
+| 통합 SDK | `Engine/SDK` | `PhantomCore.lib`, 생성된 `PhantomCore.h` |
 
 기능별 프로젝트는 코드를 찾고 독립적으로 개발하기 위한 경계다. 최종 Client가
-여러 모듈 라이브러리를 직접 링크하는 구조가 아니라 `MRG.Core` 하나를 소비한다.
+여러 모듈 라이브러리를 직접 링크하는 구조가 아니라 `PhantomCore` 하나를 소비한다.
 
 ## 4. 실행과 객체 수명
 
 ```text
 Client wWinMain
 → unique_ptr<IGameClient>
-→ mrg::Run
+→ Run
    → HighResolutionClock / Win32Window / InputState 생성
    → D3D12Renderer와 하위 Mesh·Texture·Text·Visual2D 시스템 생성
    → AudioSystem과 선택한 backend 생성
@@ -95,8 +95,8 @@ Client wWinMain
 
 핵심 소유권 규칙은 다음과 같다.
 
-- `mrg::Run`이 플랫폼, 그래픽, 오디오 subsystem을 소유한다.
-- `EngineServices`의 시스템 참조는 `mrg::Run`이 Scene 종료까지 수명을 보장하는
+- `Run`이 플랫폼, 그래픽, 오디오 subsystem을 소유한다.
+- `EngineServices`의 시스템 참조는 `Run`이 Scene 종료까지 수명을 보장하는
   빌린 참조다. 비동기 준비를 기다리는 Scene은 이 참조의 사본을 보관할 수 있으나
   서비스를 해제하지 않으며 Shutdown에서 관찰자를 먼저 버린다. 창 크기 사본은
   OnResize에서 갱신한다. Render/Update context 자체는 프레임 밖에 보관하지 않는다.
@@ -340,7 +340,7 @@ Client 저장소의 추가 문서는 다음과 같다.
 엔진 소스·공개 헤더·SDK 생성 목록과 호출 관계를 확인했으며, 구형 API 별칭이나
 이전 구현을 선택하는 호환 분기는 발견되지 않았다. Client의 ColoredCube 계열
 예제 제거에 따라 이 안내서의 예제 경로를 정리했다. 엔진 API/구현은 변경하지 않았다.
-Debug/Release x64 `MRG-Engine.sln` 전체 Rebuild 및 두 구성의 `MRG.Collision.Tests.exe`
+Debug/Release x64 `PhantomCore.sln` 전체 Rebuild 및 두 구성의 `PhantomCore.Collision.Tests.exe`
 (audio/Camera/collision/Visual2D 공개 SDK 단위 테스트)가 성공했고 `git diff --check`를 통과했다.
 Client의 제거된 예제 실행 경로를 엔진 검증 명령으로 사용하지 않는다.
 
@@ -349,7 +349,7 @@ Client의 제거된 예제 실행 경로를 엔진 검증 명령으로 사용하
 ## 2026-10-22 입력·텍스처 수명 리뷰 수정
 
 - Debug/Release x64 solution Rebuild 후 최종 수정도 두 구성 Build로 검증했습니다.
-  기본 SDK 검사와 `MRG.Collision.Tests.exe --input-state`, `--texture-lifetime`이
+  기본 SDK 검사와 `PhantomCore.Collision.Tests.exe --input-state`, `--texture-lifetime`이
   모두 성공했습니다. 입력은 4,096개 혼합 이벤트·키 전이·버퍼 재사용을 검사합니다.
   텍스처는 200회 즉시 해제 생성, 동시 16세트의 용량 거부, 업로드 fence 참조,
   64개 실제 D3D12 프레임의 타깃 유지·회수와 사용 중 descriptor 중복 방지를 검사합니다.

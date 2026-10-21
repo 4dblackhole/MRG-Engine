@@ -14,7 +14,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{B9999999-9999-4999-8999-999999999999}</ProjectGuid>
-    <RootNamespace>MRGCollisionTests</RootNamespace>
+    <RootNamespace>PhantomCoreCollisionTests</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -44,12 +44,12 @@
   <PropertyGroup>
     <OutDir>$(BaseOutputPath)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(BaseIntermediateOutputPath)$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>MRG.Collision.Tests</TargetName>
+    <TargetName>PhantomCore.Collision.Tests</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)..\Engine\SDK;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>MRG_CORE_NO_AUTOLINK;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>PHANTOMCORE_NO_AUTOLINK;WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
@@ -75,7 +75,7 @@
     <ClInclude Include="App\TextPixelTests.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Engine\SDK\MRG.Core.vcxproj">
+    <ProjectReference Include="..\Engine\SDK\PhantomCore.vcxproj">
       <Project>{78888888-8888-4888-8888-888888888888}</Project>
     </ProjectReference>
   </ItemGroup>

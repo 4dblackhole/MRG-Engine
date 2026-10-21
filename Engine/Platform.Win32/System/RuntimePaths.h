@@ -6,13 +6,10 @@
 
 #include <filesystem>
 
-namespace mrg::platform
-{
-    [[nodiscard]] std::filesystem::path ExecutablePath();
-    [[nodiscard]] std::filesystem::path ExecutableDirectory();
+[[nodiscard]] std::filesystem::path ExecutablePath();
+[[nodiscard]] std::filesystem::path ExecutableDirectory();
 
-    // Absolute paths pass through unchanged. Relative paths are resolved from
-    // the directory containing the current process executable.
-    [[nodiscard]] std::filesystem::path ResolveExecutableRelativePath(
-        const std::filesystem::path& path);
-}
+// Absolute paths pass through unchanged. Relative paths are resolved from
+// the directory containing the current process executable.
+[[nodiscard]] std::filesystem::path ResolveExecutableRelativePath(
+    const std::filesystem::path& path);

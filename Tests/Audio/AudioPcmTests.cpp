@@ -1,4 +1,4 @@
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 #include "AudioPcmTests.h"
 #include <chrono>
 #include <cmath>
@@ -23,7 +23,7 @@ namespace
     PcmProbe Probe(const std::filesystem::path& path)
     {
         PcmProbe pcm;
-        mrg::audio::DecodeAudioPcm(path, {}, [&](std::uint32_t channels, std::uint32_t rate,
+        DecodeAudioPcm(path, {}, [&](std::uint32_t channels, std::uint32_t rate,
                                                std::span<const float> samples)
         {
             Require(channels > 0 && rate > 0 && samples.size() % channels == 0,
@@ -39,7 +39,7 @@ namespace
         });
         return pcm;
     }
-    void WaitReady(mrg::audio::AudioSystem& audio, mrg::audio::AudioClip& clip)
+    void WaitReady(AudioSystem& audio, AudioClip& clip)
     {
         std::string error;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
@@ -47,14 +47,14 @@ namespace
         {
             audio.Update();
             const auto state = clip.LoadState(error);
-            Require(state != mrg::audio::AudioClipLoadState::Failed, error);
-            if (state != mrg::audio::AudioClipLoadState::Loading)
+            Require(state != AudioClipLoadState::Failed, error);
+            if (state != AudioClipLoadState::Loading)
                 return;
             Require(std::chrono::steady_clock::now() < deadline, "PCM clip loading timed out.");
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
         }
     }
-    void WaitVoice(mrg::audio::AudioSystem& audio, mrg::audio::AudioVoice& voice)
+    void WaitVoice(AudioSystem& audio, AudioVoice& voice)
     {
         std::string error;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{3};
@@ -62,8 +62,8 @@ namespace
         {
             audio.Update();
             const auto state = voice.PreparationState(error);
-            Require(state != mrg::audio::AudioPreparationState::Failed, error);
-            if (state == mrg::audio::AudioPreparationState::Ready)
+            Require(state != AudioPreparationState::Failed, error);
+            if (state == AudioPreparationState::Ready)
                 return;
             Require(std::chrono::steady_clock::now() < deadline, "PCM source seeking timed out.");
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
@@ -71,7 +71,7 @@ namespace
     }
     void VerifyPlayback(const std::filesystem::path& path, const PcmProbe& pcm)
     {
-        using namespace mrg::audio;
+
         AudioSystem audio;
         AudioConfig config;
         config.preferredBackend = AudioOutputBackend::NoSound;
@@ -126,12 +126,12 @@ int TestAudioPcm(const char* source)
         std::stop_source stop;
         stop.request_stop();
         bool called{};
-        mrg::audio::DecodeAudioPcm("must-not-open-a-cancelled-file", stop.get_token(),
+        DecodeAudioPcm("must-not-open-a-cancelled-file", stop.get_token(),
                                   [&](auto, auto, auto) { called = true; });
         Require(!called, "Cancelled reads do not open the file or invoke consumers.");
         std::stop_source partial;
         std::uint64_t frames{};
-        mrg::audio::DecodeAudioPcm(fixture, partial.get_token(), [&](auto channels, auto, auto samples)
+        DecodeAudioPcm(fixture, partial.get_token(), [&](auto channels, auto, auto samples)
         {
             frames += samples.size() / channels;
             if (frames)

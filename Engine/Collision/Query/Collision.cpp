@@ -17,7 +17,7 @@ namespace
     {
         return std::isfinite(epsilon)
             ? std::abs(epsilon)
-            : mrg::collision::DefaultEpsilon;
+            : DefaultEpsilon;
     }
 
     [[nodiscard]] float Dot(
@@ -101,7 +101,7 @@ namespace
         const float y,
         const float z,
         const float constant,
-        mrg::collision::Plane3D& plane) noexcept
+        Plane3D& plane) noexcept
     {
         const float lengthSquared = x * x + y * y + z * z;
         if (!std::isfinite(lengthSquared) ||
@@ -145,7 +145,7 @@ namespace
             [&axes, &lengthSquared](const std::size_t first,
                 const std::size_t second) noexcept
             {
-                const float threshold = mrg::collision::DefaultEpsilon *
+                const float threshold = DefaultEpsilon *
                     std::sqrt(
                         lengthSquared[first] * lengthSquared[second]);
                 return std::abs(Dot(axes[first], axes[second])) <= threshold;
@@ -194,7 +194,7 @@ namespace
         XMFLOAT2 y;
     };
 
-    [[nodiscard]] Axes2D BoxAxes(const mrg::collision::Obb2D& box) noexcept
+    [[nodiscard]] Axes2D BoxAxes(const Obb2D& box) noexcept
     {
         const float cosine = std::cos(box.rotationRadians);
         const float sine = std::sin(box.rotationRadians);
@@ -202,7 +202,7 @@ namespace
     }
 
     [[nodiscard]] float ProjectionRadius(
-        const mrg::collision::Obb2D& box,
+        const Obb2D& box,
         const Axes2D& boxAxes,
         const XMFLOAT2& axis) noexcept
     {
@@ -211,9 +211,9 @@ namespace
     }
 
     [[nodiscard]] bool IsSeparatedOnAxis(
-        const mrg::collision::Obb2D& first,
+        const Obb2D& first,
         const Axes2D& firstAxes,
-        const mrg::collision::Obb2D& second,
+        const Obb2D& second,
         const Axes2D& secondAxes,
         const XMFLOAT2& axis,
         const float epsilon) noexcept
@@ -227,8 +227,8 @@ namespace
         return centerDistance > allowedDistance;
     }
 
-    [[nodiscard]] std::optional<mrg::collision::LineHit3D> IntersectPlane(
-        const mrg::collision::Plane3D& plane,
+    [[nodiscard]] std::optional<LineHit3D> IntersectPlane(
+        const Plane3D& plane,
         const XMFLOAT3& origin,
         const XMFLOAT3& direction,
         const float minimumParameter,
@@ -263,7 +263,7 @@ namespace
                     plane.normal.x / normalLength,
                     plane.normal.y / normalLength,
                     plane.normal.z / normalLength};
-                return mrg::collision::LineHit3D{origin, normal, 0.0F};
+                return LineHit3D{origin, normal, 0.0F};
             }
             return std::nullopt;
         }
@@ -279,7 +279,7 @@ namespace
                     plane.normal.x / normalLength,
                     plane.normal.y / normalLength,
                     plane.normal.z / normalLength};
-                return mrg::collision::LineHit3D{origin, normal, 0.0F};
+                return LineHit3D{origin, normal, 0.0F};
             }
             return std::nullopt;
         }
@@ -299,14 +299,14 @@ namespace
             plane.normal.x / normalLength,
             plane.normal.y / normalLength,
             plane.normal.z / normalLength};
-        return mrg::collision::LineHit3D{
+        return LineHit3D{
             AddScaled(origin, direction, parameter),
             normal,
             parameter};
     }
 
     [[nodiscard]] bool SphereIntersectsDirection(
-        const mrg::collision::Sphere3D& sphere,
+        const Sphere3D& sphere,
         const XMFLOAT3& origin,
         const XMFLOAT3& direction,
         const float minimumParameter,
@@ -347,7 +347,7 @@ namespace
     }
 
     [[nodiscard]] bool TryMakeBox(
-        const mrg::collision::Obb3D& source,
+        const Obb3D& source,
         DirectX::BoundingOrientedBox& destination,
         const float epsilon) noexcept
     {
@@ -383,546 +383,544 @@ namespace
     }
 }
 
-namespace mrg::collision
+
+ViewFrustum MakeViewFrustum(
+    const DirectX::XMFLOAT4X4& viewProjection) noexcept
 {
-    ViewFrustum MakeViewFrustum(
-        const DirectX::XMFLOAT4X4& viewProjection) noexcept
+    ViewFrustum frustum{};
+    (void)TryMakeFrustumPlane(
+        viewProjection._11 + viewProjection._14,
+        viewProjection._21 + viewProjection._24,
+        viewProjection._31 + viewProjection._34,
+        viewProjection._41 + viewProjection._44,
+        frustum.left);
+    (void)TryMakeFrustumPlane(
+        viewProjection._14 - viewProjection._11,
+        viewProjection._24 - viewProjection._21,
+        viewProjection._34 - viewProjection._31,
+        viewProjection._44 - viewProjection._41,
+        frustum.right);
+    (void)TryMakeFrustumPlane(
+        viewProjection._12 + viewProjection._14,
+        viewProjection._22 + viewProjection._24,
+        viewProjection._32 + viewProjection._34,
+        viewProjection._42 + viewProjection._44,
+        frustum.bottom);
+    (void)TryMakeFrustumPlane(
+        viewProjection._14 - viewProjection._12,
+        viewProjection._24 - viewProjection._22,
+        viewProjection._34 - viewProjection._32,
+        viewProjection._44 - viewProjection._42,
+        frustum.top);
+    (void)TryMakeFrustumPlane(
+        viewProjection._13,
+        viewProjection._23,
+        viewProjection._33,
+        viewProjection._43,
+        frustum.nearPlane);
+    (void)TryMakeFrustumPlane(
+        viewProjection._14 - viewProjection._13,
+        viewProjection._24 - viewProjection._23,
+        viewProjection._34 - viewProjection._33,
+        viewProjection._44 - viewProjection._43,
+        frustum.farPlane);
+    return frustum;
+}
+
+Sphere3D TransformSphere(
+    const Sphere3D& sphere,
+    const DirectX::XMFLOAT4X4& world) noexcept
+{
+    if (!HasValidRadius(sphere.radius) ||
+        !HasFiniteCoordinates(sphere.center) ||
+        !std::isfinite(world._41) ||
+        !std::isfinite(world._42) ||
+        !std::isfinite(world._43))
     {
-        ViewFrustum frustum{};
-        (void)TryMakeFrustumPlane(
-            viewProjection._11 + viewProjection._14,
-            viewProjection._21 + viewProjection._24,
-            viewProjection._31 + viewProjection._34,
-            viewProjection._41 + viewProjection._44,
-            frustum.left);
-        (void)TryMakeFrustumPlane(
-            viewProjection._14 - viewProjection._11,
-            viewProjection._24 - viewProjection._21,
-            viewProjection._34 - viewProjection._31,
-            viewProjection._44 - viewProjection._41,
-            frustum.right);
-        (void)TryMakeFrustumPlane(
-            viewProjection._12 + viewProjection._14,
-            viewProjection._22 + viewProjection._24,
-            viewProjection._32 + viewProjection._34,
-            viewProjection._42 + viewProjection._44,
-            frustum.bottom);
-        (void)TryMakeFrustumPlane(
-            viewProjection._14 - viewProjection._12,
-            viewProjection._24 - viewProjection._22,
-            viewProjection._34 - viewProjection._32,
-            viewProjection._44 - viewProjection._42,
-            frustum.top);
-        (void)TryMakeFrustumPlane(
-            viewProjection._13,
-            viewProjection._23,
-            viewProjection._33,
-            viewProjection._43,
-            frustum.nearPlane);
-        (void)TryMakeFrustumPlane(
-            viewProjection._14 - viewProjection._13,
-            viewProjection._24 - viewProjection._23,
-            viewProjection._34 - viewProjection._33,
-            viewProjection._44 - viewProjection._43,
-            frustum.farPlane);
-        return frustum;
+        return {{}, -1.0F};
     }
 
-    Sphere3D TransformSphere(
-        const Sphere3D& sphere,
-        const DirectX::XMFLOAT4X4& world) noexcept
+    const float worldScale = MaximumWorldScale(world);
+    if (!std::isfinite(worldScale))
     {
-        if (!HasValidRadius(sphere.radius) ||
-            !HasFiniteCoordinates(sphere.center) ||
-            !std::isfinite(world._41) ||
-            !std::isfinite(world._42) ||
-            !std::isfinite(world._43))
-        {
-            return {{}, -1.0F};
-        }
-
-        const float worldScale = MaximumWorldScale(world);
-        if (!std::isfinite(worldScale))
-        {
-            return {{}, -1.0F};
-        }
-
-        XMFLOAT3 center{};
-        XMStoreFloat3(
-            &center,
-            XMVector3TransformCoord(
-                XMLoadFloat3(&sphere.center),
-                XMLoadFloat4x4(&world)));
-        if (!HasFiniteCoordinates(center))
-        {
-            return {{}, -1.0F};
-        }
-        return {center, sphere.radius * worldScale};
+        return {{}, -1.0F};
     }
 
-    VolumeIntersection Classify(
-        const ViewFrustum& frustum,
-        const Sphere3D& sphere,
-        const float epsilon) noexcept
+    XMFLOAT3 center{};
+    XMStoreFloat3(
+        &center,
+        XMVector3TransformCoord(
+            XMLoadFloat3(&sphere.center),
+            XMLoadFloat4x4(&world)));
+    if (!HasFiniteCoordinates(center))
     {
-        if (!HasValidRadius(sphere.radius) ||
-            !HasFiniteCoordinates(sphere.center))
+        return {{}, -1.0F};
+    }
+    return {center, sphere.radius * worldScale};
+}
+
+VolumeIntersection Classify(
+    const ViewFrustum& frustum,
+    const Sphere3D& sphere,
+    const float epsilon) noexcept
+{
+    if (!HasValidRadius(sphere.radius) ||
+        !HasFiniteCoordinates(sphere.center))
+    {
+        return VolumeIntersection::Outside;
+    }
+
+    const float absoluteEpsilon = AbsEpsilon(epsilon);
+    const std::array<const Plane3D*, 6> planes{
+        &frustum.left,
+        &frustum.right,
+        &frustum.bottom,
+        &frustum.top,
+        &frustum.nearPlane,
+        &frustum.farPlane};
+    VolumeIntersection result = VolumeIntersection::Inside;
+    for (const Plane3D* plane : planes)
+    {
+        const float normalLengthSquared = LengthSquared(plane->normal);
+        if (!std::isfinite(normalLengthSquared) ||
+            !std::isfinite(plane->distanceFromOrigin) ||
+            normalLengthSquared <=
+                std::numeric_limits<float>::epsilon())
         {
             return VolumeIntersection::Outside;
         }
 
-        const float absoluteEpsilon = AbsEpsilon(epsilon);
-        const std::array<const Plane3D*, 6> planes{
-            &frustum.left,
-            &frustum.right,
-            &frustum.bottom,
-            &frustum.top,
-            &frustum.nearPlane,
-            &frustum.farPlane};
-        VolumeIntersection result = VolumeIntersection::Inside;
-        for (const Plane3D* plane : planes)
+        const float signedDistance =
+            (Dot(plane->normal, sphere.center) -
+                plane->distanceFromOrigin) /
+            std::sqrt(normalLengthSquared);
+        if (signedDistance < -sphere.radius - absoluteEpsilon)
         {
-            const float normalLengthSquared = LengthSquared(plane->normal);
-            if (!std::isfinite(normalLengthSquared) ||
-                !std::isfinite(plane->distanceFromOrigin) ||
-                normalLengthSquared <=
-                    std::numeric_limits<float>::epsilon())
-            {
-                return VolumeIntersection::Outside;
-            }
-
-            const float signedDistance =
-                (Dot(plane->normal, sphere.center) -
-                    plane->distanceFromOrigin) /
-                std::sqrt(normalLengthSquared);
-            if (signedDistance < -sphere.radius - absoluteEpsilon)
-            {
-                return VolumeIntersection::Outside;
-            }
-            if (signedDistance <= sphere.radius + absoluteEpsilon)
-            {
-                result = VolumeIntersection::Intersecting;
-            }
+            return VolumeIntersection::Outside;
         }
-        return result;
-    }
-
-    DirectX::XMFLOAT2 ClosestPoint(
-        const LineSegment2D& segment,
-        const DirectX::XMFLOAT2& point) noexcept
-    {
-        const XMFLOAT2 direction = Subtract(segment.end, segment.start);
-        const float lengthSquared = LengthSquared(direction);
-        if (lengthSquared <= std::numeric_limits<float>::epsilon())
+        if (signedDistance <= sphere.radius + absoluteEpsilon)
         {
-            return segment.start;
+            result = VolumeIntersection::Intersecting;
         }
+    }
+    return result;
+}
 
-        const float parameter = std::clamp(
-            Dot(Subtract(point, segment.start), direction) / lengthSquared,
-            0.0F,
-            1.0F);
-        return {
-            segment.start.x + direction.x * parameter,
-            segment.start.y + direction.y * parameter};
+DirectX::XMFLOAT2 ClosestPoint(
+    const LineSegment2D& segment,
+    const DirectX::XMFLOAT2& point) noexcept
+{
+    const XMFLOAT2 direction = Subtract(segment.end, segment.start);
+    const float lengthSquared = LengthSquared(direction);
+    if (lengthSquared <= std::numeric_limits<float>::epsilon())
+    {
+        return segment.start;
     }
 
-    DirectX::XMFLOAT2 ClosestPoint(
-        const Obb2D& box,
-        const DirectX::XMFLOAT2& point) noexcept
-    {
-        if (!HasValidExtents(box.halfExtents))
-        {
-            return box.center;
-        }
+    const float parameter = std::clamp(
+        Dot(Subtract(point, segment.start), direction) / lengthSquared,
+        0.0F,
+        1.0F);
+    return {
+        segment.start.x + direction.x * parameter,
+        segment.start.y + direction.y * parameter};
+}
 
-        const Axes2D axes = BoxAxes(box);
-        const XMFLOAT2 relative = Subtract(point, box.center);
-        const float localX = std::clamp(
-            Dot(relative, axes.x),
-            -box.halfExtents.x,
-            box.halfExtents.x);
-        const float localY = std::clamp(
-            Dot(relative, axes.y),
-            -box.halfExtents.y,
-            box.halfExtents.y);
-        return {
-            box.center.x + axes.x.x * localX + axes.y.x * localY,
-            box.center.y + axes.x.y * localX + axes.y.y * localY};
+DirectX::XMFLOAT2 ClosestPoint(
+    const Obb2D& box,
+    const DirectX::XMFLOAT2& point) noexcept
+{
+    if (!HasValidExtents(box.halfExtents))
+    {
+        return box.center;
     }
 
-    bool Intersects(
-        const Circle2D& circle,
-        const Line2D& line,
-        const float epsilon) noexcept
+    const Axes2D axes = BoxAxes(box);
+    const XMFLOAT2 relative = Subtract(point, box.center);
+    const float localX = std::clamp(
+        Dot(relative, axes.x),
+        -box.halfExtents.x,
+        box.halfExtents.x);
+    const float localY = std::clamp(
+        Dot(relative, axes.y),
+        -box.halfExtents.y,
+        box.halfExtents.y);
+    return {
+        box.center.x + axes.x.x * localX + axes.y.x * localY,
+        box.center.y + axes.x.y * localX + axes.y.y * localY};
+}
+
+bool Intersects(
+    const Circle2D& circle,
+    const Line2D& line,
+    const float epsilon) noexcept
+{
+    if (!HasValidRadius(circle.radius))
     {
-        if (!HasValidRadius(circle.radius))
-        {
-            return false;
-        }
-
-        const float absoluteEpsilon = AbsEpsilon(epsilon);
-        const float directionLengthSquared = LengthSquared(line.direction);
-        if (!std::isfinite(directionLengthSquared) ||
-            directionLengthSquared <= absoluteEpsilon * absoluteEpsilon)
-        {
-            return false;
-        }
-
-        const XMFLOAT2 relative = Subtract(circle.center, line.point);
-        const float cross =
-            relative.x * line.direction.y -
-            relative.y * line.direction.x;
-        const float safeDirectionLengthSquared = std::max(
-            directionLengthSquared,
-            std::numeric_limits<float>::min());
-        const float distanceSquared =
-            (cross * cross) / safeDirectionLengthSquared;
-        const float allowedRadius = circle.radius + absoluteEpsilon;
-        return distanceSquared <= allowedRadius * allowedRadius;
+        return false;
     }
 
-    bool Intersects(
-        const Circle2D& circle,
-        const LineSegment2D& segment,
-        const float epsilon) noexcept
+    const float absoluteEpsilon = AbsEpsilon(epsilon);
+    const float directionLengthSquared = LengthSquared(line.direction);
+    if (!std::isfinite(directionLengthSquared) ||
+        directionLengthSquared <= absoluteEpsilon * absoluteEpsilon)
     {
-        if (!HasValidRadius(circle.radius))
-        {
-            return false;
-        }
-
-        const XMFLOAT2 closest = ClosestPoint(segment, circle.center);
-        const XMFLOAT2 delta = Subtract(closest, circle.center);
-        const float allowedRadius = circle.radius + AbsEpsilon(epsilon);
-        return LengthSquared(delta) <= allowedRadius * allowedRadius;
+        return false;
     }
 
-    bool Intersects(
-        const Circle2D& circle,
-        const Obb2D& box,
-        const float epsilon) noexcept
-    {
-        if (!HasValidRadius(circle.radius) ||
-            !HasValidExtents(box.halfExtents))
-        {
-            return false;
-        }
+    const XMFLOAT2 relative = Subtract(circle.center, line.point);
+    const float cross =
+        relative.x * line.direction.y -
+        relative.y * line.direction.x;
+    const float safeDirectionLengthSquared = std::max(
+        directionLengthSquared,
+        std::numeric_limits<float>::min());
+    const float distanceSquared =
+        (cross * cross) / safeDirectionLengthSquared;
+    const float allowedRadius = circle.radius + absoluteEpsilon;
+    return distanceSquared <= allowedRadius * allowedRadius;
+}
 
-        const XMFLOAT2 closest = ClosestPoint(box, circle.center);
-        const XMFLOAT2 delta = Subtract(closest, circle.center);
-        const float allowedRadius = circle.radius + AbsEpsilon(epsilon);
-        return LengthSquared(delta) <= allowedRadius * allowedRadius;
+bool Intersects(
+    const Circle2D& circle,
+    const LineSegment2D& segment,
+    const float epsilon) noexcept
+{
+    if (!HasValidRadius(circle.radius))
+    {
+        return false;
     }
 
-    bool Intersects(
-        const Obb2D& first,
-        const Obb2D& second,
-        const float epsilon) noexcept
+    const XMFLOAT2 closest = ClosestPoint(segment, circle.center);
+    const XMFLOAT2 delta = Subtract(closest, circle.center);
+    const float allowedRadius = circle.radius + AbsEpsilon(epsilon);
+    return LengthSquared(delta) <= allowedRadius * allowedRadius;
+}
+
+bool Intersects(
+    const Circle2D& circle,
+    const Obb2D& box,
+    const float epsilon) noexcept
+{
+    if (!HasValidRadius(circle.radius) ||
+        !HasValidExtents(box.halfExtents))
     {
-        if (!HasValidExtents(first.halfExtents) ||
-            !HasValidExtents(second.halfExtents))
-        {
-            return false;
-        }
-
-        const float absoluteEpsilon = AbsEpsilon(epsilon);
-        const Axes2D firstAxes = BoxAxes(first);
-        const Axes2D secondAxes = BoxAxes(second);
-        const std::array<XMFLOAT2, 4> separatingAxes{
-            firstAxes.x,
-            firstAxes.y,
-            secondAxes.x,
-            secondAxes.y};
-
-        for (const XMFLOAT2& axis : separatingAxes)
-        {
-            if (IsSeparatedOnAxis(
-                    first,
-                    firstAxes,
-                    second,
-                    secondAxes,
-                    axis,
-                    absoluteEpsilon))
-            {
-                return false;
-            }
-        }
-        return true;
+        return false;
     }
 
-    bool Intersects(
-        const Line2D& line,
-        const Circle2D& circle,
-        const float epsilon) noexcept
+    const XMFLOAT2 closest = ClosestPoint(box, circle.center);
+    const XMFLOAT2 delta = Subtract(closest, circle.center);
+    const float allowedRadius = circle.radius + AbsEpsilon(epsilon);
+    return LengthSquared(delta) <= allowedRadius * allowedRadius;
+}
+
+bool Intersects(
+    const Obb2D& first,
+    const Obb2D& second,
+    const float epsilon) noexcept
+{
+    if (!HasValidExtents(first.halfExtents) ||
+        !HasValidExtents(second.halfExtents))
     {
-        return Intersects(circle, line, epsilon);
+        return false;
     }
 
-    bool Intersects(
-        const LineSegment2D& segment,
-        const Circle2D& circle,
-        const float epsilon) noexcept
+    const float absoluteEpsilon = AbsEpsilon(epsilon);
+    const Axes2D firstAxes = BoxAxes(first);
+    const Axes2D secondAxes = BoxAxes(second);
+    const std::array<XMFLOAT2, 4> separatingAxes{
+        firstAxes.x,
+        firstAxes.y,
+        secondAxes.x,
+        secondAxes.y};
+
+    for (const XMFLOAT2& axis : separatingAxes)
     {
-        return Intersects(circle, segment, epsilon);
-    }
-
-    bool Intersects(
-        const Obb2D& box,
-        const Circle2D& circle,
-        const float epsilon) noexcept
-    {
-        return Intersects(circle, box, epsilon);
-    }
-
-    std::optional<LineHit3D> Intersect(
-        const Plane3D& plane,
-        const Line3D& line,
-        const float epsilon) noexcept
-    {
-        return IntersectPlane(
-            plane,
-            line.point,
-            line.direction,
-            -std::numeric_limits<float>::infinity(),
-            std::numeric_limits<float>::infinity(),
-            false,
-            epsilon);
-    }
-
-    std::optional<LineHit3D> Intersect(
-        const Plane3D& plane,
-        const Ray3D& ray,
-        const float epsilon) noexcept
-    {
-        return IntersectPlane(
-            plane,
-            ray.origin,
-            ray.direction,
-            0.0F,
-            std::numeric_limits<float>::infinity(),
-            false,
-            epsilon);
-    }
-
-    std::optional<LineHit3D> Intersect(
-        const Plane3D& plane,
-        const LineSegment3D& segment,
-        const float epsilon) noexcept
-    {
-        return IntersectPlane(
-            plane,
-            segment.start,
-            Subtract(segment.end, segment.start),
-            0.0F,
-            1.0F,
-            true,
-            epsilon);
-    }
-
-    bool Intersects(
-        const Plane3D& plane,
-        const Line3D& line,
-        const float epsilon) noexcept
-    {
-        return Intersect(plane, line, epsilon).has_value();
-    }
-
-    bool Intersects(
-        const Plane3D& plane,
-        const Ray3D& ray,
-        const float epsilon) noexcept
-    {
-        return Intersect(plane, ray, epsilon).has_value();
-    }
-
-    bool Intersects(
-        const Plane3D& plane,
-        const LineSegment3D& segment,
-        const float epsilon) noexcept
-    {
-        return Intersect(plane, segment, epsilon).has_value();
-    }
-
-    std::optional<TriangleHit3D> Intersect(
-        const Triangle3D& triangle,
-        const Ray3D& ray,
-        const float epsilon) noexcept
-    {
-        const float absoluteEpsilon = AbsEpsilon(epsilon);
-        const XMFLOAT3 firstEdge = Subtract(triangle.second, triangle.first);
-        const XMFLOAT3 secondEdge = Subtract(triangle.third, triangle.first);
-        const XMFLOAT3 directionCross = Cross(ray.direction, secondEdge);
-        const float determinant = Dot(firstEdge, directionCross);
-        if (!std::isfinite(determinant) ||
-            std::abs(determinant) <= absoluteEpsilon)
-        {
-            return std::nullopt;
-        }
-
-        const float inverseDeterminant = 1.0F / determinant;
-        const XMFLOAT3 originDelta = Subtract(ray.origin, triangle.first);
-        const float secondWeight =
-            Dot(originDelta, directionCross) * inverseDeterminant;
-        if (secondWeight < -absoluteEpsilon ||
-            secondWeight > 1.0F + absoluteEpsilon)
-        {
-            return std::nullopt;
-        }
-
-        const XMFLOAT3 deltaCross = Cross(originDelta, firstEdge);
-        const float thirdWeight =
-            Dot(ray.direction, deltaCross) * inverseDeterminant;
-        if (thirdWeight < -absoluteEpsilon ||
-            secondWeight + thirdWeight > 1.0F + absoluteEpsilon)
-        {
-            return std::nullopt;
-        }
-
-        float parameter = Dot(secondEdge, deltaCross) * inverseDeterminant;
-        if (!std::isfinite(parameter) || parameter < -absoluteEpsilon)
-        {
-            return std::nullopt;
-        }
-        parameter = std::max(parameter, 0.0F);
-
-        const XMFLOAT3 unnormalizedNormal = Cross(firstEdge, secondEdge);
-        const float normalLengthSquared = LengthSquared(unnormalizedNormal);
-        if (!std::isfinite(normalLengthSquared) ||
-            normalLengthSquared <= absoluteEpsilon * absoluteEpsilon)
-        {
-            return std::nullopt;
-        }
-        const float inverseNormalLength = 1.0F / std::sqrt(normalLengthSquared);
-        const float firstWeight = 1.0F - secondWeight - thirdWeight;
-        return TriangleHit3D{
-            AddScaled(ray.origin, ray.direction, parameter),
-            {unnormalizedNormal.x * inverseNormalLength,
-                unnormalizedNormal.y * inverseNormalLength,
-                unnormalizedNormal.z * inverseNormalLength},
-            {firstWeight, secondWeight, thirdWeight},
-            parameter};
-    }
-
-    bool Intersects(
-        const Triangle3D& triangle,
-        const Ray3D& ray,
-        const float epsilon) noexcept
-    {
-        return Intersect(triangle, ray, epsilon).has_value();
-    }
-
-    bool Intersects(
-        const Sphere3D& sphere,
-        const Line3D& line,
-        const float epsilon) noexcept
-    {
-        return SphereIntersectsDirection(
-            sphere,
-            line.point,
-            line.direction,
-            -std::numeric_limits<float>::infinity(),
-            std::numeric_limits<float>::infinity(),
-            false,
-            epsilon);
-    }
-
-    bool Intersects(
-        const Sphere3D& sphere,
-        const Ray3D& ray,
-        const float epsilon) noexcept
-    {
-        return SphereIntersectsDirection(
-            sphere,
-            ray.origin,
-            ray.direction,
-            0.0F,
-            std::numeric_limits<float>::infinity(),
-            false,
-            epsilon);
-    }
-
-    bool Intersects(
-        const Sphere3D& sphere,
-        const LineSegment3D& segment,
-        const float epsilon) noexcept
-    {
-        return SphereIntersectsDirection(
-            sphere,
-            segment.start,
-            Subtract(segment.end, segment.start),
-            0.0F,
-            1.0F,
-            true,
-            epsilon);
-    }
-
-    bool Intersects(
-        const Sphere3D& sphere,
-        const Obb3D& box,
-        const float epsilon) noexcept
-    {
-        if (!HasValidRadius(sphere.radius))
+        if (IsSeparatedOnAxis(
+                first,
+                firstAxes,
+                second,
+                secondAxes,
+                axis,
+                absoluteEpsilon))
         {
             return false;
         }
-
-        DirectX::BoundingOrientedBox directXBox;
-        if (!TryMakeBox(box, directXBox, epsilon))
-        {
-            return false;
-        }
-
-        DirectX::BoundingSphere directXSphere;
-        directXSphere.Center = sphere.center;
-        directXSphere.Radius = sphere.radius + AbsEpsilon(epsilon);
-        return directXSphere.Intersects(directXBox);
     }
+    return true;
+}
 
-    bool Intersects(
-        const Obb3D& first,
-        const Obb3D& second,
-        const float epsilon) noexcept
+bool Intersects(
+    const Line2D& line,
+    const Circle2D& circle,
+    const float epsilon) noexcept
+{
+    return Intersects(circle, line, epsilon);
+}
+
+bool Intersects(
+    const LineSegment2D& segment,
+    const Circle2D& circle,
+    const float epsilon) noexcept
+{
+    return Intersects(circle, segment, epsilon);
+}
+
+bool Intersects(
+    const Obb2D& box,
+    const Circle2D& circle,
+    const float epsilon) noexcept
+{
+    return Intersects(circle, box, epsilon);
+}
+
+std::optional<LineHit3D> Intersect(
+    const Plane3D& plane,
+    const Line3D& line,
+    const float epsilon) noexcept
+{
+    return IntersectPlane(
+        plane,
+        line.point,
+        line.direction,
+        -std::numeric_limits<float>::infinity(),
+        std::numeric_limits<float>::infinity(),
+        false,
+        epsilon);
+}
+
+std::optional<LineHit3D> Intersect(
+    const Plane3D& plane,
+    const Ray3D& ray,
+    const float epsilon) noexcept
+{
+    return IntersectPlane(
+        plane,
+        ray.origin,
+        ray.direction,
+        0.0F,
+        std::numeric_limits<float>::infinity(),
+        false,
+        epsilon);
+}
+
+std::optional<LineHit3D> Intersect(
+    const Plane3D& plane,
+    const LineSegment3D& segment,
+    const float epsilon) noexcept
+{
+    return IntersectPlane(
+        plane,
+        segment.start,
+        Subtract(segment.end, segment.start),
+        0.0F,
+        1.0F,
+        true,
+        epsilon);
+}
+
+bool Intersects(
+    const Plane3D& plane,
+    const Line3D& line,
+    const float epsilon) noexcept
+{
+    return Intersect(plane, line, epsilon).has_value();
+}
+
+bool Intersects(
+    const Plane3D& plane,
+    const Ray3D& ray,
+    const float epsilon) noexcept
+{
+    return Intersect(plane, ray, epsilon).has_value();
+}
+
+bool Intersects(
+    const Plane3D& plane,
+    const LineSegment3D& segment,
+    const float epsilon) noexcept
+{
+    return Intersect(plane, segment, epsilon).has_value();
+}
+
+std::optional<TriangleHit3D> Intersect(
+    const Triangle3D& triangle,
+    const Ray3D& ray,
+    const float epsilon) noexcept
+{
+    const float absoluteEpsilon = AbsEpsilon(epsilon);
+    const XMFLOAT3 firstEdge = Subtract(triangle.second, triangle.first);
+    const XMFLOAT3 secondEdge = Subtract(triangle.third, triangle.first);
+    const XMFLOAT3 directionCross = Cross(ray.direction, secondEdge);
+    const float determinant = Dot(firstEdge, directionCross);
+    if (!std::isfinite(determinant) ||
+        std::abs(determinant) <= absoluteEpsilon)
     {
-        DirectX::BoundingOrientedBox firstBox;
-        DirectX::BoundingOrientedBox secondBox;
-        if (!TryMakeBox(first, firstBox, epsilon) ||
-            !TryMakeBox(second, secondBox, epsilon))
-        {
-            return false;
-        }
-        return firstBox.Intersects(secondBox);
+        return std::nullopt;
     }
 
-    bool Intersects(
-        const Line3D& line,
-        const Sphere3D& sphere,
-        const float epsilon) noexcept
+    const float inverseDeterminant = 1.0F / determinant;
+    const XMFLOAT3 originDelta = Subtract(ray.origin, triangle.first);
+    const float secondWeight =
+        Dot(originDelta, directionCross) * inverseDeterminant;
+    if (secondWeight < -absoluteEpsilon ||
+        secondWeight > 1.0F + absoluteEpsilon)
     {
-        return Intersects(sphere, line, epsilon);
+        return std::nullopt;
     }
 
-    bool Intersects(
-        const Ray3D& ray,
-        const Sphere3D& sphere,
-        const float epsilon) noexcept
+    const XMFLOAT3 deltaCross = Cross(originDelta, firstEdge);
+    const float thirdWeight =
+        Dot(ray.direction, deltaCross) * inverseDeterminant;
+    if (thirdWeight < -absoluteEpsilon ||
+        secondWeight + thirdWeight > 1.0F + absoluteEpsilon)
     {
-        return Intersects(sphere, ray, epsilon);
+        return std::nullopt;
     }
 
-    bool Intersects(
-        const LineSegment3D& segment,
-        const Sphere3D& sphere,
-        const float epsilon) noexcept
+    float parameter = Dot(secondEdge, deltaCross) * inverseDeterminant;
+    if (!std::isfinite(parameter) || parameter < -absoluteEpsilon)
     {
-        return Intersects(sphere, segment, epsilon);
+        return std::nullopt;
+    }
+    parameter = std::max(parameter, 0.0F);
+
+    const XMFLOAT3 unnormalizedNormal = Cross(firstEdge, secondEdge);
+    const float normalLengthSquared = LengthSquared(unnormalizedNormal);
+    if (!std::isfinite(normalLengthSquared) ||
+        normalLengthSquared <= absoluteEpsilon * absoluteEpsilon)
+    {
+        return std::nullopt;
+    }
+    const float inverseNormalLength = 1.0F / std::sqrt(normalLengthSquared);
+    const float firstWeight = 1.0F - secondWeight - thirdWeight;
+    return TriangleHit3D{
+        AddScaled(ray.origin, ray.direction, parameter),
+        {unnormalizedNormal.x * inverseNormalLength,
+            unnormalizedNormal.y * inverseNormalLength,
+            unnormalizedNormal.z * inverseNormalLength},
+        {firstWeight, secondWeight, thirdWeight},
+        parameter};
+}
+
+bool Intersects(
+    const Triangle3D& triangle,
+    const Ray3D& ray,
+    const float epsilon) noexcept
+{
+    return Intersect(triangle, ray, epsilon).has_value();
+}
+
+bool Intersects(
+    const Sphere3D& sphere,
+    const Line3D& line,
+    const float epsilon) noexcept
+{
+    return SphereIntersectsDirection(
+        sphere,
+        line.point,
+        line.direction,
+        -std::numeric_limits<float>::infinity(),
+        std::numeric_limits<float>::infinity(),
+        false,
+        epsilon);
+}
+
+bool Intersects(
+    const Sphere3D& sphere,
+    const Ray3D& ray,
+    const float epsilon) noexcept
+{
+    return SphereIntersectsDirection(
+        sphere,
+        ray.origin,
+        ray.direction,
+        0.0F,
+        std::numeric_limits<float>::infinity(),
+        false,
+        epsilon);
+}
+
+bool Intersects(
+    const Sphere3D& sphere,
+    const LineSegment3D& segment,
+    const float epsilon) noexcept
+{
+    return SphereIntersectsDirection(
+        sphere,
+        segment.start,
+        Subtract(segment.end, segment.start),
+        0.0F,
+        1.0F,
+        true,
+        epsilon);
+}
+
+bool Intersects(
+    const Sphere3D& sphere,
+    const Obb3D& box,
+    const float epsilon) noexcept
+{
+    if (!HasValidRadius(sphere.radius))
+    {
+        return false;
     }
 
-    bool Intersects(
-        const Obb3D& box,
-        const Sphere3D& sphere,
-        const float epsilon) noexcept
+    DirectX::BoundingOrientedBox directXBox;
+    if (!TryMakeBox(box, directXBox, epsilon))
     {
-        return Intersects(sphere, box, epsilon);
+        return false;
     }
+
+    DirectX::BoundingSphere directXSphere;
+    directXSphere.Center = sphere.center;
+    directXSphere.Radius = sphere.radius + AbsEpsilon(epsilon);
+    return directXSphere.Intersects(directXBox);
+}
+
+bool Intersects(
+    const Obb3D& first,
+    const Obb3D& second,
+    const float epsilon) noexcept
+{
+    DirectX::BoundingOrientedBox firstBox;
+    DirectX::BoundingOrientedBox secondBox;
+    if (!TryMakeBox(first, firstBox, epsilon) ||
+        !TryMakeBox(second, secondBox, epsilon))
+    {
+        return false;
+    }
+    return firstBox.Intersects(secondBox);
+}
+
+bool Intersects(
+    const Line3D& line,
+    const Sphere3D& sphere,
+    const float epsilon) noexcept
+{
+    return Intersects(sphere, line, epsilon);
+}
+
+bool Intersects(
+    const Ray3D& ray,
+    const Sphere3D& sphere,
+    const float epsilon) noexcept
+{
+    return Intersects(sphere, ray, epsilon);
+}
+
+bool Intersects(
+    const LineSegment3D& segment,
+    const Sphere3D& sphere,
+    const float epsilon) noexcept
+{
+    return Intersects(sphere, segment, epsilon);
+}
+
+bool Intersects(
+    const Obb3D& box,
+    const Sphere3D& sphere,
+    const float epsilon) noexcept
+{
+    return Intersects(sphere, box, epsilon);
 }

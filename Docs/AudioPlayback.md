@@ -35,14 +35,14 @@ software mixer sample rate, QPC tick과 QPC frequency를 반환한다. Client는
 기준으로 사용하지 않는다.
 
 ```cpp
-const mrg::audio::AudioClockSnapshot clock =
+const AudioClockSnapshot clock =
     audio.CaptureClockSnapshot();
 
-mrg::audio::AudioPlaybackSettings playback;
+AudioPlaybackSettings playback;
 playback.startDspClock = scheduledDspClock;
 playback.volume = 0.85F;
 
-std::unique_ptr<mrg::audio::AudioVoice> voice =
+std::unique_ptr<AudioVoice> voice =
     clip->Play(playback, hitSoundBus.get(), error);
 ```
 
@@ -62,7 +62,7 @@ AudioPlaybackManager를 직접 사용하는 호출자의 Update는 즉시 검사
 DSP 예약 정밀도에는 영향이 없습니다.
 
 2026-10-12 source seek/duration/retire 변경은 Debug/Release x64 전체
-`MRG-Engine.sln` Rebuild와 두 구성의 `MRG.Collision.Tests`로 검증했다.
+`PhantomCore.sln` Rebuild와 두 구성의 `PhantomCore.Collision.Tests`로 검증했다.
 SDK probe는 원본 us 위치·길이·DSP 예약 전달과 Loading Clip 유지/Ready 후 해제를 검사한다.
 Client의 별도 에디터 회귀는 실제 MP3의 정확한 비동기 열기/끝부분 seek/정상 종료/범위 밖
 위치 거부를 FMOD NoSound로 검사한다. 물리 장치 청취나 수동 UI 검증은 아니다.
@@ -102,8 +102,8 @@ Voice를 먼저 정지해야 하며 API/Update는 같은 Client thread에서 호
 ```cpp
 // A SceneGameClient hook: registration/loading remains Client policy.
 std::string error;
-std::shared_ptr<mrg::audio::AudioClip> clip = services.audio.LoadSound(
-    path, mrg::audio::AudioLoadMode::Stream, error);
+std::shared_ptr<AudioClip> clip = services.audio.LoadSound(
+    path, AudioLoadMode::Stream, error);
 const auto id = AudioPlayback().Play(clip, {}, nullptr, error);
 if (auto* voice = AudioPlayback().FindVoice(id))
 {
@@ -188,5 +188,5 @@ Loading/Ready/Failed, Voice 준비, DSP 예약과 RetireClip 계약은 유지합
 긴 음악의 메모리는 float PCM의 프레임 수 × 채널 수 × 4바이트이며 디스크 캐시는 없습니다.
 샘플 수/byte 길이 범위를 검사하고 초기 탐색/재개/재시작 모두 동일한 PCM 좌표를 사용합니다.
 
-`MRG.Collision.Tests --audio-pcm [UTF-8 audio path]`는 실제 SDK API로 LAME 패딩,
+`PhantomCore.Collision.Tests --audio-pcm [UTF-8 audio path]`는 실제 SDK API로 LAME 패딩,
 원본 앞 무음, 취소, 재생 길이 일치, 비동기 로딩과 반복 탐색을 검증합니다.

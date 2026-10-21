@@ -14,7 +14,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{C3333333-3333-4333-8333-333333333333}</ProjectGuid>
-    <RootNamespace>MRGAudio</RootNamespace>
+    <RootNamespace>PhantomCoreAudio</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -44,7 +44,7 @@
   <PropertyGroup>
     <OutDir>$(BaseOutputPath)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(BaseIntermediateOutputPath)$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>MRG.Audio</TargetName>
+    <TargetName>PhantomCore.Audio</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>

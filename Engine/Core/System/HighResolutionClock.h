@@ -2,20 +2,17 @@
 
 #include <cstdint>
 
-namespace mrg::system
+// General-purpose QueryPerformanceCounter clock used by the engine loop.
+class HighResolutionClock final
 {
-    // General-purpose QueryPerformanceCounter clock used by the engine loop.
-    class HighResolutionClock final
-    {
-    public:
-        HighResolutionClock();
+public:
+    HighResolutionClock();
 
-        [[nodiscard]] double Tick(double& totalSeconds) noexcept;
-        [[nodiscard]] double NowSeconds() const noexcept;
+    [[nodiscard]] double Tick(double& totalSeconds) noexcept;
+    [[nodiscard]] double NowSeconds() const noexcept;
 
-    private:
-        double inverseFrequency_{};
-        std::int64_t startCounter_{};
-        double previousSeconds_{};
-    };
-}
+private:
+    double inverseFrequency_{};
+    std::int64_t startCounter_{};
+    double previousSeconds_{};
+};

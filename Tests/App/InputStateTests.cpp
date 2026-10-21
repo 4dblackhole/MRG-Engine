@@ -1,38 +1,35 @@
 #include "InputStateTests.h"
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 #include <iostream>
 
-namespace mrg::platform
+// Test-only access keeps event injection outside the consumer API.
+struct InputStateTestAccess final
 {
-    // Test-only access keeps event injection outside the consumer API.
-    struct InputStateTestAccess final
+    static void Begin(InputState &input)
     {
-        static void Begin(InputState &input)
-        {
-            input.BeginUpdate();
-        }
-        static void Reset(InputState &input)
-        {
-            input.Reset();
-        }
-        static void Move(InputState &input, std::int64_t time)
-        {
-            input.AddMouseDelta(1, -1, time);
-        }
-        static void Wheel(InputState &input, std::int64_t time)
-        {
-            input.AddMouseWheel(1, time);
-        }
-        static void Key(InputState &input, bool down, std::int64_t time)
-        {
-            input.SetKey('F', down, time);
-        }
-    };
-} // namespace mrg::platform
+        input.BeginUpdate();
+    }
+    static void Reset(InputState &input)
+    {
+        input.Reset();
+    }
+    static void Move(InputState &input, std::int64_t time)
+    {
+        input.AddMouseDelta(1, -1, time);
+    }
+    static void Wheel(InputState &input, std::int64_t time)
+    {
+        input.AddMouseWheel(1, time);
+    }
+    static void Key(InputState &input, bool down, std::int64_t time)
+    {
+        input.SetKey('F', down, time);
+    }
+};
 
 int TestInputState()
 {
-    using namespace mrg::platform;
+
     InputState input;
     for (int turn = 0; turn < 2; ++turn)
     {

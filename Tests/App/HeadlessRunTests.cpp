@@ -1,5 +1,5 @@
 #include "HeadlessRunTests.h"
-#include "MRG_Core.h"
+#include "PhantomCore.h"
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -7,27 +7,27 @@
 
 namespace
 {
-    class FailingHiddenClient final : public mrg::IGameClient
+    class FailingHiddenClient final : public IGameClient
     {
       public:
         explicit FailingHiddenClient(bool &shutdown) : shutdown_(shutdown)
         {
         }
-        mrg::EngineConfig GetEngineConfig() const override
+        EngineConfig GetEngineConfig() const override
         {
-            mrg::EngineConfig config;
+            EngineConfig config;
             config.showWindow = false;
-            config.audio.preferredBackend = mrg::audio::AudioOutputBackend::NoSound;
+            config.audio.preferredBackend = AudioOutputBackend::NoSound;
             return config;
         }
-        void Initialize(const mrg::EngineServices &) override
+        void Initialize(const EngineServices &) override
         {
         }
-        bool Update(const mrg::UpdateContext &) override
+        bool Update(const UpdateContext &) override
         {
             throw std::runtime_error("Expected hidden Update failure.");
         }
-        void Render(const mrg::graphics::RenderContext &) override
+        void Render(const RenderContext &) override
         {
         }
         void OnResize(std::uint32_t, std::uint32_t) override
@@ -46,7 +46,7 @@ namespace
 int TestHeadlessRunError()
 {
     bool shutdown = false;
-    const auto result = mrg::Run(std::make_unique<FailingHiddenClient>(shutdown));
+    const auto result = Run(std::make_unique<FailingHiddenClient>(shutdown));
     if (result != EXIT_FAILURE || !shutdown)
     {
         std::cerr << "Hidden Run must fail without blocking and clean up the initialized Client.\n";

@@ -59,6 +59,10 @@ PrepareImages/LoadImage/poll은 기존 렌더 소유 스레드에서 호출합�
 텍스처 업로드는 렌더 queue에 제출한 뒤 이미지별 fence 대기를 하지 않습니다. 같은 queue의
 후속 draw가 copy 뒤에 실행되며, command allocator/list·upload buffer·destination handle을
 완료 fence까지 보관합니다. 정상 프레임에서 완료분을 해제하고 종료 시 남은 작업을 기다립니다.
+TextureSet은 64칸 SRV 블록의 공유 lease를 소유합니다. 마지막 참조가 없어지면
+원래 heap의 pool로 반환하며, 업로드·material·RenderToTexture의 프레임 참조가 GPU
+fence까지 이를 유지하므로 사용 중인 descriptor는 재사용하지 않습니다. 관리자를
+재초기화해도 이전 handle은 새 heap의 pool에 블록을 반환하지 않습니다.
 화면 SubmitScreen은 clip 밖의 primitive를 텍스트 shaping/instance 생성 전에 거릅니다.
 Canvas 트리 자체의 수집 비용은 남으므로 큰 목록은 Client에서 가시 항목만 생성해야 합니다.
 

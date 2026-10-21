@@ -63,6 +63,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Collision\CollisionTests.cpp" />
+    <ClCompile Include="App\InputStateTests.cpp" />
+    <ClCompile Include="App\TextureLifetimeTests.cpp" />
+    <ClInclude Include="App\InputStateTests.h" />
+    <ClInclude Include="App\TextureLifetimeTests.h" />
     <ClCompile Include="App\HeadlessRunTests.cpp" />
     <ClCompile Include="App\TextRenderingTests.cpp" />
     <ClCompile Include="App\TextPixelTests.cpp" />

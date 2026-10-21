@@ -137,6 +137,7 @@ namespace mrg::graphics
 
     private:
         struct DecodedImage;
+        struct DescriptorBlockPool;
 
         void ValidateTextureSetRequest(
             std::span<const std::filesystem::path> paths) const;
@@ -177,7 +178,7 @@ namespace mrg::graphics
         HANDLE uploadFenceEvent_{};
         std::uint64_t nextUploadFenceValue_{1};
         std::uint32_t descriptorSize_{};
-        std::uint32_t nextDescriptorBlock_{};
+        std::shared_ptr<DescriptorBlockPool> descriptorBlocks_;
         bool initialized_{};
     };
 }

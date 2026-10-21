@@ -1,6 +1,8 @@
 #include "Input/Input.h"
 
 #include <algorithm>
+#include <new>
+#include <stdexcept>
 
 namespace mrg::platform
 {
@@ -10,6 +12,11 @@ namespace mrg::platform
         {
             return static_cast<std::size_t>(button);
         }
+    }
+
+    InputState::InputState()
+    {
+        events_.reserve(256);
     }
 
     bool InputState::IsKeyDown(const std::uint16_t virtualKey) const noexcept
@@ -76,7 +83,7 @@ namespace mrg::platform
 
     std::span<const InputEvent> InputState::Events() const noexcept
     {
-        return {events_.data(), eventCount_};
+        return events_;
     }
 
     std::int64_t InputState::PerformanceCounterFrequency() const noexcept
@@ -94,7 +101,8 @@ namespace mrg::platform
         mouseDeltaY_ = 0;
         mouseInsideWindow_ = false;
         mouseWheelDelta_ = 0.0F;
-        eventCount_ = 0;
+        events_.clear();
+        eventStorageFailed_ = false;
     }
 
     void InputState::Reset() noexcept
@@ -109,7 +117,8 @@ namespace mrg::platform
         mouseDeltaY_ = 0;
         mouseInsideWindow_ = false;
         mouseWheelDelta_ = 0.0F;
-        eventCount_ = 0;
+        events_.clear();
+        eventStorageFailed_ = false;
     }
 
     void InputState::SetPerformanceCounterFrequency(
@@ -219,9 +228,21 @@ namespace mrg::platform
 
     void InputState::PushEvent(const InputEvent& event) noexcept
     {
-        if (eventCount_ < events_.size())
+        if (eventStorageFailed_)
+            return;
+        // Never unwind through the Win32 callback. PumpMessages reports a
+        // storage failure before an incomplete stream can reach the Client.
+        try
         {
-            events_[eventCount_++] = event;
+            events_.push_back(event);
+        }
+        catch (const std::bad_alloc &)
+        {
+            eventStorageFailed_ = true;
+        }
+        catch (const std::length_error &)
+        {
+            eventStorageFailed_ = true;
         }
     }
 }

@@ -7,6 +7,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="App\InputStateTests.cpp"><Filter>App</Filter></ClCompile>
+    <ClCompile Include="App\TextureLifetimeTests.cpp"><Filter>App</Filter></ClCompile>
+    <ClInclude Include="App\InputStateTests.h"><Filter>App</Filter></ClInclude>
+    <ClInclude Include="App\TextureLifetimeTests.h"><Filter>App</Filter></ClInclude>
     <ClCompile Include="App\HeadlessRunTests.cpp"><Filter>App</Filter></ClCompile>
     <ClCompile Include="App\TextRenderingTests.cpp"><Filter>App</Filter></ClCompile>
     <ClCompile Include="App\TextPixelTests.cpp"><Filter>App</Filter></ClCompile>

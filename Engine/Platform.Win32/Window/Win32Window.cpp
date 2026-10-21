@@ -142,6 +142,8 @@ namespace mrg::platform
 
             TranslateMessage(&message);
             DispatchMessageW(&message);
+            if (input_->eventStorageFailed_)
+                throw std::runtime_error("Unable to retain the complete timestamped input stream.");
         }
 
         // UI placement needs an absolute client-space snapshot. Raw Input is

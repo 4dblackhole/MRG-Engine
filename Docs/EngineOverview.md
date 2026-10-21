@@ -118,6 +118,9 @@ Client wWinMain
   때만 호출된다.
 - 오디오 service update는 별도 deadline을 사용하며 렌더 속도를 제한하지 않는다.
 - 키보드·마우스의 기준 입력은 Win32 Raw Input이다.
+- `InputState`는 한 Update의 이벤트를 순서대로 보존하고 다음 Update에서 버퍼를
+  재사용한다. 256개는 초기 예약량이며 상한이 아니다. 저장 메모리 부족은 Win32
+  callback 밖에서 오류로 보고하여 불완전한 입력을 Client에 전달하지 않는다.
 - 키 조회에는 자체 enum 대신 `VK_SPACE`, `VK_ESCAPE`, `'W'` 같은 Virtual-Key
   값을 사용한다.
 - 리듬 판정은 렌더 프레임이나 현재 key state만 사용하지 않고
@@ -342,3 +345,18 @@ Debug/Release x64 `MRG-Engine.sln` 전체 Rebuild 및 두 구성의 `MRG.Collisi
 Client의 제거된 예제 실행 경로를 엔진 검증 명령으로 사용하지 않는다.
 
 공통 PCM 디코딩(2026-10-20): `Audio/Decode`의 공개 `DecodeAudioPcm`은 장치와 독립적으로 원본 sample rate의 float PCM을 제공합니다. FMOD 재생과 Client 에디터 분석이 이 결과를 공유하며 MP3 Info/LAME 패딩을 제거합니다. 기존 Vorbis/Windows 코덱 경로와 취소·비동기 수명·메모리 비용은 [AudioPlayback](AudioPlayback.md#공통-pcm-시간축-2026-10-20)을 참고합니다.
+
+## 2026-10-22 입력·텍스처 수명 리뷰 수정
+
+- Debug/Release x64 solution Rebuild 후 최종 수정도 두 구성 Build로 검증했습니다.
+  기본 SDK 검사와 `MRG.Collision.Tests.exe --input-state`, `--texture-lifetime`이
+  모두 성공했습니다. 입력은 4,096개 혼합 이벤트·키 전이·버퍼 재사용을 검사합니다.
+  텍스처는 200회 즉시 해제 생성, 동시 16세트의 용량 거부, 업로드 fence 참조,
+  64개 실제 D3D12 프레임의 타깃 유지·회수와 사용 중 descriptor 중복 방지를 검사합니다.
+- MSVC v143/14.44 Code Analysis를 실제 Core·SDK Tests의 include/define/PCH/C++20과
+  Debug/Release x64 설정으로 실행했습니다. 변경한 코드의 컴파일·분석 진단과
+  파싱 오류는 없습니다. 제3자 코덱은 기존 vendor-only 분석 제외를 유지합니다.
+  범위 밖 기존 진단은 ScreenVisual2DManager C26478, Visual2DSurface C26498/C6011,
+  CollisionTests C26800, WindowControlTests C6011이며 수정하거나 억제하지 않았습니다.
+- `git diff --check` 통과. 원시 로그는 ignored `build/review-fixes-2026-10-22/`입니다.
+  이 검증은 숨긴 창의 자동 SDK 검사이며 실제 화면·물리 입력·청취의 수동 검증은 아닙니다.

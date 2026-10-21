@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <vector>
 
 namespace mrg::platform
 {
@@ -46,6 +47,8 @@ namespace mrg::platform
     class InputState final
     {
     public:
+        InputState();
+
         // Accepts a Win32 Virtual-Key value (for example VK_ESCAPE or 'W').
         // Raw Input keeps left/right modifier keys distinct, so query
         // VK_LSHIFT/VK_RSHIFT, VK_LCONTROL/VK_RCONTROL, or VK_LMENU/VK_RMENU.
@@ -72,11 +75,11 @@ namespace mrg::platform
 
     private:
         friend class Win32Window;
+        friend struct InputStateTestAccess;
 
         static constexpr std::size_t KeyCount = 256;
         static constexpr std::size_t MouseButtonCount =
             static_cast<std::size_t>(MouseButton::Count);
-        static constexpr std::size_t MaximumEventsPerUpdate = 256;
 
         void BeginUpdate() noexcept;
         void Reset() noexcept;
@@ -112,8 +115,8 @@ namespace mrg::platform
         std::int32_t mousePositionY_{};
         bool mouseInsideWindow_{};
         float mouseWheelDelta_{};
-        std::array<InputEvent, MaximumEventsPerUpdate> events_{};
-        std::size_t eventCount_{};
+        std::vector<InputEvent> events_;
+        bool eventStorageFailed_{};
         std::int64_t performanceCounterFrequency_{};
     };
 }

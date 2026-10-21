@@ -4,9 +4,11 @@
 #include <wincodec.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -94,6 +96,8 @@ namespace mrg::graphics
             }
 
             std::vector<ComPtr<ID3D12Resource>> resources;
+            // Frame and upload owners retain this lease through their fences.
+            std::shared_ptr<const void> descriptorAllocation;
             D3D12_CPU_DESCRIPTOR_HANDLE cpuDescriptorStart{};
             D3D12_GPU_DESCRIPTOR_HANDLE gpuDescriptorStart{};
         };
@@ -173,6 +177,39 @@ namespace mrg::graphics
         }
 
     }
+
+    struct TextureManager::DescriptorBlockPool final
+    {
+        struct Lease final
+        {
+            std::shared_ptr<DescriptorBlockPool> pool;
+            std::uint32_t offset{};
+            ~Lease()
+            {
+                std::lock_guard lock(pool->mutex);
+                pool->used[offset / MaxTexturesPerSet] = false;
+            }
+        };
+
+        std::shared_ptr<Lease> Acquire(const std::shared_ptr<DescriptorBlockPool>& owner)
+        {
+            std::lock_guard lock(mutex);
+            const auto available = std::ranges::find(used, false);
+            if (available == used.end())
+                throw std::runtime_error("The texture descriptor heap has no free material block.");
+            auto lease = std::make_shared<Lease>();
+            lease->pool = owner;
+            lease->offset = static_cast<std::uint32_t>(available - used.begin()) * MaxTexturesPerSet;
+            *available = true;
+            return lease;
+        }
+
+        // A lease may outlive its manager, or be released on another thread.
+        // It always returns to its original heap generation.
+        ComPtr<ID3D12DescriptorHeap> heap;
+        std::mutex mutex;
+        std::array<bool, DescriptorHeapCapacity / MaxTexturesPerSet> used{};
+    };
 
     struct TextureManager::DecodedImage final
     {
@@ -332,6 +369,8 @@ namespace mrg::graphics
                 "Create texture descriptor heap");
             descriptorSize_ = device.GetDescriptorHandleIncrementSize(
                 D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            descriptorBlocks_ = std::make_shared<DescriptorBlockPool>();
+            descriptorBlocks_->heap = descriptorHeap_;
 
             ThrowIfFailed(
                 device.CreateCommandAllocator(
@@ -420,7 +459,7 @@ namespace mrg::graphics
         commandQueue_ = nullptr;
         nextUploadFenceValue_ = 1;
         descriptorSize_ = 0;
-        nextDescriptorBlock_ = 0;
+        descriptorBlocks_.reset();
         initialized_ = false;
     }
 
@@ -437,13 +476,13 @@ namespace mrg::graphics
             decodedImages.push_back(TakePreparedImage(path));
         }
 
-        BeginUploadCommands();
         auto textureSet = std::make_shared<D3D12TextureSet>();
         textureSet->resources.reserve(decodedImages.size());
         std::vector<ComPtr<ID3D12Resource>> uploadBuffers;
         uploadBuffers.reserve(decodedImages.size());
         const D3D12_CPU_DESCRIPTOR_HANDLE cpuBlockStart =
             InitializeDescriptorBlock(*textureSet);
+        BeginUploadCommands();
 
         try
         {
@@ -472,7 +511,6 @@ namespace mrg::graphics
         }
 
         ExecuteUpload(std::move(uploadBuffers), textureSet);
-        nextDescriptorBlock_ += MaxTexturesPerSet;
         return textureSet;
     }
 
@@ -538,13 +576,6 @@ namespace mrg::graphics
                 "A render-target texture requires an initialized manager "
                 "and a positive size.");
         }
-        if (nextDescriptorBlock_ >
-            DescriptorHeapCapacity - MaxTexturesPerSet)
-        {
-            throw std::runtime_error(
-                "The texture descriptor heap has no free material block.");
-        }
-
         auto target = std::make_shared<D3D12RenderTargetTexture>();
         auto textureSet = std::make_shared<D3D12TextureSet>();
         const D3D12_CPU_DESCRIPTOR_HANDLE descriptorBlock =
@@ -596,7 +627,6 @@ namespace mrg::graphics
         target->textures = textureSet;
         target->width = width;
         target->height = height;
-        nextDescriptorBlock_ += MaxTexturesPerSet;
         return target;
     }
 
@@ -612,12 +642,6 @@ namespace mrg::graphics
         {
             throw std::invalid_argument(
                 "A texture set must contain between 1 and 64 images.");
-        }
-        if (nextDescriptorBlock_ >
-            DescriptorHeapCapacity - MaxTexturesPerSet)
-        {
-            throw std::runtime_error(
-                "The texture descriptor heap has no free material block.");
         }
     }
 
@@ -719,16 +743,19 @@ namespace mrg::graphics
     D3D12_CPU_DESCRIPTOR_HANDLE TextureManager::InitializeDescriptorBlock(
         TextureSet& textureSet)
     {
+        CollectCompletedUploads();
         D3D12TextureSet& concreteSet = RequireTextureSet(textureSet);
+        const auto allocation = descriptorBlocks_->Acquire(descriptorBlocks_);
+        concreteSet.descriptorAllocation = allocation;
         const D3D12_CPU_DESCRIPTOR_HANDLE cpuBlockStart =
             OffsetCpuDescriptor(
                 descriptorHeap_->GetCPUDescriptorHandleForHeapStart(),
-                nextDescriptorBlock_,
+                allocation->offset,
                 descriptorSize_);
         concreteSet.cpuDescriptorStart = cpuBlockStart;
         concreteSet.gpuDescriptorStart = OffsetGpuDescriptor(
             descriptorHeap_->GetGPUDescriptorHandleForHeapStart(),
-            nextDescriptorBlock_,
+            allocation->offset,
             descriptorSize_);
 
         // Fill the fixed-size shader array with safe null SRVs first. Valid

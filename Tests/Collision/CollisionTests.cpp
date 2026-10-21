@@ -3,6 +3,8 @@
 #include "../App/TextPixelTests.h"
 #include "../App/TextRenderingTests.h"
 #include "../App/WindowControlTests.h"
+#include "../App/InputStateTests.h"
+#include "../App/TextureLifetimeTests.h"
 #include "MRG_Core.h"
 
 #include <DirectXMath.h>
@@ -1341,6 +1343,10 @@ namespace
 
 int main(int argc, char **argv)
 {
+    if (argc == 2 && std::string_view(argv[1]) == "--texture-lifetime")
+        return TestTextureLifetime();
+    if (argc == 2 && std::string_view(argv[1]) == "--input-state")
+        return TestInputState();
     if ((argc == 2 || argc == 3) && std::string_view(argv[1]) == "--audio-pcm")
         return TestAudioPcm(argc == 3 ? argv[2] : nullptr);
     if (argc == 2 && std::string_view(argv[1]) == "--window-control")
@@ -1432,6 +1438,7 @@ int main(int argc, char **argv)
                   expanded[0].nodeTransform._41 == retained[0].nodeTransform._41,
               "Immutable rectangle batches retain lifetime, primitive order, transform and clipping.");
     }
+    failureCount += TestInputState();
     TestManagedAudioPlayback();
     TestManagedScreenVisual2D();
     TestCameraMatrices();

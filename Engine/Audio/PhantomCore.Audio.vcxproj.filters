@@ -73,15 +73,20 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="ThirdParty\Signalsmith\UPSTREAM.md"><Filter>ThirdParty\Signalsmith</Filter></None>
-    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\fft.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
-    <None Include="ThirdParty\Signalsmith\signalsmith-linear\LICENSE.txt"><Filter>ThirdParty\Signalsmith</Filter></None>
-    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\linear.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
-    <None Include="ThirdParty\Signalsmith\signalsmith-linear\README.md"><Filter>ThirdParty\Signalsmith</Filter></None>
-    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\stft.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
-    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\platform\fft-linear.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
-    <None Include="ThirdParty\Signalsmith\signalsmith-stretch\LICENSE.txt"><Filter>ThirdParty\Signalsmith</Filter></None>
-    <None Include="ThirdParty\Signalsmith\signalsmith-stretch\README.md"><Filter>ThirdParty\Signalsmith</Filter></None>
-    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-stretch\signalsmith-stretch.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\fft.h"><Filter>ThirdParty\Signalsmith\signalsmith-linear</Filter></ClInclude>
+    <None Include="ThirdParty\Signalsmith\signalsmith-linear\LICENSE.txt"><Filter>ThirdParty\Signalsmith\signalsmith-linear</Filter></None>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\linear.h"><Filter>ThirdParty\Signalsmith\signalsmith-linear</Filter></ClInclude>
+    <None Include="ThirdParty\Signalsmith\signalsmith-linear\README.md"><Filter>ThirdParty\Signalsmith\signalsmith-linear</Filter></None>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\stft.h"><Filter>ThirdParty\Signalsmith\signalsmith-linear</Filter></ClInclude>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\platform\fft-linear.h"><Filter>ThirdParty\Signalsmith\signalsmith-linear\platform</Filter></ClInclude>
+    <None Include="ThirdParty\Signalsmith\signalsmith-stretch\LICENSE.txt"><Filter>ThirdParty\Signalsmith\signalsmith-stretch</Filter></None>
+    <None Include="ThirdParty\Signalsmith\signalsmith-stretch\README.md"><Filter>ThirdParty\Signalsmith\signalsmith-stretch</Filter></None>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-stretch\signalsmith-stretch.h"><Filter>ThirdParty\Signalsmith\signalsmith-stretch</Filter></ClInclude>
     <Filter Include="ThirdParty\Signalsmith" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="ThirdParty\Signalsmith\signalsmith-linear" />
+    <Filter Include="ThirdParty\Signalsmith\signalsmith-linear\platform" />
+    <Filter Include="ThirdParty\Signalsmith\signalsmith-stretch" />
   </ItemGroup>
 </Project>

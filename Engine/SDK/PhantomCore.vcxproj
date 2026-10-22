@@ -229,7 +229,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Audio\Processing\TimeStretch.h" />
-    <ClCompile Include="..\Audio\Processing\TimeStretch.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader><Optimization>MaxSpeed</Optimization><BasicRuntimeChecks>Default</BasicRuntimeChecks><AdditionalOptions>/external:I&quot;$(ProjectDir)..\Audio\ThirdParty\Signalsmith&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel></ClCompile>
+    <!-- Analyze the adapter, while keeping pinned external FFT/stretch headers outside the diagnostic scope. -->
+    <ClCompile Include="..\Audio\Processing\TimeStretch.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader><Optimization>MaxSpeed</Optimization><BasicRuntimeChecks>Default</BasicRuntimeChecks><AdditionalOptions>/analyze:external- /external:I&quot;$(ProjectDir)..\Audio\ThirdParty\Signalsmith&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Audio\ThirdParty\Signalsmith\UPSTREAM.md" />

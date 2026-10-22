@@ -66,4 +66,22 @@
     <Filter Include="Decode\Submodules" />
     <Filter Include="ThirdParty" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Processing\TimeStretch.h"><Filter>Processing</Filter></ClInclude>
+    <ClCompile Include="Processing\TimeStretch.cpp"><Filter>Processing</Filter></ClCompile>
+    <Filter Include="Processing" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ThirdParty\Signalsmith\UPSTREAM.md"><Filter>ThirdParty\Signalsmith</Filter></None>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\fft.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
+    <None Include="ThirdParty\Signalsmith\signalsmith-linear\LICENSE.txt"><Filter>ThirdParty\Signalsmith</Filter></None>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\linear.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
+    <None Include="ThirdParty\Signalsmith\signalsmith-linear\README.md"><Filter>ThirdParty\Signalsmith</Filter></None>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\stft.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\platform\fft-linear.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
+    <None Include="ThirdParty\Signalsmith\signalsmith-stretch\LICENSE.txt"><Filter>ThirdParty\Signalsmith</Filter></None>
+    <None Include="ThirdParty\Signalsmith\signalsmith-stretch\README.md"><Filter>ThirdParty\Signalsmith</Filter></None>
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-stretch\signalsmith-stretch.h"><Filter>ThirdParty\Signalsmith</Filter></ClInclude>
+    <Filter Include="ThirdParty\Signalsmith" />
+  </ItemGroup>
 </Project>

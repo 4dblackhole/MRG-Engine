@@ -377,3 +377,5 @@ CollisionTests C26800, WindowControlTests C6011 진단은 별도 보고합니다
 두 구성에서 기본 SDK와 `--input-state`, `--texture-lifetime`, `--text-rendering`,
 `--text-pixels`, `--headless-error`가 모두 성공했습니다. `git diff --check`도 통과했습니다.
 자동 숨김 창/GPU 검사이며 실제 화면·물리 입력·청취는 수동 검증하지 않았습니다.
+
+고정 속도 PCM 음정 유지와 원본 좌표 탐색은 [AudioPlayback](AudioPlayback.md)의 PrepareTimeStretch를 참고합니다.

@@ -81,3 +81,5 @@ Client에 함께 보관했던 기술 예제 Scene은 제거되었다. 엔진의 
 [IWindowControl 서비스](Docs/WindowControl.md)를 사용합니다. 게임별 저장 정책은 Client가 소유합니다.
 
 오디오 재생과 외부 파형 분석은 공통 `DecodeAudioPcm` 시간축을 사용할 수 있습니다. MP3 패딩 처리와 메모리 비용은 [AudioPlayback](Docs/AudioPlayback.md#공통-pcm-시간축-2026-10-20)을 참고합니다.
+
+고정 속도 PCM 음정 유지와 원본 좌표 탐색은 [AudioPlayback](Docs/AudioPlayback.md)의 PrepareTimeStretch를 참고합니다.

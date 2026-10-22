@@ -90,4 +90,20 @@
     <ClCompile Include="ThirdParty\DrMp3.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)ThirdParty\dr_libs&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><EnablePREfast>false</EnablePREfast><PREfastProjectDirectory /><PREfastRulesetDirectories /><PREfastRulesetFile /><WarningLevel>TurnOffAllWarnings</WarningLevel></ClCompile>
     <ClCompile Include="ThirdParty\StbVorbis.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)ThirdParty\stb&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><EnablePREfast>false</EnablePREfast><PREfastProjectDirectory /><PREfastRulesetDirectories /><PREfastRulesetFile /><WarningLevel>TurnOffAllWarnings</WarningLevel></ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Processing\TimeStretch.h" />
+    <ClCompile Include="Processing\TimeStretch.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader><Optimization>MaxSpeed</Optimization><BasicRuntimeChecks>Default</BasicRuntimeChecks><AdditionalOptions>/external:I&quot;$(ProjectDir)ThirdParty\Signalsmith&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ThirdParty\Signalsmith\UPSTREAM.md" />
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\fft.h" />
+    <None Include="ThirdParty\Signalsmith\signalsmith-linear\LICENSE.txt" />
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\linear.h" />
+    <None Include="ThirdParty\Signalsmith\signalsmith-linear\README.md" />
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\stft.h" />
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-linear\platform\fft-linear.h" />
+    <None Include="ThirdParty\Signalsmith\signalsmith-stretch\LICENSE.txt" />
+    <None Include="ThirdParty\Signalsmith\signalsmith-stretch\README.md" />
+    <ClInclude Include="ThirdParty\Signalsmith\signalsmith-stretch\signalsmith-stretch.h" />
+  </ItemGroup>
 </Project>

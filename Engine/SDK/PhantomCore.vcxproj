@@ -227,4 +227,20 @@
     <ClCompile Include="..\Audio\ThirdParty\DrMp3.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)..\Audio\ThirdParty\dr_libs&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><EnablePREfast>false</EnablePREfast><PREfastProjectDirectory /><PREfastRulesetDirectories /><PREfastRulesetFile /><WarningLevel>TurnOffAllWarnings</WarningLevel></ClCompile>
     <ClCompile Include="..\Audio\ThirdParty\StbVorbis.cpp"><AdditionalOptions>/external:I&quot;$(ProjectDir)..\Audio\ThirdParty\stb&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel><PrecompiledHeader>NotUsing</PrecompiledHeader><EnablePREfast>false</EnablePREfast><PREfastProjectDirectory /><PREfastRulesetDirectories /><PREfastRulesetFile /><WarningLevel>TurnOffAllWarnings</WarningLevel></ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Audio\Processing\TimeStretch.h" />
+    <ClCompile Include="..\Audio\Processing\TimeStretch.cpp"><PrecompiledHeader>NotUsing</PrecompiledHeader><Optimization>MaxSpeed</Optimization><BasicRuntimeChecks>Default</BasicRuntimeChecks><AdditionalOptions>/external:I&quot;$(ProjectDir)..\Audio\ThirdParty\Signalsmith&quot; %(AdditionalOptions)</AdditionalOptions><ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Audio\ThirdParty\Signalsmith\UPSTREAM.md" />
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\fft.h" />
+    <None Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\LICENSE.txt" />
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\linear.h" />
+    <None Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\README.md" />
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\stft.h" />
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\platform\fft-linear.h" />
+    <None Include="..\Audio\ThirdParty\Signalsmith\signalsmith-stretch\LICENSE.txt" />
+    <None Include="..\Audio\ThirdParty\Signalsmith\signalsmith-stretch\README.md" />
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-stretch\signalsmith-stretch.h" />
+  </ItemGroup>
 </Project>

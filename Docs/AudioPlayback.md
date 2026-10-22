@@ -190,3 +190,24 @@ Loading/Ready/Failed, Voice 준비, DSP 예약과 RetireClip 계약은 유지합
 
 `PhantomCore.Collision.Tests --audio-pcm [UTF-8 audio path]`는 실제 SDK API로 LAME 패딩,
 원본 앞 무음, 취소, 재생 길이 일치, 비동기 로딩과 반복 탐색을 검증합니다.
+
+## 고정 속도와 음정 유지 (2026-10-23)
+
+`AudioClip::PrepareTimeStretch(rate, error)`는 비동기 clip을 로드한 직후,
+LoadState polling이나 Play 전에 한 번 설정합니다. 0.5..2.0의 고정 속도로
+원본 PCM을 worker에서 변환하며, LoadState는 변환과 native 열기가 끝날 때까지
+Loading입니다. 완료 후 변경 요청은 거절합니다. 공개 duration과 Play/Restart의
+startPositionMicroseconds는 계속 원본 곡의 좌표입니다. 변환된 PCM의 좌표로
+변환하는 것은 backend의 책임이고 DSP 예약 시각은 그대로 전달합니다.
+재생 설정의 pitch는 추가적인 음정/속도 조절이므로, 음정을 유지하려면 1을 사용합니다.
+
+순수 PCM 함수 `TimeStretchPcm`도 같은 SDK에 제공됩니다. interleaved float PCM을
+받고 round(sourceFrames / rate)개의 프레임을 반환합니다. Signalsmith Stretch와
+Linear의 고정 MIT 소스를 사용하며, 입력 lookahead와 출력 latency를 보정합니다.
+의도된 앞부분 무음은 유지하며 에너지 임계값으로 정렬하지 않습니다. 취소는
+청크 사이에 확인하고 부분 결과를 반환하지 않습니다. 큰 변경 비율의 음질은
+원본에 따라 달라질 수 있습니다. 버전과 라이선스는
+Engine/Audio/ThirdParty/Signalsmith/UPSTREAM.md에 기록합니다.
+
+SDK `--audio-pcm` 검증은 0.5/1/1.5/2배속의 정확한 길이·440Hz 음정·스테레오
+일관성·transient 정렬·취소, 비동기 clip의 원본 길이와 원본 좌표 탐색을 검사합니다.

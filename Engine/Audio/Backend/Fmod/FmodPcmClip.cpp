@@ -1,6 +1,9 @@
 #include "FmodPcmClip.h"
 #include "FmodAudioClip.h"
 #include "Decode/AudioPcmDecoder.h"
+#include "Processing/TimeStretch.h"
+#include <cmath>
+#include <algorithm>
 
 #include <fmod_errors.h>
 #include <chrono>
@@ -49,6 +52,31 @@ namespace
                mode == AudioLoadMode::SampleAsync;
     }
 
+    class StretchedVoice final : public IAudioVoiceBackend
+    {
+    public:
+        StretchedVoice(std::unique_ptr<IAudioVoiceBackend> voice, double rate, std::uint64_t duration, std::uint64_t physicalDuration)
+            : voice_(std::move(voice)), rate_(rate), duration_(duration), physicalDuration_(physicalDuration) {}
+        AudioPreparationState PreparationState(std::string &e) override { return voice_->PreparationState(e); }
+        bool IsPlaying() const noexcept override { return voice_->IsPlaying(); }
+        bool Restart(const AudioPlaybackSettings &settings, IAudioBusBackend *bus, std::string &error) override
+        {
+            if (settings.startPositionMicroseconds >= duration_) { error = "Source position is past the clip end."; return false; }
+            auto mapped = settings;
+            mapped.startPositionMicroseconds = std::min(static_cast<std::uint64_t>(settings.startPositionMicroseconds / rate_), physicalDuration_ - 1);
+            return voice_->Restart(mapped, bus, error);
+        }
+        bool Stop(std::string &e) override { return voice_->Stop(e); }
+        bool SetPaused(bool v, std::string &e) override { return voice_->SetPaused(v, e); }
+        bool SetVolume(float v, std::string &e) override { return voice_->SetVolume(v, e); }
+        bool SetPitch(float v, std::string &e) override { return voice_->SetPitch(v, e); }
+        bool SetDelay(std::uint64_t a, std::uint64_t b, std::string &e) override { return voice_->SetDelay(a, b, e); }
+    private:
+        std::unique_ptr<IAudioVoiceBackend> voice_;
+        double rate_;
+        std::uint64_t duration_, physicalDuration_;
+    };
+
     // The public clip retains the decoded source for raw-memory streams.
     // FMOD owns only playback/mixing; it never parses this compressed file.
     class FmodPcmClip final : public IAudioClipBackend
@@ -62,6 +90,17 @@ namespace
         {
         }
         ~FmodPcmClip() override { cancellation_.request_stop(); }
+
+        bool PrepareTimeStretch(double rate, std::string &error) override
+        {
+            if (!std::isfinite(rate) || rate < 0.5 || rate > 2.0)
+            { error = "Time-stretch rate must be 0.5..2.0."; return false; }
+            if (clip_ || converting_ || !failure_.empty())
+            { error = "Time stretch must be configured before polling the clip."; return false; }
+            stretchRate_ = rate;
+            error.clear();
+            return true;
+        }
 
         AudioClipLoadState LoadState(std::string& error) const override
         {
@@ -86,6 +125,22 @@ namespace
                 try
                 {
                     pcm_ = pending_.get();
+                    if (!converting_)
+                    {
+                        sourceDuration_ = static_cast<std::uint64_t>(std::llround(
+                            static_cast<long double>(pcm_.samples.size() / pcm_.channels) * 1'000'000 / pcm_.rate));
+                        if (stretchRate_ != 1.0)
+                        {
+                            converting_ = true;
+                            pending_ = std::async(std::launch::async,
+                                [pcm = std::move(pcm_), rate = stretchRate_, stop = cancellation_.get_token()]() mutable {
+                                    pcm.samples = TimeStretchPcm(pcm.samples, pcm.channels, pcm.rate, rate, stop);
+                                    return pcm;
+                                });
+                            error.clear();
+                            return AudioClipLoadState::Loading;
+                        }
+                    }
                     OpenPcm();
                 }
                 catch (const std::exception& exception)
@@ -107,7 +162,10 @@ namespace
                 error = "The PCM source is still loading.";
                 return false;
             }
-            return state != AudioClipLoadState::Failed && clip_->GetDurationMicroseconds(duration, error);
+            if (state == AudioClipLoadState::Failed) return false;
+            duration = sourceDuration_;
+            error.clear();
+            return true;
         }
 
         std::unique_ptr<IAudioVoiceBackend> Play(const AudioPlaybackSettings& settings,
@@ -118,7 +176,15 @@ namespace
                 error = "The PCM source is still loading.";
             if (state != AudioClipLoadState::Ready && state != AudioClipLoadState::Playing)
                 return nullptr;
-            return clip_->Play(settings, bus, error);
+            if (settings.startPositionMicroseconds >= sourceDuration_)
+            { error = "Source position is past the clip end."; return nullptr; }
+            std::uint64_t physicalDuration{};
+            if (!clip_->GetDurationMicroseconds(physicalDuration, error) || physicalDuration == 0) return nullptr;
+            auto mapped = settings;
+            mapped.startPositionMicroseconds = std::min(static_cast<std::uint64_t>(settings.startPositionMicroseconds / stretchRate_), physicalDuration - 1);
+            auto voice = clip_->Play(mapped, bus, error);
+            if (!voice || stretchRate_ == 1.0) return voice;
+            return std::make_unique<StretchedVoice>(std::move(voice), stretchRate_, sourceDuration_, physicalDuration);
         }
 
     private:
@@ -149,6 +215,9 @@ namespace
         std::uint64_t generation_{};
         AudioLoadMode mode_;
         std::stop_source cancellation_;
+        double stretchRate_{1.0};
+        mutable bool converting_{};
+        mutable std::uint64_t sourceDuration_{};
         mutable std::future<SourcePcm> pending_;
         mutable SourcePcm pcm_;
         mutable std::unique_ptr<FmodAudioClip> clip_;

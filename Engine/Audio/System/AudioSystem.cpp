@@ -35,6 +35,13 @@ AudioClip::~AudioClip()
     }
 }
 
+bool AudioClip::PrepareTimeStretch(double rate, std::string &error)
+{
+    if (implementation_) return implementation_->PrepareTimeStretch(rate, error);
+    error = "The audio clip is not initialized.";
+    return false;
+}
+
 bool AudioClip::IsValid() const noexcept
 {
     return implementation_ != nullptr;

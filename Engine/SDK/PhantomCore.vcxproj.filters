@@ -192,4 +192,22 @@
     <Filter Include="Audio\Decode\Submodules" />
     <Filter Include="Audio\ThirdParty" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Audio\Processing\TimeStretch.h"><Filter>Audio\Processing</Filter></ClInclude>
+    <ClCompile Include="..\Audio\Processing\TimeStretch.cpp"><Filter>Audio\Processing</Filter></ClCompile>
+    <Filter Include="Audio\Processing" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Audio\ThirdParty\Signalsmith\UPSTREAM.md"><Filter>Audio\ThirdParty\Signalsmith</Filter></None>
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\fft.h"><Filter>Audio\ThirdParty\Signalsmith</Filter></ClInclude>
+    <None Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\LICENSE.txt"><Filter>Audio\ThirdParty\Signalsmith</Filter></None>
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\linear.h"><Filter>Audio\ThirdParty\Signalsmith</Filter></ClInclude>
+    <None Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\README.md"><Filter>Audio\ThirdParty\Signalsmith</Filter></None>
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\stft.h"><Filter>Audio\ThirdParty\Signalsmith</Filter></ClInclude>
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-linear\platform\fft-linear.h"><Filter>Audio\ThirdParty\Signalsmith</Filter></ClInclude>
+    <None Include="..\Audio\ThirdParty\Signalsmith\signalsmith-stretch\LICENSE.txt"><Filter>Audio\ThirdParty\Signalsmith</Filter></None>
+    <None Include="..\Audio\ThirdParty\Signalsmith\signalsmith-stretch\README.md"><Filter>Audio\ThirdParty\Signalsmith</Filter></None>
+    <ClInclude Include="..\Audio\ThirdParty\Signalsmith\signalsmith-stretch\signalsmith-stretch.h"><Filter>Audio\ThirdParty\Signalsmith</Filter></ClInclude>
+    <Filter Include="Audio\ThirdParty\Signalsmith" />
+  </ItemGroup>
 </Project>

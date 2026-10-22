@@ -54,6 +54,12 @@ class IAudioClipBackend
 {
 public:
     virtual ~IAudioClipBackend() = default;
+    [[nodiscard]] virtual bool PrepareTimeStretch(double playbackRate, std::string &error)
+    {
+        if (playbackRate == 1.0) { error.clear(); return true; }
+        error = "This clip backend does not support time stretching.";
+        return false;
+    }
     [[nodiscard]] virtual bool GetDurationMicroseconds(
         std::uint64_t& duration, std::string& errorMessage) const = 0;
     [[nodiscard]] virtual AudioClipLoadState LoadState(std::string& errorMessage) const
@@ -77,6 +83,10 @@ public:
     AudioClip(AudioClip&&) = delete;
     AudioClip& operator=(AudioClip&&) = delete;
 
+    // Call immediately after asynchronous loading, before polling or playback.
+    // Fixed rate 0.5..2.0, preserving pitch. LoadState includes conversion.
+    // Duration and all voice start positions remain in original source time.
+    [[nodiscard]] bool PrepareTimeStretch(double playbackRate, std::string &error);
     [[nodiscard]] bool IsValid() const noexcept;
     [[nodiscard]] bool GetDurationMicroseconds(
         std::uint64_t& duration, std::string& errorMessage) const;
